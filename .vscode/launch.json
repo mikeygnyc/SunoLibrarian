@@ -1,0 +1,61 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/cli/dist/index.js",
+      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/cli",
+      "args": ["download","--browser", "http://localhost:9222", "-f", "wav"],
+      "console": "internalConsole",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - List",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/cli/dist/index.js",
+      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/cli",
+      "args": ["list", "--token", "YOUR_TOKEN_HERE"],
+      "console": "internalConsole",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Workspaces",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/cli/dist/index.js",
+      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/cli",
+      "args": ["workspaces", "--token", "YOUR_TOKEN_HERE"],
+      "console": "internalConsole",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Converter",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/converter/dist/index.js",
+      "preLaunchTask": "tsc: build - converter/tsconfig.json",
+      "outFiles": ["${workspaceFolder}/converter/dist/**/*.js"],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/converter",
+      "args": ["-i", "/Users/mikegales/Projects/SunoTrackExporterExt/downloads", "-o", "/Volumes/StudioProjects/suno_lib", "-f", "flac,mp3,alac,wav", "--exit-on-error"],
+      "console": "internalConsole",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
