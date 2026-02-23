@@ -1,0 +1,37 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"command": "source ~/.nvm/nvm.sh && npm run build",
+			"options": {
+				"cwd": "${workspaceFolder}/cli",
+				"shell": {
+					"executable": "/bin/zsh",
+					"args": ["-l", "-i", "-c"]
+				}
+			},
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build",
+			"label": "tsc: build - cli/tsconfig.json"
+		},
+		{
+			"type": "shell",
+			"command": "source ~/.nvm/nvm.sh && npm run build",
+			"options": {
+				"cwd": "${workspaceFolder}/converter",
+				"shell": {
+					"executable": "/bin/zsh",
+					"args": ["-l", "-i", "-c"]
+				}
+			},
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build",
+			"label": "tsc: build - converter/tsconfig.json"
+		}
+	]
+}
