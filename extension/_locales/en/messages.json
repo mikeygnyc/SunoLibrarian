@@ -1,0 +1,670 @@
+{
+   "allWorkspaces": {
+      "description": "Header title for all workspaces section",
+      "message": "All workspaces"
+   },
+   "backToFileDrop": {
+      "description": "Button to go back to file drop zone",
+      "message": "Back"
+   },
+   "cached": {
+      "description": "Cache timestamp label",
+      "message": "Cached:"
+   },
+   "changeChromeSettings": {
+      "description": "Link to Chrome settings",
+      "message": "change these Chrome settings"
+   },
+   "clearAllData": {
+      "description": "Button to clear all extension data",
+      "message": "Clear All Data"
+   },
+   "clearAllDataComplete": {
+      "description": "Success message after clearing all data",
+      "message": "All extension data has been cleared. The page will reload."
+   },
+   "clearAllDataError": {
+      "description": "Error message when clearing data fails",
+      "message": "Error clearing data: {error}"
+   },
+   "clearAllDataTitle": {
+      "description": "Tooltip for clear all data button",
+      "message": "Clear all extension data and reset to fresh install"
+   },
+   "clearing": {
+      "description": "Status message while clearing data",
+      "message": "Clearing..."
+   },
+   "close": {
+      "description": "Close button",
+      "message": "Close"
+   },
+   "completed": {
+      "description": "Completed message",
+      "message": "Completed! Downloaded"
+   },
+   "confirmClearAllData": {
+      "description": "Confirmation message for clearing all data",
+      "message": "This will clear ALL extension data including:\n- All cached tracks and workspaces\n- All metadata\n- Download history\n- Authentication token\n\nYou will need to visit suno.com again to re-authenticate.\n\nThis action cannot be undone. Continue?"
+   },
+   "confirmReset": {
+      "description": "Confirmation message for reset",
+      "message": "Are you sure you want to reset all download status? This will allow you to download tracks again."
+   },
+   "conversionFailed": {
+      "description": "Conversion failed message",
+      "message": "Conversion failed:"
+   },
+   "converting": {
+      "description": "Converting label",
+      "message": "Converting"
+   },
+   "customDownloadDescription": {
+      "description": "Description text for custom download tab",
+      "message": "Drop your missing-tracks.txt file here to download only the missing tracks."
+   },
+   "customDownloadTitle": {
+      "description": "Title for custom download section",
+      "message": "Custom Download"
+   },
+   "downloadAllMetadata": {
+      "description": "Button to download CSV with full metadata",
+      "message": "Download All Metadata"
+   },
+   "downloadCsvPrompt": {
+      "description": "Prompt to download CSV after fetching tracks",
+      "message": "Found {count} tracks from {workspaces} workspace(s).\n\nWould you like to download this list as a CSV file (packaged in a ZIP with library syncing scripts)?"
+   },
+   "downloadMP3": {
+      "description": "Download MP3 button",
+      "message": "Download MP3"
+   },
+   "downloadSelectedMP3": {
+      "description": "Download selected MP3 button",
+      "message": "Download Selected MP3"
+   },
+   "downloadSelectedMP3Custom": {
+      "description": "Button to download selected MP3 in custom download tab",
+      "message": "Download Selected MP3"
+   },
+   "downloadSelectedWAV": {
+      "description": "Download selected WAV button",
+      "message": "Convert & Download Selected WAV"
+   },
+   "downloadSelectedWAVCustom": {
+      "description": "Button to download selected WAV in custom download tab",
+      "message": "Convert & Download Selected WAV"
+   },
+   "downloadTrackList": {
+      "description": "Button label for downloading simple track list (CSV + scripts, no metadata)",
+      "message": "Download Track List"
+   },
+   "downloadWAV": {
+      "description": "Download WAV button",
+      "message": "Download WAV"
+   },
+   "downloadableTracks": {
+      "description": "Downloadable tracks text",
+      "message": "downloadable tracks across"
+   },
+   "downloaded": {
+      "description": "Downloaded label",
+      "message": "Downloaded"
+   },
+   "downloading": {
+      "description": "Downloading label",
+      "message": "Downloading"
+   },
+   "dropFileHere": {
+      "description": "File drop zone instruction",
+      "message": "Drop file here or click to browse"
+   },
+   "errorLoadingTracks": {
+      "description": "Error loading tracks",
+      "message": "Error loading tracks:"
+   },
+   "errorsResetHere": {
+      "description": "Reset button text in top right corner",
+      "message": "Errors? Reset Here"
+   },
+   "exportLibraryAlertMessage": {
+      "description": "Message for the export library alert",
+      "message": "This will create a ZIP file containing:\n- suno-tracks-list.csv (list of all tracks)\n- check-library.bat (Windows script)\n- check-library.sh (Linux/macOS script)\n- README.txt (instructions)\n\n⚠️ IMPORTANT: After downloading, extract the ZIP file to the folder where you downloaded your tracks (MP3/WAV files).\n\nThe scripts need to be in the same folder as your downloaded tracks to work correctly.\n\nContinue?"
+   },
+   "exportLibraryAlertTitle": {
+      "description": "Title for export library alert",
+      "message": "Export SunoLibrary"
+   },
+   "exportSunoLibrary": {
+      "description": "Button to export library as ZIP",
+      "message": "Export SunoLibrary"
+   },
+   "exporting": {
+      "description": "Status when exporting library",
+      "message": "Exporting..."
+   },
+   "extensionDescription": {
+      "description": "Extension description",
+      "message": "Quickly export your Suno tracks from each workspace as MP3 or WAV files with metadata"
+   },
+   "extensionName": {
+      "description": "Extension name",
+      "message": "Suno Tracks Exporter"
+   },
+   "extractToken": {
+      "description": "Button to extract session",
+      "message": "Extract Session from Page"
+   },
+   "extracting": {
+      "description": "Extracting session status",
+      "message": "Extracting..."
+   },
+   "fetchingMetadata": {
+      "description": "Status text for metadata fetching",
+      "message": "Fetching metadata"
+   },
+   "fetchingMissingTracks": {
+      "description": "Progress message when fetching missing tracks",
+      "message": "Fetching missing tracks... {current}/{total} ({percent}%)"
+   },
+   "fetchingWorkspaces": {
+      "description": "Message shown while fetching workspaces",
+      "message": "Fetching workspaces..."
+   },
+   "fetchingWorkspacesProgress": {
+      "description": "Progress message while fetching workspaces",
+      "message": "Fetching workspaces... (Found {count} so far, loading page {page}...)"
+   },
+   "fileAlreadyExists": {
+      "description": "Alert when file format already exists",
+      "message": "{format} file already exists for this track."
+   },
+   "filterLiked": {
+      "description": "Filter label for liked tracks",
+      "message": "Liked"
+   },
+   "filterNotLiked": {
+      "description": "Filter label for not liked tracks",
+      "message": "Not Liked"
+   },
+   "filterStems": {
+      "description": "Filter label for stems",
+      "message": "Stems"
+   },
+   "filterUpload": {
+      "description": "Filter label for uploads",
+      "message": "Upload"
+   },
+   "foundInCacheFetching": {
+      "description": "Status when loading from cache and fetching missing",
+      "message": "Found {found} in cache, fetching {missing} missing..."
+   },
+   "foundTrackIds": {
+      "description": "Status when track IDs found in file",
+      "message": "Found {count} track ID(s). Loading from cache..."
+   },
+   "goToSuno": {
+      "description": "Button to navigate to Suno",
+      "message": "Go to Suno.com"
+   },
+   "hide": {
+      "description": "Prefix for hide filter labels",
+      "message": "Hide"
+   },
+   "hideStems": {
+      "description": "Filter option to hide stems",
+      "message": "Hide Stems"
+   },
+   "hideUploads": {
+      "description": "Filter option to hide uploads",
+      "message": "Hide Uploads"
+   },
+   "instruction1": {
+      "description": "First instruction",
+      "message": "Visit suno.com and log in"
+   },
+   "instruction2": {
+      "description": "Second instruction",
+      "message": "Click \"Extract Session\" if session is not found automatically"
+   },
+   "instruction3": {
+      "description": "Third instruction",
+      "message": "Click \"Open Downloader\" or use the button on the page"
+   },
+   "instruction4": {
+      "description": "Fourth instruction",
+      "message": "Select tracks and download"
+   },
+   "instructions": {
+      "description": "Instructions label",
+      "message": "Instructions:"
+   },
+   "loadingAllTracksSummary": {
+      "description": "Summary before loading tracks",
+      "message": "Found {count} workspace(s). Loading tracks..."
+   },
+   "loadingTracks": {
+      "description": "Loading tracks message",
+      "message": "Loading tracks..."
+   },
+   "loadingWorkspaceTracks": {
+      "description": "Progress message when loading tracks for a workspace",
+      "message": "Found {total} workspace(s). Loading tracks from workspace {current}/{total}: \"{name}\"..."
+   },
+   "metadataFetchComplete": {
+      "description": "Status when metadata fetching is done",
+      "message": "Metadata fetching complete"
+   },
+   "metadataFetchFailed": {
+      "description": "Error message for metadata fetching",
+      "message": "Failed to fetch metadata for {count} tracks"
+   },
+   "metadataProgress": {
+      "description": "Progress text for metadata fetching",
+      "message": "Fetching metadata: {current}/{total} tracks ({percentage}%)"
+   },
+   "missingTracksFileName": {
+      "description": "Missing tracks file name",
+      "message": "missing-tracks.txt"
+   },
+   "navigatingToLibrary": {
+      "description": "Navigating status",
+      "message": "Navigating to library... Session will be captured automatically from API requests."
+   },
+   "noDownloadableTracksFound": {
+      "description": "Error when no downloadable tracks found",
+      "message": "No downloadable tracks found"
+   },
+   "noNewTracksSelected": {
+      "description": "Alert when no new tracks remain to download",
+      "message": "All selected tracks have already been downloaded."
+   },
+   "noTrackIdsFound": {
+      "description": "Error when file has no track IDs",
+      "message": "No track IDs found in file"
+   },
+   "noTracksFound": {
+      "description": "No tracks found message",
+      "message": "No downloadable tracks found."
+   },
+   "noTracksMissingFormat": {
+      "description": "Alert when no tracks missing specific format",
+      "message": "No tracks missing {format} format found in selection."
+   },
+   "noTracksMissingFormatAuto": {
+      "description": "Alert when no tracks missing specific format (auto-select)",
+      "message": "No tracks missing {format} format found."
+   },
+   "of": {
+      "description": "Of connector",
+      "message": "of"
+   },
+   "openDownloader": {
+      "description": "Button to open downloader",
+      "message": "Open Downloader on Suno.com"
+   },
+   "pleaseSelectTxtFile": {
+      "description": "Error when wrong file type selected",
+      "message": "Please select a .txt file"
+   },
+   "pleaseVisitSuno": {
+      "description": "Message to visit Suno first",
+      "message": "Please visit suno.com first"
+   },
+   "rawApiResponse": {
+      "description": "Header for raw API data in sidecar file",
+      "message": "--- Raw API Response ---"
+   },
+   "readmeBatFile": {
+      "description": "README: BAT file description",
+      "message": "- check-library.bat: Windows script to check for downloaded files"
+   },
+   "readmeContains": {
+      "description": "README: what ZIP contains",
+      "message": "This ZIP file contains:"
+   },
+   "readmeCsvFile": {
+      "description": "README: CSV file description",
+      "message": "- suno-tracks-list.csv: Simplified list of all your tracks (easy to parse, no long text fields)"
+   },
+   "readmeCustomDownload": {
+      "description": "README: custom download section",
+      "message": "CUSTOM DOWNLOAD TAB:"
+   },
+   "readmeCustomDownloadStep1": {
+      "description": "README: custom download step 1",
+      "message": "1. Open Suno Tracks Exporter extension"
+   },
+   "readmeCustomDownloadStep2": {
+      "description": "README: custom download step 2",
+      "message": "2. Go to the \"Custom Download\" tab"
+   },
+   "readmeCustomDownloadStep3": {
+      "description": "README: custom download step 3",
+      "message": "3. Drop the missing-tracks.txt file"
+   },
+   "readmeCustomDownloadStep4": {
+      "description": "README: custom download step 4",
+      "message": "4. The extension will show only tracks that are missing files"
+   },
+   "readmeCustomDownloadStep5": {
+      "description": "README: custom download step 5",
+      "message": "5. Download MP3 or WAV for tracks that need them"
+   },
+   "readmeDuplicatesFormat": {
+      "description": "README: duplicates format",
+      "message": "- duplicates.txt: Contains tracks with multiple files of the same type"
+   },
+   "readmeDuplicatesFormatDetail": {
+      "description": "README: duplicates format detail",
+      "message": "  Format: trackId - MP3:filename1|date1;filename2|date2; WAV:filename3|date3;"
+   },
+   "readmeDuplicatesNote": {
+      "description": "README: duplicates note",
+      "message": "  Files are listed with their modification dates to help identify which is older."
+   },
+   "readmeHowToUse": {
+      "description": "README: how to use section",
+      "message": "HOW TO USE:"
+   },
+   "readmeJsonFile": {
+      "description": "README: JSON file description",
+      "message": "- suno-tracks-list.json: Full metadata including lyrics and prompts (for detailed information)"
+   },
+   "readmeJsonScripts": {
+      "description": "List item for JSON scripts in README",
+      "message": "- csv2json.bat / csv2json.sh (Convert CSV to JSON)"
+   },
+   "readmeLinux": {
+      "description": "README: Linux/macOS section",
+      "message": "Linux/macOS:"
+   },
+   "readmeLinuxStep1": {
+      "description": "README: Linux step 1",
+      "message": "1. Extract this ZIP file to your downloads folder (where your MP3/WAV files are)"
+   },
+   "readmeLinuxStep2": {
+      "description": "README: Linux step 2",
+      "message": "2. Open Terminal in that folder"
+   },
+   "readmeLinuxStep3": {
+      "description": "README: Linux step 3",
+      "message": "3. Make the script executable:"
+   },
+   "readmeLinuxStep3a": {
+      "description": "README: Linux step 3a",
+      "message": "   chmod +x check-library.sh"
+   },
+   "readmeLinuxStep4": {
+      "description": "README: Linux step 4",
+      "message": "4. Run the script:"
+   },
+   "readmeLinuxStep4a": {
+      "description": "README: Linux step 4a",
+      "message": "   ./check-library.sh"
+   },
+   "readmeLinuxStep5": {
+      "description": "README: Linux step 5",
+      "message": "5. The script will analyze your folder and create:"
+   },
+   "readmeLinuxStep5a": {
+      "description": "README: Linux step 5a",
+      "message": "   - missing-tracks.txt: List of tracks with file status (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeLinuxStep5b": {
+      "description": "README: Linux step 5b",
+      "message": "   - duplicates.txt: List of tracks with multiple files showing filenames and dates"
+   },
+   "readmeLinuxStep6": {
+      "description": "README: Linux step 6",
+      "message": "6. Use the Custom Download tab in Suno Tracks Exporter to download missing tracks"
+   },
+   "readmeMissingTracksExample": {
+      "description": "README: missing tracks example",
+      "message": "  Example: abc123,true,false,true"
+   },
+   "readmeMissingTracksFormat": {
+      "description": "README: missing tracks format",
+      "message": "- missing-tracks.txt: Contains all tracks with their file status"
+   },
+   "readmeMissingTracksFormatDetail": {
+      "description": "README: missing tracks format detail",
+      "message": "  Format: trackId,mp3Found,wavFound,txtFound"
+   },
+   "readmeNote": {
+      "description": "README: note about filename matching",
+      "message": "NOTE: The scripts check for files containing the track ID anywhere in the filename, so they work with any naming convention you might have used."
+   },
+   "readmeReadmeFile": {
+      "description": "README: README file description",
+      "message": "- README.txt: This file"
+   },
+   "readmeResults": {
+      "description": "README: results section",
+      "message": "Results:"
+   },
+   "readmeScriptsCheck": {
+      "description": "README: scripts check description",
+      "message": "The scripts check your downloads folder for files containing each track ID:"
+   },
+   "readmeScriptsCheckMp3": {
+      "description": "README: scripts check MP3",
+      "message": "- Looks for *.mp3 files with the track ID in the filename"
+   },
+   "readmeScriptsCheckTxt": {
+      "description": "README: scripts check TXT",
+      "message": "- Looks for *.txt files with the track ID in the filename"
+   },
+   "readmeScriptsCheckWav": {
+      "description": "README: scripts check WAV",
+      "message": "- Looks for *.wav files with the track ID in the filename"
+   },
+   "readmeShFile": {
+      "description": "README: SH file description",
+      "message": "- check-library.sh: Linux/macOS script to check for downloaded files"
+   },
+   "readmeSupport": {
+      "description": "README: support note",
+      "message": "For support or issues, visit the extension's GitHub repository."
+   },
+   "readmeTitle": {
+      "description": "README title",
+      "message": "Suno Tracks Exporter - Library Check Scripts"
+   },
+   "readmeWhatScriptsDo": {
+      "description": "README: what scripts do section",
+      "message": "WHAT THE SCRIPTS DO:"
+   },
+   "readmeWindows": {
+      "description": "README: Windows section",
+      "message": "Windows:"
+   },
+   "readmeWindowsStep1": {
+      "description": "README: Windows step 1",
+      "message": "1. Extract this ZIP file to your downloads folder (where your MP3/WAV files are)"
+   },
+   "readmeWindowsStep2": {
+      "description": "README: Windows step 2",
+      "message": "2. Double-click check-library.bat"
+   },
+   "readmeWindowsStep3": {
+      "description": "README: Windows step 3",
+      "message": "3. The script will analyze your folder and create:"
+   },
+   "readmeWindowsStep3a": {
+      "description": "README: Windows step 3a",
+      "message": "   - missing-tracks.txt: List of tracks with file status (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeWindowsStep3b": {
+      "description": "README: Windows step 3b",
+      "message": "   - duplicates.txt: List of tracks with multiple files showing filenames and dates"
+   },
+   "readmeWindowsStep4": {
+      "description": "README: Windows step 4",
+      "message": "4. Use the Custom Download tab in Suno Tracks Exporter to download missing tracks"
+   },
+   "refreshAllWorkspaces": {
+      "description": "Tooltip for global refresh button",
+      "message": "Refresh all workspaces and tracks"
+   },
+   "refreshWorkspace": {
+      "description": "Tooltip for refresh button",
+      "message": "Refresh tracks from this workspace"
+   },
+   "resetDownloads": {
+      "description": "Button to reset download status",
+      "message": "Reset Downloads"
+   },
+   "resetDownloadsTitle": {
+      "description": "Tooltip for reset downloads button",
+      "message": "Clear all download status"
+   },
+   "scriptBothFormats": {
+      "description": "Script message: both formats",
+      "message": "both formats"
+   },
+   "scriptCheckingMissing": {
+      "description": "Script message: checking for missing tracks",
+      "message": "Checking for missing tracks..."
+   },
+   "scriptDuplicates": {
+      "description": "Script message: duplicates",
+      "message": "Duplicates:"
+   },
+   "scriptExtensionLimitation": {
+      "description": "Script message: extension limitation explanation",
+      "message": "Extensions can't access your system storage, so I created this workaround for failed batches, missing tracks."
+   },
+   "scriptFoundTracks": {
+      "description": "Script message: found tracks",
+      "message": "Found:"
+   },
+   "scriptMissingTracks": {
+      "description": "Script message: missing tracks",
+      "message": "Missing:"
+   },
+   "scriptMissingTracksFile": {
+      "description": "Script message: missing tracks saved",
+      "message": "Missing track IDs saved to missing-tracks.txt"
+   },
+   "scriptMp3Only": {
+      "description": "Script message: MP3 only",
+      "message": "MP3 only"
+   },
+   "scriptResultsSaved": {
+      "description": "Script message: results saved",
+      "message": "Results saved to:"
+   },
+   "scriptTotalTracks": {
+      "description": "Script message: total tracks",
+      "message": "Total tracks:"
+   },
+   "scriptUseCustomDownload": {
+      "description": "Script message: use custom download tab",
+      "message": "Use the Custom Download tab in Suno Tracks Exporter to continue downloading only the missing tracks."
+   },
+   "scriptWavOnly": {
+      "description": "Script message: WAV only",
+      "message": "WAV only"
+   },
+   "selectAll": {
+      "description": "Select all checkbox",
+      "message": "Select All"
+   },
+   "selectAllCustom": {
+      "description": "Select all checkbox in custom download tab",
+      "message": "Select All"
+   },
+   "showOnlyLiked": {
+      "description": "Checkbox label to filter only liked tracks",
+      "message": "Show only Liked"
+   },
+   "showOnlyLikedCustom": {
+      "description": "Show only liked checkbox in custom download tab",
+      "message": "Show only Liked"
+   },
+   "stop": {
+      "description": "Stop button",
+      "message": "STOP"
+   },
+   "stopped": {
+      "description": "Stopped message",
+      "message": "Stopped! Downloaded"
+   },
+   "stoppingDownloads": {
+      "description": "Stopping downloads message",
+      "message": "Stopping downloads..."
+   },
+   "tabAllTracks": {
+      "description": "Tab title for all tracks view",
+      "message": "All Tracks"
+   },
+   "tabCustomDownload": {
+      "description": "Tab title for custom download view",
+      "message": "Custom Download"
+   },
+   "tokenCaptured": {
+      "description": "Session captured successfully",
+      "message": "Session captured successfully! You can now use the downloader."
+   },
+   "tokenFound": {
+      "description": "Session found status",
+      "message": "Session found! Ready to download."
+   },
+   "tokenNotCaptured": {
+      "description": "Session not captured message",
+      "message": "Session not captured. Try:"
+   },
+   "tokenNotCapturedInstructions": {
+      "description": "Instructions when session not captured",
+      "message": "1. Navigate to different pages on suno.com\n2. Click on \"Library\" or \"Create\" to trigger API calls\n3. The session will be captured automatically"
+   },
+   "tokenNotFound": {
+      "description": "Session not found status",
+      "message": "Session not found."
+   },
+   "tokenNotFoundInstructions": {
+      "description": "Instructions when session not found",
+      "message": "Navigate around suno.com (library, create page, etc.) to capture session automatically, or click \"Extract Session\"."
+   },
+   "track": {
+      "description": "Singular track label",
+      "message": "track"
+   },
+   "tracks": {
+      "description": "Tracks label",
+      "message": "tracks"
+   },
+   "turnOffAskWhere": {
+      "description": "Turn off ask where to save instruction",
+      "message": "and turn OFF \"Ask where to save each file before downloading\""
+   },
+   "turnOnOffFilters": {
+      "description": "Filter enable/disable toggle label",
+      "message": "Turn On/Off Filters"
+   },
+   "waitingForConversion": {
+      "description": "Waiting for conversion",
+      "message": "Waiting for conversion..."
+   },
+   "waitingForToken": {
+      "description": "Waiting for session status",
+      "message": "Looking for session..."
+   },
+   "warning": {
+      "description": "Warning label",
+      "message": "Warning:"
+   },
+   "warningMessage": {
+      "description": "Warning message",
+      "message": "You're about to download a potentially large number of files. To avoid confirming each download one by one,"
+   },
+   "workspace": {
+      "description": "Workspace label",
+      "message": "workspace"
+   },
+   "workspaces": {
+      "description": "Workspaces label",
+      "message": "workspace(s)"
+   }
+}

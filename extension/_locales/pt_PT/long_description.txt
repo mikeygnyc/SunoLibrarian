@@ -1,0 +1,156 @@
+Exportador de Faixas Suno - Guia Completo do Utilizador
+
+Histórico de Versões
+
+Atualizações da Versão 1.0.4
+- Adicionado separador Transferência Personalizada para transferir apenas faixas em falta
+- Adicionada função de Exportação de Biblioteca com CSV e scripts de verificação
+- Adicionados scripts check-library.bat/.sh com detecção de estado de ficheiros
+- Adicionada detecção de duplicados em scripts de verificação
+- Adicionado botão Exportar Biblioteca Suno para transferir ZIP novamente sem refetch
+- Melhorado tratamento de limite de taxa com retry automático e backoff exponencial
+- Adicionadas notificações ao utilizador para limitação de taxa
+- Ajuste dinâmico de atrasos baseado em detecção de limite de taxa
+- Formato melhorado de missing-tracks.txt com estado de ficheiros (mp3Found, wavFound, txtFound)
+- Scripts agora suportam múltiplos idiomas automaticamente
+- Melhorado tratamento de erros para prevenir que faixas sejam deixadas para trás
+- Adicionada recolha de metadados em segundo plano para informações completas de faixas
+- CSV melhorado com metadados completos (letras, etiquetas, prompt, BPM, tom, etc.)
+- Adicionada opção de exportação JSON com metadados completos
+- Adicionado botão "Transferir Todos os Metadados" após a recolha de metadados ser concluída
+- Melhorado layout do modal com design de duas colunas para melhor usabilidade
+- Adicionados filtros "Ocultar" para Stems, Uploads, Gostadas e Não Gostadas
+- Adicionado botão "Erros? Repor Aqui" para limpar todos os dados da extensão
+- Removidos scripts csv2json (metadados agora incluídos diretamente na exportação JSON)
+
+Atualizações da Versão 1.0.3
+- Adicionada incorporação de metadados para ficheiros MP3 (Capa, Letras, Prompt, etc.)
+- Adicionados ficheiros de texto sidecar para todas as transferências contendo informações completas da faixa
+- Adicionadas opções para ocultar Stems e Uploads da lista de faixas
+- Adicionado cache de espaço de trabalho para tempos de carregamento mais rápidos
+- Adicionado botão de atualização para espaços de trabalho individuais
+- Melhorada estabilidade de transferência para ficheiros pequenos e grandes
+- Corrigidos problemas de compatibilidade com Windows Media Player para arte da capa
+
+Visão Geral
+
+O Exportador de Faixas Suno é uma extensão poderosa do Chrome que permite exportar e transferir rapidamente todas as suas faixas de música criadas no Suno.com. Se está a gerir uma grande biblioteca de música gerada por IA, a fazer cópias de segurança do seu trabalho criativo ou a organizar faixas em vários espaços de trabalho, esta extensão fornece uma solução automatizada para transferir as suas faixas em lote nos formatos MP3 e WAV.
+
+Por Que Usar o Exportador de Faixas Suno?
+
+O Suno.com não oferece funcionalidade de transferência em massa. Transferir cada faixa manualmente uma por uma é demorado e tedioso, especialmente se tiver dezenas ou centenas de faixas em vários espaços de trabalho. Esta extensão resolve todos estes problemas fornecendo transferências em lote automatizadas com organização inteligente e acompanhamento de progresso.
+
+Principais Funcionalidades
+
+Autenticação Automática
+- Captura automaticamente o seu token de autenticação do Suno.com enquanto navega
+- Sem necessidade de configuração manual
+- Tokens armazenados localmente apenas no seu dispositivo
+- Privacidade e segurança completas
+
+Suporte Multi-Espaço de Trabalho
+- Detecta e obtém automaticamente faixas de todos os seus espaços de trabalho
+- Lida com centenas de espaços de trabalho com paginação
+- Exibe faixas agrupadas por espaço de trabalho com secções recolhíveis
+- Navegação fácil através de grandes coleções
+
+Transferências em Lote
+- Selecione faixas individuais, espaços de trabalho inteiros ou todas as faixas de uma vez
+- Transferências MP3 instantâneas
+- Conversão automática para WAV com acompanhamento de progresso
+- Barra de progresso em tempo real sempre visível
+- Transferências sequenciais com atrasos inteligentes para evitar limitação de taxa
+
+Organização Inteligente
+- Ficheiros guardados com formato: espaço-de-trabalho-nome-da-faixa-id.mp3/wav
+- Nomes de ficheiro organizados e únicos
+- Identificação e organização fáceis
+
+Rastreamento de Estado de Transferência
+- Faixas já transferidas são marcadas visualmente (esbatidas)
+- Botão de desbloqueio para repor estado de transferência e transferir novamente
+- Botão de reposição global para limpar todo o estado de transferência
+- Retomar transferências manualmente se algo falhar
+
+Metadados e Sidecars
+- Incorpora metadados (Letras, Prompt, Capa, BPM, Tom) em ficheiros MP3
+- Gera um ficheiro de texto companheiro (.txt) para cada transferência com detalhes completos da faixa
+- Inclui resposta bruta da API nos ficheiros sidecar para desenvolvedores/arquivamento
+
+Filtragem e Cache
+- Filtre Stems ou Uploads da lista para manter a sua visualização limpa
+- Filtro para mostrar apenas faixas gostadas
+- O cache de espaços de trabalho acelera significativamente os tempos de carregamento
+- Atualize espaços de trabalho individuais para verificar novas faixas sem recarregar tudo
+- Timestamps de cache exibidos para cada espaço de trabalho
+
+Separador Transferência Personalizada (Novo na v1.0.4)
+- Arraste o ficheiro missing-tracks.txt para transferir apenas as faixas em falta
+- Detecta automaticamente quais formatos de ficheiro (MP3/WAV) estão em falta
+- Carrega faixas do cache primeiro para minimizar requisições à API
+- Organiza faixas em falta por espaço de trabalho
+- Respeita o estado do ficheiro do missing-tracks.txt (não transferirá se o ficheiro já existir)
+
+Exportação de Biblioteca (Novo na v1.0.4)
+- Exporta toda a biblioteca como ficheiro ZIP contendo lista CSV e scripts de verificação
+- Scripts check-library.bat/.sh analisam a sua pasta de transferências
+- Gera missing-tracks.txt com estado de ficheiros (mp3Found, wavFound, txtFound)
+- Gera duplicates.txt para faixas com múltiplos ficheiros
+- Scripts suportam múltiplos idiomas automaticamente
+
+Tratamento de Limite de Taxa (Novo na v1.0.4)
+- Retry automático com backoff exponencial em erros de limite de taxa
+- Ajuste dinâmico de atrasos quando limites de taxa são detectados
+- Notificações ao utilizador quando limitação de taxa ocorre
+- Continua a obter mesmo quando limites de taxa ocorrem
+- Previne que faixas sejam deixadas para trás
+
+Como Usar
+
+Instalação
+1. Instale a extensão na Chrome Web Store
+2. Visite suno.com e inicie sessão
+3. Navegue pelo site (a extensão captura o token automaticamente)
+
+Transferir Faixas
+1. Clique no ícone da extensão na barra de ferramentas
+2. Clique em "Abrir Exportador no Suno.com"
+3. Selecione as faixas desejadas (ou use "Selecionar Tudo")
+4. Clique em "Transferir MP3 Selecionados" ou "Converter e Transferir WAV Selecionados"
+5. Acompanhe o progresso na barra de estado
+
+Fluxo de Trabalho de Transferência Personalizada
+1. Exporte a sua biblioteca usando o botão "Exportar Biblioteca Suno"
+2. Extraia o ficheiro ZIP para a sua pasta de transferências
+3. Execute check-library.bat (Windows) ou check-library.sh (Linux/Mac)
+4. O script gerará missing-tracks.txt com estado de ficheiros
+5. Abra o separador Transferência Personalizada na extensão
+6. Arraste o ficheiro missing-tracks.txt
+7. Transfira apenas as faixas em falta
+
+Gestão de Token
+- Se o token não for encontrado, clique em "Extrair Sessão da Página"
+- A extensão navegará para a biblioteca e capturará o token automaticamente
+
+Dicas
+
+Otimizar Transferências
+- Vá em Definições do Chrome → Transferências
+- Desative "Perguntar onde guardar cada ficheiro antes de transferir"
+- Isto elimina diálogos de confirmação e acelera transferências em lote
+
+Formatos
+- MP3: Transferência rápida e direta com metadados incorporados
+- WAV: Alta qualidade, inclui ficheiro sidecar com metadados
+
+Repor Transferências
+- Use o botão de desbloqueio em faixas individuais para repor o seu estado de transferência
+- Use o botão "Repor Transferências" para limpar todo o estado de transferência de uma vez
+- Isto permite transferir faixas novamente se necessário
+
+Privacidade e Segurança
+
+- Todos os dados armazenados localmente no seu dispositivo
+- Nenhum servidor externo ou terceiros envolvidos
+- Tokens nunca saem do seu navegador
+- Código aberto e transparente

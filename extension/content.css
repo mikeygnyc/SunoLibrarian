@@ -1,0 +1,32 @@
+/* Styles for Suno Tracks Exporter */
+
+.suno-batch-downloader-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.suno-batch-downloader-btn:active {
+  transform: translateY(0);
+}
+
+#suno-download-modal {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#suno-download-modal h2 {
+  color: #333;
+  margin: 0 0 20px 0;
+}
+
+#suno-download-modal button {
+  transition: opacity 0.2s;
+}
+
+#suno-download-modal button:hover {
+  opacity: 0.9;
+}
+
+#suno-download-modal button:active {
+  opacity: 0.8;
+}
+

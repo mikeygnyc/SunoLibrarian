@@ -1,0 +1,670 @@
+{
+   "allWorkspaces": {
+      "description": "Título do cabeçalho para secção de todas as áreas de trabalho",
+      "message": "Todas as áreas de trabalho"
+   },
+   "backToFileDrop": {
+      "description": "Botão para voltar à zona de arrastar ficheiro",
+      "message": "Voltar"
+   },
+   "cached": {
+      "description": "Rótulo de timestamp de cache",
+      "message": "Em cache:"
+   },
+   "changeChromeSettings": {
+      "description": "Ligação para definições do Chrome",
+      "message": "altere estas definições do Chrome"
+   },
+   "clearAllData": {
+      "description": "Button to clear all extension data",
+      "message": "Limpar Todos os Dados"
+   },
+   "clearAllDataComplete": {
+      "description": "Success message after clearing all data",
+      "message": "Todos os dados da extensão foram limpos. A página será recarregada."
+   },
+   "clearAllDataError": {
+      "description": "Error message when clearing data fails",
+      "message": "Erro ao limpar dados: {error}"
+   },
+   "clearAllDataTitle": {
+      "description": "Tooltip for clear all data button",
+      "message": "Limpar todos os dados da extensão e redefinir para instalação nova"
+   },
+   "clearing": {
+      "description": "Status message while clearing data",
+      "message": "A limpar..."
+   },
+   "close": {
+      "description": "Botão fechar",
+      "message": "Fechar"
+   },
+   "completed": {
+      "description": "Mensagem concluído",
+      "message": "Concluído! Transferidos"
+   },
+   "confirmClearAllData": {
+      "description": "Confirmation message for clearing all data",
+      "message": "Isto limpará TODOS os dados da extensão incluindo:\n- Todas as faixas e áreas de trabalho em cache\n- Todos os metadados\n- Histórico de transferências\n- Token de autenticação\n\nPrecisará visitar suno.com novamente para re-autenticar.\n\nEsta ação não pode ser desfeita. Continuar?"
+   },
+   "confirmReset": {
+      "description": "Mensagem de confirmação para repor",
+      "message": "Tem a certeza de que pretende repor todo o estado de transferência? Isto permitirá transferir as faixas novamente."
+   },
+   "conversionFailed": {
+      "description": "Mensagem conversão falhou",
+      "message": "Conversão falhou:"
+   },
+   "converting": {
+      "description": "Etiqueta a converter",
+      "message": "A converter"
+   },
+   "customDownloadDescription": {
+      "description": "Texto de descrição para separador de transferência personalizada",
+      "message": "Arraste o seu ficheiro missing-tracks.txt aqui para transferir apenas as faixas em falta."
+   },
+   "customDownloadTitle": {
+      "description": "Título para secção de transferência personalizada",
+      "message": "Transferência Personalizada"
+   },
+   "downloadAllMetadata": {
+      "description": "Button to download CSV with full metadata",
+      "message": "Transferir Todos os Metadados"
+   },
+   "downloadCsvPrompt": {
+      "description": "Solicitação para transferir CSV após obter faixas",
+      "message": "Encontradas {count} faixas de {workspaces} área(s) de trabalho.\n\nGostaria de transferir esta lista como um ficheiro CSV (empacotado num ZIP com scripts de sincronização de biblioteca)?"
+   },
+   "downloadMP3": {
+      "description": "Botão transferir MP3",
+      "message": "Transferir MP3"
+   },
+   "downloadSelectedMP3": {
+      "description": "Botão transferir MP3 selecionados",
+      "message": "Transferir MP3 Selecionados"
+   },
+   "downloadSelectedMP3Custom": {
+      "description": "Botão para transferir MP3 selecionados no separador de transferência personalizada",
+      "message": "Transferir MP3 Selecionados"
+   },
+   "downloadSelectedWAV": {
+      "description": "Botão transferir WAV selecionados",
+      "message": "Converter e Transferir WAV Selecionados"
+   },
+   "downloadSelectedWAVCustom": {
+      "description": "Botão para transferir WAV selecionados no separador de transferência personalizada",
+      "message": "Converter e Transferir WAV Selecionados"
+   },
+   "downloadTrackList": {
+      "description": "Button label for downloading simple track list (CSV + scripts, no metadata)",
+      "message": "Transferir Lista de Faixas"
+   },
+   "downloadWAV": {
+      "description": "Botão transferir WAV",
+      "message": "Transferir WAV"
+   },
+   "downloadableTracks": {
+      "description": "Texto de faixas disponíveis",
+      "message": "faixas disponíveis para transferência em"
+   },
+   "downloaded": {
+      "description": "Etiqueta transferidos",
+      "message": "Transferidos"
+   },
+   "downloading": {
+      "description": "Etiqueta a transferir",
+      "message": "A transferir"
+   },
+   "dropFileHere": {
+      "description": "Instrução da zona de arrastar ficheiro",
+      "message": "Arraste o ficheiro aqui ou clique para procurar"
+   },
+   "errorLoadingTracks": {
+      "description": "Erro ao carregar faixas",
+      "message": "Erro ao carregar faixas:"
+   },
+   "errorsResetHere": {
+      "description": "Reset button text in top right corner",
+      "message": "Erros? Reiniciar Aqui"
+   },
+   "exportLibraryAlertMessage": {
+      "description": "Mensagem para a alerta de exportar biblioteca",
+      "message": "Isto criará um ficheiro ZIP contendo:\n- suno-tracks-list.csv (lista de todas as faixas)\n- check-library.bat (script do Windows)\n- check-library.sh (script do Linux/macOS)\n- README.txt (instruções)\n\n⚠️ IMPORTANTE: Após transferir, extraia o ficheiro ZIP para a pasta onde transferiu as suas faixas (ficheiros MP3/WAV).\n\nOs scripts precisam estar na mesma pasta que as suas faixas transferidas para funcionar corretamente.\n\nContinuar?"
+   },
+   "exportLibraryAlertTitle": {
+      "description": "Título para alerta de exportar biblioteca",
+      "message": "Exportar Biblioteca Suno"
+   },
+   "exportSunoLibrary": {
+      "description": "Botão para exportar biblioteca como ZIP",
+      "message": "Exportar Biblioteca Suno"
+   },
+   "exporting": {
+      "description": "Estado ao exportar biblioteca",
+      "message": "A exportar..."
+   },
+   "extensionDescription": {
+      "description": "Descrição da extensão",
+      "message": "Exporte rapidamente as suas faixas do Suno de cada área de trabalho como ficheiros MP3 ou WAV"
+   },
+   "extensionName": {
+      "description": "Nome da extensão",
+      "message": "Exportador de Faixas Suno"
+   },
+   "extractToken": {
+      "description": "Botão para extrair sessão",
+      "message": "Extrair Sessão da Página"
+   },
+   "extracting": {
+      "description": "Estado de extração de sessão",
+      "message": "A extrair..."
+   },
+   "fetchingMetadata": {
+      "description": "Status text for metadata fetching",
+      "message": "A obter metadados"
+   },
+   "fetchingMissingTracks": {
+      "description": "Mensagem de progresso ao obter faixas em falta",
+      "message": "A obter faixas em falta... {current}/{total} ({percent}%)"
+   },
+   "fetchingWorkspaces": {
+      "description": "Mensagem ao obter áreas de trabalho",
+      "message": "A obter áreas de trabalho..."
+   },
+   "fetchingWorkspacesProgress": {
+      "description": "Mensagem de progresso ao obter áreas de trabalho",
+      "message": "A obter áreas de trabalho... (Encontradas {count} até agora, a carregar página {page}...)"
+   },
+   "fileAlreadyExists": {
+      "description": "Alerta quando formato de ficheiro já existe",
+      "message": "O ficheiro {format} já existe para esta faixa."
+   },
+   "filterLiked": {
+      "description": "Rótulo de filtro para faixas gostadas",
+      "message": "Gostadas"
+   },
+   "filterNotLiked": {
+      "description": "Rótulo de filtro para faixas não gostadas",
+      "message": "Não Gostadas"
+   },
+   "filterStems": {
+      "description": "Rótulo de filtro para stems",
+      "message": "Stems"
+   },
+   "filterUpload": {
+      "description": "Rótulo de filtro para transferências",
+      "message": "Transferência"
+   },
+   "foundInCacheFetching": {
+      "description": "Estado ao carregar do cache e obter em falta",
+      "message": "Encontrados {found} no cache, a obter {missing} em falta..."
+   },
+   "foundTrackIds": {
+      "description": "Estado quando IDs de faixas encontrados no ficheiro",
+      "message": "Encontrados {count} ID(s) de faixa(s). A carregar do cache..."
+   },
+   "goToSuno": {
+      "description": "Botão para navegar para Suno",
+      "message": "Ir para Suno.com"
+   },
+   "hide": {
+      "description": "Prefixo para rótulos de filtro de ocultar",
+      "message": "Ocultar"
+   },
+   "hideStems": {
+      "description": "Opção de filtro para ocultar stems",
+      "message": "Ocultar Stems"
+   },
+   "hideUploads": {
+      "description": "Opção de filtro para ocultar uploads",
+      "message": "Ocultar Uploads"
+   },
+   "instruction1": {
+      "description": "Primeira instrução",
+      "message": "Visite suno.com e inicie sessão"
+   },
+   "instruction2": {
+      "description": "Segunda instrução",
+      "message": "Clique em \"Extrair Sessão\" se a sessão não for encontrada automaticamente"
+   },
+   "instruction3": {
+      "description": "Terceira instrução",
+      "message": "Clique em \"Abrir Exportador\" ou use o botão na página"
+   },
+   "instruction4": {
+      "description": "Quarta instrução",
+      "message": "Selecione as faixas e transfira"
+   },
+   "instructions": {
+      "description": "Etiqueta de instruções",
+      "message": "Instruções:"
+   },
+   "loadingAllTracksSummary": {
+      "description": "Resumo antes de carregar faixas",
+      "message": "Encontradas {count} área(s) de trabalho. A carregar faixas..."
+   },
+   "loadingTracks": {
+      "description": "Mensagem a carregar faixas",
+      "message": "A carregar faixas..."
+   },
+   "loadingWorkspaceTracks": {
+      "description": "Mensagem de progresso ao carregar faixas de uma área",
+      "message": "Encontradas {total} área(s) de trabalho. A carregar faixas da área {current}/{total}: \"{name}\"..."
+   },
+   "metadataFetchComplete": {
+      "description": "Status when metadata fetching is done",
+      "message": "Obtenção de metadados concluída"
+   },
+   "metadataFetchFailed": {
+      "description": "Error message for metadata fetching",
+      "message": "Falha ao obter metadados para {count} faixas"
+   },
+   "metadataProgress": {
+      "description": "Progress text for metadata fetching",
+      "message": "A obter metadados: {current}/{total} faixas ({percentage}%)"
+   },
+   "missingTracksFileName": {
+      "description": "Nome do ficheiro de faixas em falta",
+      "message": "missing-tracks.txt"
+   },
+   "navigatingToLibrary": {
+      "description": "Estado de navegação",
+      "message": "A navegar para biblioteca... A sessão será capturada automaticamente das requisições da API."
+   },
+   "noDownloadableTracksFound": {
+      "description": "Erro quando nenhuma faixa disponível para transferência encontrada",
+      "message": "Nenhuma faixa disponível para transferência encontrada"
+   },
+   "noNewTracksSelected": {
+      "description": "Alerta quando não há faixas novas para transferir",
+      "message": "Todas as faixas selecionadas já foram transferidas."
+   },
+   "noTrackIdsFound": {
+      "description": "Erro quando ficheiro não tem IDs de faixas",
+      "message": "Nenhum ID de faixa encontrado no ficheiro"
+   },
+   "noTracksFound": {
+      "description": "Mensagem nenhuma faixa encontrada",
+      "message": "Nenhuma faixa disponível para transferência encontrada."
+   },
+   "noTracksMissingFormat": {
+      "description": "Alerta quando não há faixas em falta do formato específico",
+      "message": "Nenhuma faixa em falta do formato {format} encontrada na seleção."
+   },
+   "noTracksMissingFormatAuto": {
+      "description": "Alerta quando não há faixas em falta do formato (seleção automática)",
+      "message": "Nenhuma faixa em falta do formato {format} encontrada."
+   },
+   "of": {
+      "description": "Conector de",
+      "message": "de"
+   },
+   "openDownloader": {
+      "description": "Botão para abrir exportador",
+      "message": "Abrir Exportador no Suno.com"
+   },
+   "pleaseSelectTxtFile": {
+      "description": "Erro quando tipo de ficheiro incorreto selecionado",
+      "message": "Por favor, selecione um ficheiro .txt"
+   },
+   "pleaseVisitSuno": {
+      "description": "Mensagem para visitar Suno primeiro",
+      "message": "Por favor, visite suno.com primeiro"
+   },
+   "rawApiResponse": {
+      "description": "Cabeçalho para dados brutos da API no ficheiro sidecar",
+      "message": "--- Resposta Bruta da API ---"
+   },
+   "readmeBatFile": {
+      "description": "README: descrição do ficheiro BAT",
+      "message": "- check-library.bat: Script do Windows para verificar ficheiros transferidos"
+   },
+   "readmeContains": {
+      "description": "README: o que o ZIP contém",
+      "message": "Este ficheiro ZIP contém:"
+   },
+   "readmeCsvFile": {
+      "description": "README: descrição do ficheiro CSV",
+      "message": "- suno-tracks-list.csv: Lista simplificada de todas as suas faixas (fácil de analisar, sem campos de texto longo)"
+   },
+   "readmeCustomDownload": {
+      "description": "README: secção transferência personalizada",
+      "message": "SEPARADOR TRANSFERÊNCIA PERSONALIZADA:"
+   },
+   "readmeCustomDownloadStep1": {
+      "description": "README: passo 1 de transferência personalizada",
+      "message": "1. Abra a extensão Suno Tracks Exporter"
+   },
+   "readmeCustomDownloadStep2": {
+      "description": "README: passo 2 de transferência personalizada",
+      "message": "2. Vá para o separador \"Transferência Personalizada\""
+   },
+   "readmeCustomDownloadStep3": {
+      "description": "README: passo 3 de transferência personalizada",
+      "message": "3. Arraste o ficheiro missing-tracks.txt"
+   },
+   "readmeCustomDownloadStep4": {
+      "description": "README: passo 4 de transferência personalizada",
+      "message": "4. A extensão mostrará apenas as faixas que faltam ficheiros"
+   },
+   "readmeCustomDownloadStep5": {
+      "description": "README: passo 5 de transferência personalizada",
+      "message": "5. Transfira MP3 ou WAV para as faixas que precisarem"
+   },
+   "readmeDuplicatesFormat": {
+      "description": "README: formato de duplicados",
+      "message": "- duplicates.txt: Contém faixas com múltiplos ficheiros do mesmo tipo"
+   },
+   "readmeDuplicatesFormatDetail": {
+      "description": "README: detalhe de formato de duplicados",
+      "message": "  Formato: trackId - MP3:nome1|data1;nome2|data2; WAV:nome3|data3;"
+   },
+   "readmeDuplicatesNote": {
+      "description": "README: nota sobre duplicados",
+      "message": "  Os ficheiros são listados com as suas datas de modificação para ajudar a identificar qual é mais antigo."
+   },
+   "readmeHowToUse": {
+      "description": "README: secção como usar",
+      "message": "COMO USAR:"
+   },
+   "readmeJsonFile": {
+      "description": "README: descrição do ficheiro JSON",
+      "message": "- suno-tracks-list.json: Metadados completos incluindo letras e prompts (para informações detalhadas)"
+   },
+   "readmeJsonScripts": {
+      "description": "List item for JSON scripts in README",
+      "message": "- csv2json.bat / csv2json.sh (Converter CSV para JSON)"
+   },
+   "readmeLinux": {
+      "description": "README: secção Linux/macOS",
+      "message": "Linux/macOS:"
+   },
+   "readmeLinuxStep1": {
+      "description": "README: passo 1 do Linux",
+      "message": "1. Extraia este ficheiro ZIP para a sua pasta de transferências (onde estão os seus ficheiros MP3/WAV)"
+   },
+   "readmeLinuxStep2": {
+      "description": "README: passo 2 do Linux",
+      "message": "2. Abra o Terminal nessa pasta"
+   },
+   "readmeLinuxStep3": {
+      "description": "README: passo 3 do Linux",
+      "message": "3. Torne o script executável:"
+   },
+   "readmeLinuxStep3a": {
+      "description": "README: passo 3a do Linux",
+      "message": "   chmod +x check-library.sh"
+   },
+   "readmeLinuxStep4": {
+      "description": "README: passo 4 do Linux",
+      "message": "4. Execute o script:"
+   },
+   "readmeLinuxStep4a": {
+      "description": "README: passo 4a do Linux",
+      "message": "   ./check-library.sh"
+   },
+   "readmeLinuxStep5": {
+      "description": "README: passo 5 do Linux",
+      "message": "5. O script analisará a sua pasta e criará:"
+   },
+   "readmeLinuxStep5a": {
+      "description": "README: passo 5a do Linux",
+      "message": "   - missing-tracks.txt: Lista de faixas com estado de ficheiros (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeLinuxStep5b": {
+      "description": "README: passo 5b do Linux",
+      "message": "   - duplicates.txt: Lista de faixas com múltiplos ficheiros mostrando nomes de ficheiro e datas"
+   },
+   "readmeLinuxStep6": {
+      "description": "README: passo 6 do Linux",
+      "message": "6. Use o separador Transferência Personalizada no Suno Tracks Exporter para transferir faixas em falta"
+   },
+   "readmeMissingTracksExample": {
+      "description": "README: exemplo de faixas em falta",
+      "message": "  Exemplo: abc123,true,false,true"
+   },
+   "readmeMissingTracksFormat": {
+      "description": "README: formato de faixas em falta",
+      "message": "- missing-tracks.txt: Contém todas as faixas com o seu estado de ficheiros"
+   },
+   "readmeMissingTracksFormatDetail": {
+      "description": "README: detalhe de formato de faixas em falta",
+      "message": "  Formato: trackId,mp3Found,wavFound,txtFound"
+   },
+   "readmeNote": {
+      "description": "README: nota sobre correspondência de nomes de ficheiro",
+      "message": "NOTA: Os scripts procuram ficheiros que contenham o ID de faixa em qualquer parte do nome do ficheiro, por isso funcionam com qualquer convenção de nomes que possa ter usado."
+   },
+   "readmeReadmeFile": {
+      "description": "README: descrição do ficheiro README",
+      "message": "- README.txt: Este ficheiro"
+   },
+   "readmeResults": {
+      "description": "README: secção resultados",
+      "message": "Resultados:"
+   },
+   "readmeScriptsCheck": {
+      "description": "README: descrição de verificação de scripts",
+      "message": "Os scripts verificam a sua pasta de transferências para ficheiros que contenham cada ID de faixa:"
+   },
+   "readmeScriptsCheckMp3": {
+      "description": "README: scripts verificam MP3",
+      "message": "- Procura ficheiros *.mp3 com o ID de faixa no nome do ficheiro"
+   },
+   "readmeScriptsCheckTxt": {
+      "description": "README: scripts verificam TXT",
+      "message": "- Procura ficheiros *.txt com o ID de faixa no nome do ficheiro"
+   },
+   "readmeScriptsCheckWav": {
+      "description": "README: scripts verificam WAV",
+      "message": "- Procura ficheiros *.wav com o ID de faixa no nome do ficheiro"
+   },
+   "readmeShFile": {
+      "description": "README: descrição do ficheiro SH",
+      "message": "- check-library.sh: Script do Linux/macOS para verificar ficheiros transferidos"
+   },
+   "readmeSupport": {
+      "description": "README: nota de suporte",
+      "message": "Para suporte ou problemas, visite o repositório GitHub da extensão."
+   },
+   "readmeTitle": {
+      "description": "Título do README",
+      "message": "Exportador de Faixas Suno - Scripts de Verificação de Biblioteca"
+   },
+   "readmeWhatScriptsDo": {
+      "description": "README: secção o que os scripts fazem",
+      "message": "O QUE OS SCRIPTS FAZEM:"
+   },
+   "readmeWindows": {
+      "description": "README: secção Windows",
+      "message": "Windows:"
+   },
+   "readmeWindowsStep1": {
+      "description": "README: passo 1 do Windows",
+      "message": "1. Extraia este ficheiro ZIP para a sua pasta de transferências (onde estão os seus ficheiros MP3/WAV)"
+   },
+   "readmeWindowsStep2": {
+      "description": "README: passo 2 do Windows",
+      "message": "2. Clique duas vezes em check-library.bat"
+   },
+   "readmeWindowsStep3": {
+      "description": "README: passo 3 do Windows",
+      "message": "3. O script analisará a sua pasta e criará:"
+   },
+   "readmeWindowsStep3a": {
+      "description": "README: passo 3a do Windows",
+      "message": "   - missing-tracks.txt: Lista de faixas com estado de ficheiros (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeWindowsStep3b": {
+      "description": "README: passo 3b do Windows",
+      "message": "   - duplicates.txt: Lista de faixas com múltiplos ficheiros mostrando nomes de ficheiro e datas"
+   },
+   "readmeWindowsStep4": {
+      "description": "README: passo 4 do Windows",
+      "message": "4. Use o separador Transferência Personalizada no Suno Tracks Exporter para transferir faixas em falta"
+   },
+   "refreshAllWorkspaces": {
+      "description": "Dica para botão de atualizar tudo",
+      "message": "Atualizar todas as áreas de trabalho e faixas"
+   },
+   "refreshWorkspace": {
+      "description": "Dica para botão de atualizar área de trabalho",
+      "message": "Atualizar faixas desta área de trabalho"
+   },
+   "resetDownloads": {
+      "description": "Botão para repor estado de transferência",
+      "message": "Repor Transferências"
+   },
+   "resetDownloadsTitle": {
+      "description": "Dica para botão de repor transferências",
+      "message": "Limpar todo o estado de transferência"
+   },
+   "scriptBothFormats": {
+      "description": "Mensagem do script: ambos os formatos",
+      "message": "ambos os formatos"
+   },
+   "scriptCheckingMissing": {
+      "description": "Mensagem do script: a verificar faixas em falta",
+      "message": "A verificar faixas em falta..."
+   },
+   "scriptDuplicates": {
+      "description": "Mensagem do script: duplicados",
+      "message": "Duplicados:"
+   },
+   "scriptExtensionLimitation": {
+      "description": "Mensagem do script: explicação de limitação de extensão",
+      "message": "As extensões não podem aceder ao armazenamento do sistema, por isso criei esta solução para lotes falhados, faixas em falta."
+   },
+   "scriptFoundTracks": {
+      "description": "Mensagem do script: faixas encontradas",
+      "message": "Encontradas:"
+   },
+   "scriptMissingTracks": {
+      "description": "Mensagem do script: faixas em falta",
+      "message": "Em falta:"
+   },
+   "scriptMissingTracksFile": {
+      "description": "Mensagem do script: faixas em falta guardadas",
+      "message": "IDs de faixas em falta guardados em missing-tracks.txt"
+   },
+   "scriptMp3Only": {
+      "description": "Mensagem do script: apenas MP3",
+      "message": "apenas MP3"
+   },
+   "scriptResultsSaved": {
+      "description": "Mensagem do script: resultados guardados",
+      "message": "Resultados guardados em:"
+   },
+   "scriptTotalTracks": {
+      "description": "Mensagem do script: total de faixas",
+      "message": "Total de faixas:"
+   },
+   "scriptUseCustomDownload": {
+      "description": "Mensagem do script: usar separador de transferência personalizada",
+      "message": "Use o separador Transferência Personalizada no Suno Tracks Exporter para continuar a transferir apenas as faixas em falta."
+   },
+   "scriptWavOnly": {
+      "description": "Mensagem do script: apenas WAV",
+      "message": "apenas WAV"
+   },
+   "selectAll": {
+      "description": "Caixa de seleção selecionar tudo",
+      "message": "Selecionar Tudo"
+   },
+   "selectAllCustom": {
+      "description": "Caixa de seleção selecionar tudo no separador de transferência personalizada",
+      "message": "Selecionar Tudo"
+   },
+   "showOnlyLiked": {
+      "description": "Rótulo da caixa de seleção para filtrar apenas faixas gostadas",
+      "message": "Mostrar apenas Gostadas"
+   },
+   "showOnlyLikedCustom": {
+      "description": "Caixa de seleção mostrar apenas gostadas no separador de transferência personalizada",
+      "message": "Mostrar apenas Gostadas"
+   },
+   "stop": {
+      "description": "Botão parar",
+      "message": "PARAR"
+   },
+   "stopped": {
+      "description": "Mensagem parado",
+      "message": "Parado! Transferidos"
+   },
+   "stoppingDownloads": {
+      "description": "Mensagem a parar transferências",
+      "message": "A parar transferências..."
+   },
+   "tabAllTracks": {
+      "description": "Título do separador para visualização de todas as faixas",
+      "message": "Todas as Faixas"
+   },
+   "tabCustomDownload": {
+      "description": "Título do separador para visualização de transferência personalizada",
+      "message": "Transferência Personalizada"
+   },
+   "tokenCaptured": {
+      "description": "Sessão capturada com sucesso",
+      "message": "Sessão capturada com sucesso! Agora pode usar o exportador."
+   },
+   "tokenFound": {
+      "description": "Estado sessão encontrada",
+      "message": "Sessão encontrada! Pronto para transferir."
+   },
+   "tokenNotCaptured": {
+      "description": "Mensagem sessão não capturada",
+      "message": "Sessão não capturada. Tente:"
+   },
+   "tokenNotCapturedInstructions": {
+      "description": "Instruções quando sessão não capturada",
+      "message": "1. Navegue para páginas diferentes no suno.com\n2. Clique em \"Biblioteca\" ou \"Criar\" para acionar chamadas da API\n3. A sessão será capturada automaticamente"
+   },
+   "tokenNotFound": {
+      "description": "Estado sessão não encontrada",
+      "message": "Sessão não encontrada."
+   },
+   "tokenNotFoundInstructions": {
+      "description": "Instruções quando sessão não encontrada",
+      "message": "Navegue pelo suno.com (biblioteca, página de criação, etc.) para capturar a sessão automaticamente, ou clique em \"Extrair Sessão\"."
+   },
+   "track": {
+      "description": "Rótulo de faixa singular",
+      "message": "faixa"
+   },
+   "tracks": {
+      "description": "Etiqueta de faixas",
+      "message": "faixas"
+   },
+   "turnOffAskWhere": {
+      "description": "Instrução para desativar pergunta onde guardar",
+      "message": "e desative \"Perguntar onde guardar cada ficheiro antes de transferir\""
+   },
+   "turnOnOffFilters": {
+      "description": "Rótulo de ligar/desligar filtros",
+      "message": "Ligar/Desligar Filtros"
+   },
+   "waitingForConversion": {
+      "description": "À espera da conversão",
+      "message": "À espera da conversão..."
+   },
+   "waitingForToken": {
+      "description": "Estado à procura da sessão",
+      "message": "À procura da sessão..."
+   },
+   "warning": {
+      "description": "Etiqueta de aviso",
+      "message": "Aviso:"
+   },
+   "warningMessage": {
+      "description": "Mensagem de aviso",
+      "message": "Está prestes a transferir um grande número de ficheiros. Para evitar confirmar cada transferência um por um,"
+   },
+   "workspace": {
+      "description": "Etiqueta de área de trabalho",
+      "message": "área de trabalho"
+   },
+   "workspaces": {
+      "description": "Etiqueta de áreas de trabalho",
+      "message": "área(s) de trabalho"
+   }
+}

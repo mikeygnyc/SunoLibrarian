@@ -1,0 +1,156 @@
+Exportador de Faixas Suno - Guia Completo do Usuário
+
+Histórico de Versões
+
+Atualizações da Versão 1.0.4
+- Adicionada aba Download Personalizado para baixar apenas faixas faltantes
+- Adicionada função de Exportação de Biblioteca com CSV e scripts de verificação
+- Adicionados scripts check-library.bat/.sh com detecção de status de arquivos
+- Adicionada detecção de duplicados em scripts de verificação
+- Adicionado botão Exportar Biblioteca Suno para baixar ZIP novamente sem refetch
+- Melhorado tratamento de limite de taxa com retry automático e backoff exponencial
+- Adicionadas notificações ao usuário para limitação de taxa
+- Ajuste dinâmico de atrasos baseado em detecção de limite de taxa
+- Formato melhorado de missing-tracks.txt com status de arquivos (mp3Found, wavFound, txtFound)
+- Scripts agora suportam múltiplos idiomas automaticamente
+- Melhorado tratamento de erros para prevenir que faixas sejam deixadas para trás
+- Adicionada coleta de metadados em segundo plano para informações completas de faixas
+- CSV aprimorado com metadados completos (letras, tags, prompt, BPM, tom, etc.)
+- Adicionada opção de exportação JSON com metadados completos
+- Adicionado botão "Baixar Todos os Metadados" após a coleta de metadados ser concluída
+- Melhorado layout do modal com design de duas colunas para melhor usabilidade
+- Adicionados filtros "Ocultar" para Stems, Uploads, Curtidas e Não Curtidas
+- Adicionado botão "Erros? Redefinir Aqui" para limpar todos os dados da extensão
+- Removidos scripts csv2json (metadados agora incluídos diretamente na exportação JSON)
+
+Atualizações da Versão 1.0.3
+- Adicionada incorporação de metadados para arquivos MP3 (Capa, Letras, Prompt, etc.)
+- Adicionados arquivos de texto sidecar para todos os downloads contendo informações completas da faixa
+- Adicionadas opções para ocultar Stems e Uploads da lista de faixas
+- Adicionado cache de workspace para tempos de carregamento mais rápidos
+- Adicionado botão de atualização para workspaces individuais
+- Melhorada estabilidade de download para arquivos pequenos e grandes
+- Corrigidos problemas de compatibilidade com Windows Media Player para arte da capa
+
+Visão Geral
+
+O Exportador de Faixas Suno é uma extensão poderosa do Chrome que permite exportar e baixar rapidamente todas as suas faixas de música criadas no Suno.com. Se você está gerenciando uma grande biblioteca de música gerada por IA, fazendo backup do seu trabalho criativo ou organizando faixas em vários workspaces, esta extensão fornece uma solução automatizada para baixar suas faixas em lote nos formatos MP3 e WAV.
+
+Por Que Usar o Exportador de Faixas Suno?
+
+O Suno.com não oferece funcionalidade de download em massa. Baixar cada faixa manualmente uma por uma é demorado e tedioso, especialmente se você tem dezenas ou centenas de faixas em vários workspaces. Esta extensão resolve todos esses problemas fornecendo downloads em lote automatizados com organização inteligente e acompanhamento de progresso.
+
+Principais Recursos
+
+Autenticação Automática
+- Captura automaticamente seu token de autenticação do Suno.com enquanto você navega
+- Sem necessidade de configuração manual
+- Tokens armazenados localmente apenas no seu dispositivo
+- Privacidade e segurança completas
+
+Suporte Multi-Workspace
+- Detecta e busca automaticamente faixas de todos os seus workspaces
+- Lida com centenas de workspaces com paginação
+- Exibe faixas agrupadas por workspace com seções recolhíveis
+- Navegação fácil através de grandes coleções
+
+Downloads em Lote
+- Selecione faixas individuais, workspaces inteiros ou todas as faixas de uma vez
+- Downloads MP3 instantâneos
+- Conversão automática para WAV com acompanhamento de progresso
+- Barra de progresso em tempo real sempre visível
+- Downloads sequenciais com atrasos inteligentes para evitar limitação de taxa
+
+Organização Inteligente
+- Arquivos salvos com formato: workspace-nome-da-faixa-id.mp3/wav
+- Nomes de arquivo organizados e únicos
+- Identificação e organização fáceis
+
+Rastreamento de Status de Download
+- Faixas já baixadas são marcadas visualmente (esmaecidas)
+- Botão de desbloqueio para resetar status de download e baixar novamente
+- Botão de reset global para limpar todo o status de download
+- Retomar downloads manualmente se algo falhar
+
+Metadados e Sidecars
+- Incorpora metadados (Letras, Prompt, Capa, BPM, Tom) em arquivos MP3
+- Gera um arquivo de texto companheiro (.txt) para cada download com detalhes completos da faixa
+- Inclui resposta bruta da API nos arquivos sidecar para desenvolvedores/arquivamento
+
+Filtragem e Cache
+- Filtre Stems ou Uploads da lista para manter sua visualização limpa
+- Filtro para mostrar apenas faixas curtidas
+- O cache de workspace acelera significativamente o tempo de carregamento
+- Atualize workspaces individuais para verificar novas faixas sem recarregar tudo
+- Timestamps de cache exibidos para cada workspace
+
+Aba Download Personalizado (Novo na v1.0.4)
+- Arraste o arquivo missing-tracks.txt para baixar apenas as faixas faltantes
+- Detecta automaticamente quais formatos de arquivo (MP3/WAV) estão faltando
+- Carrega faixas do cache primeiro para minimizar requisições à API
+- Organiza faixas faltantes por workspace
+- Respeita o status do arquivo do missing-tracks.txt (não baixará se o arquivo já existir)
+
+Exportação de Biblioteca (Novo na v1.0.4)
+- Exporta toda a biblioteca como arquivo ZIP contendo lista CSV e scripts de verificação
+- Scripts check-library.bat/.sh analisam sua pasta de downloads
+- Gera missing-tracks.txt com status de arquivos (mp3Found, wavFound, txtFound)
+- Gera duplicates.txt para faixas com múltiplos arquivos
+- Scripts suportam múltiplos idiomas automaticamente
+
+Tratamento de Limite de Taxa (Novo na v1.0.4)
+- Retry automático com backoff exponencial em erros de limite de taxa
+- Ajuste dinâmico de atrasos quando limites de taxa são detectados
+- Notificações ao usuário quando limitação de taxa ocorre
+- Continua buscando mesmo quando limites de taxa ocorrem
+- Previne que faixas sejam deixadas para trás
+
+Como Usar
+
+Instalação
+1. Instale a extensão na Chrome Web Store
+2. Visite suno.com e faça login
+3. Navegue pelo site (a extensão captura o token automaticamente)
+
+Baixar Faixas
+1. Clique no ícone da extensão na barra de ferramentas
+2. Clique em "Abrir Exportador no Suno.com"
+3. Selecione as faixas desejadas (ou use "Selecionar Tudo")
+4. Clique em "Baixar MP3 Selecionados" ou "Converter e Baixar WAV Selecionados"
+5. Acompanhe o progresso na barra de status
+
+Fluxo de Trabalho de Download Personalizado
+1. Exporte sua biblioteca usando o botão "Exportar Biblioteca Suno"
+2. Extraia o arquivo ZIP para sua pasta de downloads
+3. Execute check-library.bat (Windows) ou check-library.sh (Linux/Mac)
+4. O script gerará missing-tracks.txt com status de arquivos
+5. Abra a aba Download Personalizado na extensão
+6. Arraste o arquivo missing-tracks.txt
+7. Baixe apenas as faixas faltantes
+
+Gerenciamento de Token
+- Se o token não for encontrado, clique em "Extrair Sessão da Página"
+- A extensão navegará para a biblioteca e capturará o token automaticamente
+
+Dicas
+
+Otimizar Downloads
+- Vá em Configurações do Chrome → Downloads
+- Desative "Perguntar onde salvar cada arquivo antes de baixar"
+- Isso elimina diálogos de confirmação e acelera downloads em lote
+
+Formatos
+- MP3: Download rápido e direto com metadados incorporados
+- WAV: Alta qualidade, inclui arquivo sidecar com metadados
+
+Resetar Downloads
+- Use o botão de desbloqueio em faixas individuais para resetar seu status de download
+- Use o botão "Resetar Downloads" para limpar todo o status de download de uma vez
+- Isso permite baixar faixas novamente se necessário
+
+Privacidade e Segurança
+
+- Todos os dados armazenados localmente no seu dispositivo
+- Nenhum servidor externo ou terceiros envolvidos
+- Tokens nunca saem do seu navegador
+- Código aberto e transparente

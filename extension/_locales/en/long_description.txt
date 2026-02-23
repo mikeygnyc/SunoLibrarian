@@ -1,0 +1,156 @@
+Suno Tracks Exporter - Complete User Guide
+
+Version History
+
+Version 1.0.4 Updates
+- Added Custom Download tab for downloading only missing tracks
+- Added Library Export feature with CSV and check scripts
+- Added check-library.bat/.sh scripts with file status detection
+- Added duplicates detection in check scripts
+- Added Export SunoLibrary button to re-download ZIP without refetching
+- Improved rate limit handling with automatic retry and exponential backoff
+- Added user notifications for rate limiting
+- Dynamic delay adjustment based on rate limit detection
+- Enhanced missing-tracks.txt format with file status (mp3Found, wavFound, txtFound)
+- Scripts now support multiple languages automatically
+- Improved error handling to prevent tracks from being left behind
+- Added background metadata fetching for complete track information
+- Enhanced CSV export with full metadata (lyrics, tags, prompt, BPM, key, etc.)
+- Added JSON export option with complete metadata
+- Added "Download All Metadata" button after metadata collection completes
+- Improved modal layout with two-column design for better usability
+- Added "Hide" filters for Stems, Uploads, Liked, and Not Liked tracks
+- Added "Errors? Reset Here" button to clear all extension data
+- Removed csv2json scripts (metadata now included directly in JSON export)
+
+Version 1.0.3 Updates
+- Added metadata embedding for MP3 files (Cover Art, Lyrics, Prompt, etc.)
+- Added sidecar text files for all downloads containing full track info
+- Added options to hide Stems and Uploads from the track list
+- Added workspace caching for faster load times
+- Added refresh button for individual workspaces
+- Improved download stability for small and large files
+- Fixed issues with Windows Media Player compatibility for cover art
+
+Overview
+
+Suno Tracks Exporter is a powerful Chrome extension that allows you to quickly export and download all your music tracks created on Suno.com. Whether you're managing a large library of AI-generated music, backing up your creative work, or organizing tracks across multiple workspaces, this extension provides a seamless, automated solution for batch downloading your tracks in both MP3 and WAV formats.
+
+Why Use Suno Tracks Exporter?
+
+Suno.com doesn't offer bulk download functionality. Manually downloading each track one by one is time-consuming and tedious, especially if you have dozens or hundreds of tracks across multiple workspaces. This extension solves all these problems by providing automated batch downloading with intelligent organization and progress tracking.
+
+Key Features
+
+Automatic Authentication
+- Automatically captures your authentication token from Suno.com as you browse
+- No manual configuration required
+- Tokens stored locally on your device only
+- Complete privacy and security
+
+Multi-Workspace Support
+- Automatically detects and fetches tracks from all your workspaces
+- Handles hundreds of workspaces with pagination
+- Displays tracks grouped by workspace with collapsible sections
+- Easy navigation through large collections
+
+Batch Downloads
+- Select individual tracks, entire workspaces, or all tracks at once
+- Instant MP3 downloads
+- Automatic WAV conversion with progress tracking
+- Real-time progress bar that stays visible
+- Sequential downloads with smart delays to avoid rate limiting
+
+Smart Organization
+- Files saved with format: workspace-trackname-trackid.mp3/wav
+- Organized and unique filenames
+- Easy identification and organization
+
+Download Status Tracking
+- Tracks already downloaded are visually marked (grayed out)
+- Unlock button to reset download status and download again
+- Global reset button to clear all download status
+- Resume downloads manually if something fails
+
+Metadata and Sidecars
+- Embeds metadata (Lyrics, Prompt, Cover Art, BPM, Key) into MP3 files
+- Generates a companion text file (.txt) for every download with full track details
+- Includes raw API response in sidecar files for developers/archiving
+
+Filtering and Caching
+- Filter out Stems or Uploads from the list to keep your view clean
+- Show only Liked tracks filter
+- Workspace caching speeds up loading times significantly
+- Refresh individual workspaces to check for new tracks without reloading everything
+- Cache timestamps displayed for each workspace
+
+Custom Download Tab (New in v1.0.4)
+- Drop missing-tracks.txt file to download only missing tracks
+- Automatically detects which file formats (MP3/WAV) are missing
+- Loads tracks from cache first to minimize API requests
+- Organizes missing tracks by workspace
+- Respects file status from missing-tracks.txt (won't download if file already exists)
+
+Library Export (New in v1.0.4)
+- Export entire library as ZIP file containing CSV list and check scripts
+- check-library.bat/.sh scripts analyze your downloads folder
+- Generates missing-tracks.txt with file status (mp3Found, wavFound, txtFound)
+- Generates duplicates.txt for tracks with multiple files
+- Scripts support multiple languages automatically
+
+Rate Limit Handling (New in v1.0.4)
+- Automatic retry with exponential backoff on rate limit errors
+- Dynamic delay adjustment when rate limits are detected
+- User notifications when rate limiting occurs
+- Continues fetching even when rate limits occur
+- Prevents tracks from being left behind
+
+How to Use
+
+Installation
+1. Install the extension from Chrome Web Store
+2. Visit suno.com and log in
+3. Browse the site (extension captures token automatically)
+
+Downloading Tracks
+1. Click the extension icon in the toolbar
+2. Click "Open Downloader on Suno.com"
+3. Select desired tracks (or use "Select All")
+4. Click "Download Selected MP3" or "Convert & Download Selected WAV"
+5. Monitor progress in the status bar
+
+Custom Download Workflow
+1. Export your library using "Export SunoLibrary" button
+2. Extract the ZIP file to your downloads folder
+3. Run check-library.bat (Windows) or check-library.sh (Linux/Mac)
+4. The script will generate missing-tracks.txt with file status
+5. Open Custom Download tab in the extension
+6. Drop the missing-tracks.txt file
+7. Download only the missing tracks
+
+Token Management
+- If token is not found, click "Extract Session from Page"
+- Extension will navigate to library and capture token automatically
+
+Tips
+
+Optimize Downloads
+- Go to Chrome Settings → Downloads
+- Turn off "Ask where to save each file before downloading"
+- This eliminates confirmation dialogs and speeds up batch downloads
+
+Formats
+- MP3: Quick direct download with embedded metadata
+- WAV: High quality, includes sidecar file with metadata
+
+Reset Downloads
+- Use the unlock button on individual tracks to reset their download status
+- Use "Reset Downloads" button to clear all download status at once
+- This allows you to download tracks again if needed
+
+Privacy and Security
+
+- All data stored locally on your device
+- No external servers or third parties involved
+- Tokens never leave your browser
+- Open source and transparent

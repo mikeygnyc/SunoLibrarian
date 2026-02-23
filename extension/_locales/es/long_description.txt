@@ -1,0 +1,156 @@
+Exportador de Pistas Suno - Guía Completa del Usuario
+
+Historial de Versiones
+
+Actualizaciones de la Versión 1.0.4
+- Agregada pestaña Descarga Personalizada para descargar solo pistas faltantes
+- Agregada función de Exportación de Biblioteca con CSV y scripts de verificación
+- Agregados scripts check-library.bat/.sh con detección de estado de archivos
+- Agregada detección de duplicados en scripts de verificación
+- Agregado botón Exportar Biblioteca Suno para volver a descargar ZIP sin refetch
+- Mejorado manejo de límite de tasa con reintento automático y retroceso exponencial
+- Agregadas notificaciones al usuario para limitación de tasa
+- Ajuste dinámico de retrasos basado en detección de límite de tasa
+- Formato mejorado de missing-tracks.txt con estado de archivos (mp3Found, wavFound, txtFound)
+- Los scripts ahora soportan múltiples idiomas automáticamente
+- Mejorado manejo de errores para prevenir que las pistas se queden atrás
+- Agregada obtención de metadatos en segundo plano para información completa de pistas
+- CSV mejorado con metadatos completos (letras, etiquetas, prompt, BPM, tono, etc.)
+- Agregada opción de exportación JSON con metadatos completos
+- Agregado botón "Descargar Todos los Metadatos" después de completar la recopilación
+- Mejorado diseño del modal con diseño de dos columnas para mejor usabilidad
+- Agregados filtros "Ocultar" para Stems, Uploads, Favoritas y No Favoritas
+- Agregado botón "¿Errores? Restablecer Aquí" para limpiar todos los datos de la extensión
+- Eliminados scripts csv2json (los metadatos ahora se incluyen directamente en la exportación JSON)
+
+Actualizaciones de la Versión 1.0.3
+- Agregada incorporación de metadatos para archivos MP3 (Portada, Letras, Prompt, etc.)
+- Agregados archivos de texto sidecar para todas las descargas conteniendo información completa de la pista
+- Agregadas opciones para ocultar Stems y Uploads de la lista de pistas
+- Agregado caché de espacios de trabajo para tiempos de carga más rápidos
+- Agregado botón de actualización para espacios de trabajo individuales
+- Mejorada estabilidad de descarga para archivos pequeños y grandes
+- Corregidos problemas de compatibilidad con Windows Media Player para arte de portada
+
+Visión General
+
+El Exportador de Pistas Suno es una extensión poderosa de Chrome que permite exportar y descargar rápidamente todas tus pistas de música creadas en Suno.com. Ya sea que estés gestionando una gran biblioteca de música generada por IA, haciendo copias de seguridad de tu trabajo creativo u organizando pistas en múltiples espacios de trabajo, esta extensión proporciona una solución automatizada para descargar tus pistas en lote en formatos MP3 y WAV.
+
+¿Por Qué Usar el Exportador de Pistas Suno?
+
+Suno.com no ofrece funcionalidad de descarga masiva. Descargar cada pista manualmente una por una es lento y tedioso, especialmente si tienes decenas o cientos de pistas en múltiples espacios de trabajo. Esta extensión resuelve todos estos problemas proporcionando descargas en lote automatizadas con organización inteligente y seguimiento de progreso.
+
+Características Principales
+
+Autenticación Automática
+- Captura automáticamente tu token de autenticación de Suno.com mientras navegas
+- Sin necesidad de configuración manual
+- Tokens almacenados localmente solo en tu dispositivo
+- Privacidad y seguridad completas
+
+Soporte Multi-Espacio de Trabajo
+- Detecta y obtiene automáticamente pistas de todos tus espacios de trabajo
+- Maneja cientos de espacios de trabajo con paginación
+- Muestra pistas agrupadas por espacio de trabajo con secciones colapsables
+- Navegación fácil a través de grandes colecciones
+
+Descargas en Lote
+- Selecciona pistas individuales, espacios de trabajo completos o todas las pistas a la vez
+- Descargas MP3 instantáneas
+- Conversión automática a WAV con seguimiento de progreso
+- Barra de progreso en tiempo real siempre visible
+- Descargas secuenciales con retrasos inteligentes para evitar limitación de tasa
+
+Organización Inteligente
+- Archivos guardados con formato: espacio-de-trabajo-nombre-de-pista-id.mp3/wav
+- Nombres de archivo organizados y únicos
+- Identificación y organización fáciles
+
+Seguimiento de Estado de Descarga
+- Las pistas ya descargadas se marcan visualmente (atenuadas)
+- Botón de desbloqueo para restablecer el estado de descarga y descargar nuevamente
+- Botón de restablecimiento global para limpiar todo el estado de descarga
+- Reanudar descargas manualmente si algo falla
+
+Metadatos y Sidecars
+- Incorpora metadatos (Letras, Prompt, Portada, BPM, Tono) en archivos MP3
+- Genera un archivo de texto compañero (.txt) para cada descarga con detalles completos de la pista
+- Incluye respuesta bruta de la API en archivos sidecar para desarrolladores/archivado
+
+Filtrado y Caché
+- Filtra Stems o Uploads de la lista para mantener tu vista limpia
+- Filtro para mostrar solo pistas favoritas
+- El caché de espacios de trabajo acelera significativamente los tiempos de carga
+- Actualiza espacios de trabajo individuales para verificar nuevas pistas sin recargar todo
+- Timestamps de caché mostrados para cada espacio de trabajo
+
+Pestaña Descarga Personalizada (Nuevo en v1.0.4)
+- Arrastra el archivo missing-tracks.txt para descargar solo las pistas faltantes
+- Detecta automáticamente qué formatos de archivo (MP3/WAV) faltan
+- Carga pistas del caché primero para minimizar solicitudes a la API
+- Organiza pistas faltantes por espacio de trabajo
+- Respeta el estado del archivo desde missing-tracks.txt (no descargará si el archivo ya existe)
+
+Exportación de Biblioteca (Nuevo en v1.0.4)
+- Exporta toda la biblioteca como archivo ZIP conteniendo lista CSV y scripts de verificación
+- Scripts check-library.bat/.sh analizan tu carpeta de descargas
+- Genera missing-tracks.txt con estado de archivos (mp3Found, wavFound, txtFound)
+- Genera duplicates.txt para pistas con múltiples archivos
+- Los scripts soportan múltiples idiomas automáticamente
+
+Manejo de Límite de Tasa (Nuevo en v1.0.4)
+- Reintento automático con retroceso exponencial en errores de límite de tasa
+- Ajuste dinámico de retrasos cuando se detectan límites de tasa
+- Notificaciones al usuario cuando ocurre limitación de tasa
+- Continúa obteniendo incluso cuando ocurren límites de tasa
+- Previene que las pistas se queden atrás
+
+Cómo Usar
+
+Instalación
+1. Instala la extensión desde Chrome Web Store
+2. Visita suno.com e inicia sesión
+3. Navega por el sitio (la extensión captura el token automáticamente)
+
+Descargar Pistas
+1. Haz clic en el ícono de la extensión en la barra de herramientas
+2. Haz clic en "Abrir Exportador en Suno.com"
+3. Selecciona las pistas deseadas (o usa "Seleccionar Todo")
+4. Haz clic en "Descargar MP3 Seleccionados" o "Convertir y Descargar WAV Seleccionados"
+5. Monitorea el progreso en la barra de estado
+
+Flujo de Trabajo de Descarga Personalizada
+1. Exporta tu biblioteca usando el botón "Exportar Biblioteca Suno"
+2. Extrae el archivo ZIP a tu carpeta de descargas
+3. Ejecuta check-library.bat (Windows) o check-library.sh (Linux/Mac)
+4. El script generará missing-tracks.txt con estado de archivos
+5. Abre la pestaña Descarga Personalizada en la extensión
+6. Arrastra el archivo missing-tracks.txt
+7. Descarga solo las pistas faltantes
+
+Gestión de Token
+- Si el token no se encuentra, haz clic en "Extraer Sesión de la Página"
+- La extensión navegará a la biblioteca y capturará el token automáticamente
+
+Consejos
+
+Optimizar Descargas
+- Ve a Configuración de Chrome → Descargas
+- Desactiva "Preguntar dónde guardar cada archivo antes de descargar"
+- Esto elimina diálogos de confirmación y acelera las descargas en lote
+
+Formatos
+- MP3: Descarga rápida y directa con metadatos incorporados
+- WAV: Alta calidad, incluye archivo sidecar con metadatos
+
+Restablecer Descargas
+- Usa el botón de desbloqueo en pistas individuales para restablecer su estado de descarga
+- Usa el botón "Restablecer Descargas" para limpiar todo el estado de descarga de una vez
+- Esto te permite descargar pistas nuevamente si es necesario
+
+Privacidad y Seguridad
+
+- Todos los datos almacenados localmente en tu dispositivo
+- Ningún servidor externo o terceros involucrados
+- Los tokens nunca salen de tu navegador
+- Código abierto y transparente

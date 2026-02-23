@@ -1,0 +1,670 @@
+{
+   "allWorkspaces": {
+      "description": "Título do cabeçalho para seção de todos os workspaces",
+      "message": "Todos os workspaces"
+   },
+   "backToFileDrop": {
+      "description": "Botão para voltar à zona de arrastar arquivo",
+      "message": "Voltar"
+   },
+   "cached": {
+      "description": "Rótulo de timestamp de cache",
+      "message": "Em cache:"
+   },
+   "changeChromeSettings": {
+      "description": "Link para configurações do Chrome",
+      "message": "altere essas configurações do Chrome"
+   },
+   "clearAllData": {
+      "description": "Button to clear all extension data",
+      "message": "Erros? Reset"
+   },
+   "clearAllDataComplete": {
+      "description": "Success message after clearing all data",
+      "message": "Todos os dados da extensão foram limpos. A página será recarregada."
+   },
+   "clearAllDataError": {
+      "description": "Error message when clearing data fails",
+      "message": "Erro ao limpar dados: {error}"
+   },
+   "clearAllDataTitle": {
+      "description": "Tooltip for clear all data button",
+      "message": "Limpar todos os dados da extensão e redefinir para instalação nova"
+   },
+   "clearing": {
+      "description": "Status message while clearing data",
+      "message": "Limpando..."
+   },
+   "close": {
+      "description": "Botão fechar",
+      "message": "Fechar"
+   },
+   "completed": {
+      "description": "Mensagem concluído",
+      "message": "Concluído! Baixados"
+   },
+   "confirmClearAllData": {
+      "description": "Confirmation message for clearing all data",
+      "message": "Isso limpará TODOS os dados da extensão incluindo:\n- Todas as faixas e workspaces em cache\n- Todos os metadados\n- Histórico de downloads\n- Token de autenticação\n\nVocê precisará visitar suno.com novamente para re-autenticar.\n\nEsta ação não pode ser desfeita. Continuar?"
+   },
+   "confirmReset": {
+      "description": "Mensagem de confirmação para reset",
+      "message": "Tem certeza que deseja resetar todo o status de download? Isso permitirá baixar as faixas novamente."
+   },
+   "conversionFailed": {
+      "description": "Mensagem conversão falhou",
+      "message": "Conversão falhou:"
+   },
+   "converting": {
+      "description": "Rótulo convertendo",
+      "message": "Convertendo"
+   },
+   "customDownloadDescription": {
+      "description": "Texto de descrição para aba de download personalizado",
+      "message": "Arraste seu arquivo missing-tracks.txt aqui para baixar apenas as faixas faltantes."
+   },
+   "customDownloadTitle": {
+      "description": "Título para seção de download personalizado",
+      "message": "Download Personalizado"
+   },
+   "downloadAllMetadata": {
+      "description": "Button to download CSV with full metadata",
+      "message": "Baixar todos os metadados"
+   },
+   "downloadCsvPrompt": {
+      "description": "Solicitação para baixar CSV após buscar faixas",
+      "message": "Encontradas {count} faixas de {workspaces} workspace(s).\n\nGostaria de baixar esta lista como um arquivo CSV (empacotado em um ZIP com scripts de sincronização de biblioteca)?"
+   },
+   "downloadMP3": {
+      "description": "Botão baixar MP3",
+      "message": "Baixar MP3"
+   },
+   "downloadSelectedMP3": {
+      "description": "Botão baixar MP3 selecionados",
+      "message": "Baixar MP3 Selecionados"
+   },
+   "downloadSelectedMP3Custom": {
+      "description": "Botão para baixar MP3 selecionados na aba de download personalizado",
+      "message": "Baixar MP3 Selecionados"
+   },
+   "downloadSelectedWAV": {
+      "description": "Botão baixar WAV selecionados",
+      "message": "Converter e Baixar WAV Selecionados"
+   },
+   "downloadSelectedWAVCustom": {
+      "description": "Botão para baixar WAV selecionados na aba de download personalizado",
+      "message": "Converter e Baixar WAV Selecionados"
+   },
+   "downloadTrackList": {
+      "description": "Button label for downloading simple track list (CSV + scripts, no metadata)",
+      "message": "Baixar Lista de Faixas"
+   },
+   "downloadWAV": {
+      "description": "Botão baixar WAV",
+      "message": "Baixar WAV"
+   },
+   "downloadableTracks": {
+      "description": "Texto de faixas disponíveis",
+      "message": "faixas disponíveis para download em"
+   },
+   "downloaded": {
+      "description": "Rótulo baixados",
+      "message": "Baixados"
+   },
+   "downloading": {
+      "description": "Rótulo baixando",
+      "message": "Baixando"
+   },
+   "dropFileHere": {
+      "description": "Instrução da zona de arrastar arquivo",
+      "message": "Arraste o arquivo aqui ou clique para procurar"
+   },
+   "errorLoadingTracks": {
+      "description": "Erro ao carregar faixas",
+      "message": "Erro ao carregar faixas:"
+   },
+   "errorsResetHere": {
+      "description": "Reset button text in top right corner",
+      "message": "Erros? Reset Aqui"
+   },
+   "exportLibraryAlertMessage": {
+      "description": "Mensagem para a alerta de exportar biblioteca",
+      "message": "Isso criará um arquivo ZIP contendo:\n- suno-tracks-list.csv (lista de todas as faixas)\n- check-library.bat (script do Windows)\n- check-library.sh (script do Linux/macOS)\n- README.txt (instruções)\n\n⚠️ IMPORTANTE: Após baixar, extraia o arquivo ZIP na pasta onde você baixou suas faixas (arquivos MP3/WAV).\n\nOs scripts precisam estar na mesma pasta que suas faixas baixadas para funcionar corretamente.\n\nContinuar?"
+   },
+   "exportLibraryAlertTitle": {
+      "description": "Título para alerta de exportar biblioteca",
+      "message": "Exportar Biblioteca Suno"
+   },
+   "exportSunoLibrary": {
+      "description": "Botão para exportar biblioteca como ZIP",
+      "message": "Exportar Biblioteca Suno"
+   },
+   "exporting": {
+      "description": "Status ao exportar biblioteca",
+      "message": "Exportando..."
+   },
+   "extensionDescription": {
+      "description": "Descrição da extensão",
+      "message": "Exporte rapidamente suas faixas do Suno de cada workspace como arquivos MP3 ou WAV com metadados"
+   },
+   "extensionName": {
+      "description": "Nome da extensão",
+      "message": "Exportador de Faixas Suno"
+   },
+   "extractToken": {
+      "description": "Botão para extrair sessão",
+      "message": "Extrair Sessão da Página"
+   },
+   "extracting": {
+      "description": "Status de extração de sessão",
+      "message": "Extraindo..."
+   },
+   "fetchingMetadata": {
+      "description": "Status text for metadata fetching",
+      "message": "Buscando metadados"
+   },
+   "fetchingMissingTracks": {
+      "description": "Mensagem de progresso ao buscar faixas faltantes",
+      "message": "Buscando faixas faltantes... {current}/{total} ({percent}%)"
+   },
+   "fetchingWorkspaces": {
+      "description": "Mensagem ao buscar workspaces",
+      "message": "Buscando workspaces..."
+   },
+   "fetchingWorkspacesProgress": {
+      "description": "Mensagem de progresso ao buscar workspaces",
+      "message": "Buscando workspaces... (Encontrados {count} até agora, carregando página {page}...)"
+   },
+   "fileAlreadyExists": {
+      "description": "Alerta quando formato de arquivo já existe",
+      "message": "Arquivo {format} já existe para esta faixa."
+   },
+   "filterLiked": {
+      "description": "Rótulo de filtro para faixas curtidas",
+      "message": "Curtidas"
+   },
+   "filterNotLiked": {
+      "description": "Rótulo de filtro para faixas não curtidas",
+      "message": "Não Curtidas"
+   },
+   "filterStems": {
+      "description": "Rótulo de filtro para stems",
+      "message": "Stems"
+   },
+   "filterUpload": {
+      "description": "Rótulo de filtro para uploads",
+      "message": "Upload"
+   },
+   "foundInCacheFetching": {
+      "description": "Status ao carregar do cache e buscar faltantes",
+      "message": "Encontrados {found} no cache, buscando {missing} faltantes..."
+   },
+   "foundTrackIds": {
+      "description": "Status quando IDs de faixas encontrados no arquivo",
+      "message": "Encontrados {count} ID(s) de faixa(s). Carregando do cache..."
+   },
+   "goToSuno": {
+      "description": "Botão para navegar para Suno",
+      "message": "Ir para Suno.com"
+   },
+   "hide": {
+      "description": "Prefixo para rótulos de filtro de ocultar",
+      "message": "Ocultar"
+   },
+   "hideStems": {
+      "description": "Opção de filtro para ocultar stems",
+      "message": "Ocultar Stems"
+   },
+   "hideUploads": {
+      "description": "Opção de filtro para ocultar uploads",
+      "message": "Ocultar Uploads"
+   },
+   "instruction1": {
+      "description": "Primeira instrução",
+      "message": "Visite suno.com e faça login"
+   },
+   "instruction2": {
+      "description": "Segunda instrução",
+      "message": "Clique em \"Extrair Sessão\" se a sessão não for encontrada automaticamente"
+   },
+   "instruction3": {
+      "description": "Terceira instrução",
+      "message": "Clique em \"Abrir Exportador\" ou use o botão na página"
+   },
+   "instruction4": {
+      "description": "Quarta instrução",
+      "message": "Selecione as faixas e baixe"
+   },
+   "instructions": {
+      "description": "Rótulo de instruções",
+      "message": "Instruções:"
+   },
+   "loadingAllTracksSummary": {
+      "description": "Resumo antes de carregar faixas",
+      "message": "Encontrados {count} workspace(s). Carregando faixas..."
+   },
+   "loadingTracks": {
+      "description": "Mensagem carregando faixas",
+      "message": "Carregando faixas..."
+   },
+   "loadingWorkspaceTracks": {
+      "description": "Mensagem de progresso ao carregar faixas de um workspace",
+      "message": "Encontrados {total} workspace(s). Carregando faixas do workspace {current}/{total}: \"{name}\"..."
+   },
+   "metadataFetchComplete": {
+      "description": "Status when metadata fetching is done",
+      "message": "Busca de metadados concluída"
+   },
+   "metadataFetchFailed": {
+      "description": "Error message for metadata fetching",
+      "message": "Falha ao buscar metadados para {count} faixas"
+   },
+   "metadataProgress": {
+      "description": "Progress text for metadata fetching",
+      "message": "Buscando metadados: {current}/{total} faixas ({percentage}%)"
+   },
+   "missingTracksFileName": {
+      "description": "Nome do arquivo de faixas faltantes",
+      "message": "missing-tracks.txt"
+   },
+   "navigatingToLibrary": {
+      "description": "Status de navegação",
+      "message": "Navegando para biblioteca... A sessão será capturada automaticamente das requisições da API."
+   },
+   "noDownloadableTracksFound": {
+      "description": "Erro quando nenhuma faixa disponível para download encontrada",
+      "message": "Nenhuma faixa disponível para download encontrada"
+   },
+   "noNewTracksSelected": {
+      "description": "Alerta quando não há faixas novas para baixar",
+      "message": "Todas as faixas selecionadas já foram baixadas."
+   },
+   "noTrackIdsFound": {
+      "description": "Erro quando arquivo não tem IDs de faixas",
+      "message": "Nenhum ID de faixa encontrado no arquivo"
+   },
+   "noTracksFound": {
+      "description": "Mensagem nenhuma faixa encontrada",
+      "message": "Nenhuma faixa disponível para download encontrada."
+   },
+   "noTracksMissingFormat": {
+      "description": "Alerta quando não há faixas faltando formato específico",
+      "message": "Nenhuma faixa faltando formato {format} encontrada na seleção."
+   },
+   "noTracksMissingFormatAuto": {
+      "description": "Alerta quando não há faixas faltando formato (seleção automática)",
+      "message": "Nenhuma faixa faltando formato {format} encontrada."
+   },
+   "of": {
+      "description": "Conector de",
+      "message": "de"
+   },
+   "openDownloader": {
+      "description": "Botão para abrir exportador",
+      "message": "Abrir Exportador no Suno.com"
+   },
+   "pleaseSelectTxtFile": {
+      "description": "Erro quando tipo de arquivo incorreto selecionado",
+      "message": "Por favor, selecione um arquivo .txt"
+   },
+   "pleaseVisitSuno": {
+      "description": "Mensagem para visitar Suno primeiro",
+      "message": "Por favor, visite suno.com primeiro"
+   },
+   "rawApiResponse": {
+      "description": "Cabeçalho para dados brutos da API no arquivo sidecar",
+      "message": "--- Resposta Bruta da API ---"
+   },
+   "readmeBatFile": {
+      "description": "README: descrição do arquivo BAT",
+      "message": "- check-library.bat: Script do Windows para verificar arquivos baixados"
+   },
+   "readmeContains": {
+      "description": "README: o que o ZIP contém",
+      "message": "Este arquivo ZIP contém:"
+   },
+   "readmeCsvFile": {
+      "description": "README: descrição do arquivo CSV",
+      "message": "- suno-tracks-list.csv: Lista simplificada de todas as suas faixas (fácil de analisar, sem campos de texto longo)"
+   },
+   "readmeCustomDownload": {
+      "description": "README: seção download personalizado",
+      "message": "ABA DOWNLOAD PERSONALIZADO:"
+   },
+   "readmeCustomDownloadStep1": {
+      "description": "README: passo 1 de download personalizado",
+      "message": "1. Abra a extensão Suno Tracks Exporter"
+   },
+   "readmeCustomDownloadStep2": {
+      "description": "README: passo 2 de download personalizado",
+      "message": "2. Vá para a aba \"Download Personalizado\""
+   },
+   "readmeCustomDownloadStep3": {
+      "description": "README: passo 3 de download personalizado",
+      "message": "3. Arraste o arquivo missing-tracks.txt"
+   },
+   "readmeCustomDownloadStep4": {
+      "description": "README: passo 4 de download personalizado",
+      "message": "4. A extensão mostrará apenas as faixas que faltam arquivos"
+   },
+   "readmeCustomDownloadStep5": {
+      "description": "README: passo 5 de download personalizado",
+      "message": "5. Baixe MP3 ou WAV para as faixas que precisarem"
+   },
+   "readmeDuplicatesFormat": {
+      "description": "README: formato de duplicados",
+      "message": "- duplicates.txt: Contém faixas com múltiplos arquivos do mesmo tipo"
+   },
+   "readmeDuplicatesFormatDetail": {
+      "description": "README: detalhe de formato de duplicados",
+      "message": "  Formato: trackId - MP3:nome1|data1;nome2|data2; WAV:nome3|data3;"
+   },
+   "readmeDuplicatesNote": {
+      "description": "README: nota sobre duplicados",
+      "message": "  Os arquivos são listados com suas datas de modificação para ajudar a identificar qual é mais antigo."
+   },
+   "readmeHowToUse": {
+      "description": "README: seção como usar",
+      "message": "COMO USAR:"
+   },
+   "readmeJsonFile": {
+      "description": "README: descrição do arquivo JSON",
+      "message": "- suno-tracks-list.json: Metadados completos incluindo letras e prompts (para informações detalhadas)"
+   },
+   "readmeJsonScripts": {
+      "description": "List item for JSON scripts in README",
+      "message": "- csv2json.bat / csv2json.sh (Converter CSV para JSON)"
+   },
+   "readmeLinux": {
+      "description": "README: seção Linux/macOS",
+      "message": "Linux/macOS:"
+   },
+   "readmeLinuxStep1": {
+      "description": "README: passo 1 do Linux",
+      "message": "1. Extraia este arquivo ZIP para sua pasta de downloads (onde estão seus arquivos MP3/WAV)"
+   },
+   "readmeLinuxStep2": {
+      "description": "README: passo 2 do Linux",
+      "message": "2. Abra o Terminal nessa pasta"
+   },
+   "readmeLinuxStep3": {
+      "description": "README: passo 3 do Linux",
+      "message": "3. Torne o script executável:"
+   },
+   "readmeLinuxStep3a": {
+      "description": "README: passo 3a do Linux",
+      "message": "   chmod +x check-library.sh"
+   },
+   "readmeLinuxStep4": {
+      "description": "README: passo 4 do Linux",
+      "message": "4. Execute o script:"
+   },
+   "readmeLinuxStep4a": {
+      "description": "README: passo 4a do Linux",
+      "message": "   ./check-library.sh"
+   },
+   "readmeLinuxStep5": {
+      "description": "README: passo 5 do Linux",
+      "message": "5. O script analisará sua pasta e criará:"
+   },
+   "readmeLinuxStep5a": {
+      "description": "README: passo 5a do Linux",
+      "message": "   - missing-tracks.txt: Lista de faixas com status de arquivos (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeLinuxStep5b": {
+      "description": "README: passo 5b do Linux",
+      "message": "   - duplicates.txt: Lista de faixas com múltiplos arquivos mostrando nomes de arquivo e datas"
+   },
+   "readmeLinuxStep6": {
+      "description": "README: passo 6 do Linux",
+      "message": "6. Use a aba Download Personalizado no Suno Tracks Exporter para baixar faixas faltantes"
+   },
+   "readmeMissingTracksExample": {
+      "description": "README: exemplo de faixas faltantes",
+      "message": "  Exemplo: abc123,true,false,true"
+   },
+   "readmeMissingTracksFormat": {
+      "description": "README: formato de faixas faltantes",
+      "message": "- missing-tracks.txt: Contém todas as faixas com seu status de arquivos"
+   },
+   "readmeMissingTracksFormatDetail": {
+      "description": "README: detalhe de formato de faixas faltantes",
+      "message": "  Formato: trackId,mp3Found,wavFound,txtFound"
+   },
+   "readmeNote": {
+      "description": "README: nota sobre correspondência de nomes de arquivo",
+      "message": "NOTA: Os scripts procuram arquivos que contenham o ID de faixa em qualquer parte do nome do arquivo, então funcionam com qualquer convenção de nomes que você possa ter usado."
+   },
+   "readmeReadmeFile": {
+      "description": "README: descrição do arquivo README",
+      "message": "- README.txt: Este arquivo"
+   },
+   "readmeResults": {
+      "description": "README: seção resultados",
+      "message": "Resultados:"
+   },
+   "readmeScriptsCheck": {
+      "description": "README: descrição de verificação de scripts",
+      "message": "Os scripts verificam sua pasta de downloads para arquivos que contenham cada ID de faixa:"
+   },
+   "readmeScriptsCheckMp3": {
+      "description": "README: scripts verificam MP3",
+      "message": "- Procura arquivos *.mp3 com o ID de faixa no nome do arquivo"
+   },
+   "readmeScriptsCheckTxt": {
+      "description": "README: scripts verificam TXT",
+      "message": "- Procura arquivos *.txt com o ID de faixa no nome do arquivo"
+   },
+   "readmeScriptsCheckWav": {
+      "description": "README: scripts verificam WAV",
+      "message": "- Procura arquivos *.wav com o ID de faixa no nome do arquivo"
+   },
+   "readmeShFile": {
+      "description": "README: descrição do arquivo SH",
+      "message": "- check-library.sh: Script do Linux/macOS para verificar arquivos baixados"
+   },
+   "readmeSupport": {
+      "description": "README: nota de suporte",
+      "message": "Para suporte ou problemas, visite o repositório GitHub da extensão."
+   },
+   "readmeTitle": {
+      "description": "Título do README",
+      "message": "Exportador de Faixas Suno - Scripts de Verificação de Biblioteca"
+   },
+   "readmeWhatScriptsDo": {
+      "description": "README: seção o que os scripts fazem",
+      "message": "O QUE OS SCRIPTS FAZEM:"
+   },
+   "readmeWindows": {
+      "description": "README: seção Windows",
+      "message": "Windows:"
+   },
+   "readmeWindowsStep1": {
+      "description": "README: passo 1 do Windows",
+      "message": "1. Extraia este arquivo ZIP para sua pasta de downloads (onde estão seus arquivos MP3/WAV)"
+   },
+   "readmeWindowsStep2": {
+      "description": "README: passo 2 do Windows",
+      "message": "2. Clique duas vezes em check-library.bat"
+   },
+   "readmeWindowsStep3": {
+      "description": "README: passo 3 do Windows",
+      "message": "3. O script analisará sua pasta e criará:"
+   },
+   "readmeWindowsStep3a": {
+      "description": "README: passo 3a do Windows",
+      "message": "   - missing-tracks.txt: Lista de faixas com status de arquivos (mp3Found, wavFound, txtFound, duplicates)"
+   },
+   "readmeWindowsStep3b": {
+      "description": "README: passo 3b do Windows",
+      "message": "   - duplicates.txt: Lista de faixas com múltiplos arquivos mostrando nomes de arquivo e datas"
+   },
+   "readmeWindowsStep4": {
+      "description": "README: passo 4 do Windows",
+      "message": "4. Use a aba Download Personalizado no Suno Tracks Exporter para baixar faixas faltantes"
+   },
+   "refreshAllWorkspaces": {
+      "description": "Dica para botão atualizar tudo",
+      "message": "Atualizar todos os workspaces e faixas"
+   },
+   "refreshWorkspace": {
+      "description": "Dica para botão atualizar workspace",
+      "message": "Atualizar faixas deste workspace"
+   },
+   "resetDownloads": {
+      "description": "Botão para resetar status de download",
+      "message": "Resetar Downloads"
+   },
+   "resetDownloadsTitle": {
+      "description": "Dica para botão resetar downloads",
+      "message": "Limpar todo status de download"
+   },
+   "scriptBothFormats": {
+      "description": "Mensagem do script: ambos os formatos",
+      "message": "ambos os formatos"
+   },
+   "scriptCheckingMissing": {
+      "description": "Mensagem do script: verificando faixas faltantes",
+      "message": "Verificando faixas faltantes..."
+   },
+   "scriptDuplicates": {
+      "description": "Mensagem do script: duplicados",
+      "message": "Duplicados:"
+   },
+   "scriptExtensionLimitation": {
+      "description": "Mensagem do script: explicação de limitação de extensão",
+      "message": "Extensões não podem acessar o armazenamento do sistema, então criei esta solução para lotes falhados, faixas faltantes."
+   },
+   "scriptFoundTracks": {
+      "description": "Mensagem do script: faixas encontradas",
+      "message": "Encontradas:"
+   },
+   "scriptMissingTracks": {
+      "description": "Mensagem do script: faixas faltantes",
+      "message": "Faltantes:"
+   },
+   "scriptMissingTracksFile": {
+      "description": "Mensagem do script: faixas faltantes salvas",
+      "message": "IDs de faixas faltantes salvos em missing-tracks.txt"
+   },
+   "scriptMp3Only": {
+      "description": "Mensagem do script: apenas MP3",
+      "message": "apenas MP3"
+   },
+   "scriptResultsSaved": {
+      "description": "Mensagem do script: resultados salvos",
+      "message": "Resultados salvos em:"
+   },
+   "scriptTotalTracks": {
+      "description": "Mensagem do script: total de faixas",
+      "message": "Total de faixas:"
+   },
+   "scriptUseCustomDownload": {
+      "description": "Mensagem do script: usar aba de download personalizado",
+      "message": "Use a aba Download Personalizado no Suno Tracks Exporter para continuar baixando apenas as faixas faltantes."
+   },
+   "scriptWavOnly": {
+      "description": "Mensagem do script: apenas WAV",
+      "message": "apenas WAV"
+   },
+   "selectAll": {
+      "description": "Checkbox selecionar tudo",
+      "message": "Selecionar Tudo"
+   },
+   "selectAllCustom": {
+      "description": "Caixa de seleção selecionar tudo na aba de download personalizado",
+      "message": "Selecionar Tudo"
+   },
+   "showOnlyLiked": {
+      "description": "Rótulo da caixa de seleção para filtrar apenas faixas curtidas",
+      "message": "Mostrar apenas Curtidas"
+   },
+   "showOnlyLikedCustom": {
+      "description": "Caixa de seleção mostrar apenas curtidas na aba de download personalizado",
+      "message": "Mostrar apenas Curtidas"
+   },
+   "stop": {
+      "description": "Botão parar",
+      "message": "PARAR"
+   },
+   "stopped": {
+      "description": "Mensagem parado",
+      "message": "Parado! Baixados"
+   },
+   "stoppingDownloads": {
+      "description": "Mensagem parando downloads",
+      "message": "Parando downloads..."
+   },
+   "tabAllTracks": {
+      "description": "Título da aba para visualização de todas as faixas",
+      "message": "Todas as Faixas"
+   },
+   "tabCustomDownload": {
+      "description": "Título da aba para visualização de download personalizado",
+      "message": "Download Personalizado"
+   },
+   "tokenCaptured": {
+      "description": "Sessão capturada com sucesso",
+      "message": "Sessão capturada com sucesso! Agora você pode usar o exportador."
+   },
+   "tokenFound": {
+      "description": "Status sessão encontrada",
+      "message": "Sessão encontrada! Pronto para baixar."
+   },
+   "tokenNotCaptured": {
+      "description": "Mensagem sessão não capturada",
+      "message": "Sessão não capturada. Tente:"
+   },
+   "tokenNotCapturedInstructions": {
+      "description": "Instruções quando sessão não capturada",
+      "message": "1. Navegue para páginas diferentes no suno.com\n2. Clique em \"Biblioteca\" ou \"Criar\" para acionar chamadas da API\n3. A sessão será capturada automaticamente"
+   },
+   "tokenNotFound": {
+      "description": "Status sessão não encontrada",
+      "message": "Sessão não encontrada."
+   },
+   "tokenNotFoundInstructions": {
+      "description": "Instruções quando sessão não encontrada",
+      "message": "Navegue pelo suno.com (biblioteca, página de criação, etc.) para capturar a sessão automaticamente, ou clique em \"Extrair Sessão\"."
+   },
+   "track": {
+      "description": "Rótulo de faixa singular",
+      "message": "faixa"
+   },
+   "tracks": {
+      "description": "Rótulo de faixas",
+      "message": "faixas"
+   },
+   "turnOffAskWhere": {
+      "description": "Instrução para desativar pergunta onde salvar",
+      "message": "e desative \"Perguntar onde salvar cada arquivo antes de baixar\""
+   },
+   "turnOnOffFilters": {
+      "description": "Rótulo de ligar/desligar filtros",
+      "message": "Ligar/Desligar Filtros"
+   },
+   "waitingForConversion": {
+      "description": "Aguardando conversão",
+      "message": "Aguardando conversão..."
+   },
+   "waitingForToken": {
+      "description": "Status procurando sessão",
+      "message": "Procurando sessão..."
+   },
+   "warning": {
+      "description": "Rótulo de aviso",
+      "message": "Aviso:"
+   },
+   "warningMessage": {
+      "description": "Mensagem de aviso",
+      "message": "Você está prestes a baixar um grande número de arquivos. Para evitar confirmar cada download um por um,"
+   },
+   "workspace": {
+      "description": "Rótulo de workspace",
+      "message": "workspace"
+   },
+   "workspaces": {
+      "description": "Rótulo de workspaces",
+      "message": "workspace(s)"
+   }
+}
