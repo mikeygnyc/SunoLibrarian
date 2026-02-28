@@ -4,42 +4,48 @@ Unified toolkit for exporting tracks from Suno and building a local tagged audio
 
 ## Project Layout
 
-- `cli/` - `suno-export` CLI downloader (tracks, metadata, images) plus `sync` chaining
-- `converter/` - `suno-process` CLI converter/metadata embedder
+- `suno-export/` - new unified project directory (single binary: `suno-export`)
+- `cli/` - legacy downloader project kept for verification
+- `converter/` - legacy processor project kept for verification
 - `extension/` - Chrome extension for interactive downloading
 
 ## Quick Start (Recommended)
 
-1. Install/build both CLIs:
+1. Install unified binary from the new directory:
 
 ```bash
-cd cli && npm install && npm run build
-cd ../converter && npm install && npm run build
+cd suno-export
+npm install
+npm run build
+npm link
 ```
 
-2. Run end-to-end in one command:
+2. Run end-to-end in one command with the unified binary:
 
 ```bash
-cd ../cli
 suno-export sync --token YOUR_TOKEN --output ../downloads --library ../library
 ```
 
 This downloads source files/metadata/images, then runs the converter.
+
+You can also run processing directly from the same binary:
+
+```bash
+suno-export process -i ../downloads -o ../library
+```
 
 ## Manual Two-Step Flow
 
 1. Download:
 
 ```bash
-cd cli
 suno-export download --token YOUR_TOKEN --output ../downloads
 ```
 
 2. Process:
 
 ```bash
-cd ../converter
-suno-process -i ../downloads -o ../library
+suno-export process -i ../downloads -o ../library
 ```
 
 ## Prerequisites
