@@ -10,7 +10,7 @@ CLI for downloading Suno tracks and metadata. It can run standalone, or chain di
 
 Recommended flow:
 1. Download with `suno-export download` (or use `suno-export sync` to chain both steps)
-2. Process with `suno-process` (if not using `sync`)
+2. Process with `suno-export process` (if not using `sync`)
 
 ## Install
 
@@ -54,7 +54,7 @@ Runs `download`, then launches converter (`converter/dist/index.js`) in the same
 suno-export sync --token YOUR_TOKEN --output ./downloads --library ./library
 ```
 
-Converter must be built first:
+Converter component must be built first:
 
 ```bash
 cd converter
@@ -74,6 +74,27 @@ npm run build
 - `--reconvert-before <iso>`
 - `--reconvert-after <iso>`
 - `--reconvert-missing`
+
+### `process`
+
+Run converter functionality directly from `suno-export`.
+
+```bash
+suno-export process -i ./downloads -o ./library
+```
+
+Common options:
+- `--process-formats <formats>`
+- `--process-bitrate <kbps>`
+- `--process-concurrency <n>`
+- `--process-update-concurrency <n>`
+- `--no-images`
+- `--no-lyrics`
+- `--exit-on-error`
+- `--reconvert-before <iso>`
+- `--reconvert-after <iso>`
+- `--reconvert-missing`
+- `--image-list <file>`
 
 ### `download-images`
 
@@ -95,7 +116,6 @@ Options:
 - `--delay <ms>` (default: `1000`)
 
 ### Other Commands
-
 - `list` list tracks (supports `--json`)
 - `workspaces` list workspaces (supports `--json`)
 - `metadata <trackId>` fetch one track metadata payload
@@ -130,6 +150,11 @@ Manual:
 ## Development
 
 ```bash
+cd ..
+npm install
+npm run build
+npm link
+
 cd cli
 npm install
 npm run dev -- download --token YOUR_TOKEN

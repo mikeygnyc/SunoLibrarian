@@ -10,7 +10,7 @@ Converts downloaded Suno audio and embeds rich metadata into output files.
 
 Recommended flow:
 1. Download with `suno-export download` (or use `suno-export sync`)
-2. Process with `suno-process`
+2. Process with `suno-export process`
 
 ## Prerequisites
 
@@ -31,37 +31,40 @@ apt-get install ffmpeg flac
 ## Install
 
 ```bash
+cd ..
+npm install
+npm run build
+npm link
+```
+
+Component-only build (if you are only working in converter):
+
+```bash
 cd converter
 npm install
 npm run build
 ```
 
-Global install (optional):
-
-```bash
-npm link
-```
-
 ## Usage
 
 ```bash
-suno-process -i ./downloads -o ./library
+suno-export process -i ./downloads -o ./library
 ```
 
 Examples:
 
 ```bash
 # specific output formats
-suno-process -i ./downloads -o ./library -f flac,mp3,alac
+suno-export process -i ./downloads -o ./library --process-formats flac,mp3,alac
 
 # custom MP3 bitrate
-suno-process -i ./downloads -o ./library -b 256
+suno-export process -i ./downloads -o ./library --process-bitrate 256
 
 # skip embedding images and lyrics
-suno-process -i ./downloads -o ./library --no-images --no-lyrics
+suno-export process -i ./downloads -o ./library --no-images --no-lyrics
 
 # generate only a JSON image worklist
-suno-process -i ./downloads -o ./library --image-list ./downloads/image-list.json
+suno-export process -i ./downloads -o ./library --image-list ./downloads/image-list.json
 ```
 
 ## Input And Output
@@ -102,14 +105,14 @@ Metadata persistence behavior:
 - converter writes `songs_metadata.json` to output root
 - converter also updates input root metadata (if different) to preserve per-format timestamps for future reconvert decisions
 
-## Options
+## `suno-export process` Options
 
 - `-i, --input <path>` input root (required)
 - `-o, --output <path>` output root (required)
-- `-f, --formats <formats>` comma list: `flac,alac,mp3,wav` (default: `flac,mp3,alac`)
-- `-b, --bitrate <kbps>` MP3 bitrate (default: `320`)
-- `-c, --concurrency <n>` processing concurrency (default: `4`)
-- `--update-concurrency <n>` update-pass concurrency (default: `8`)
+- `--process-formats <formats>` comma list: `flac,alac,mp3,wav` (default: `flac,mp3,alac`)
+- `--process-bitrate <kbps>` MP3 bitrate (default: `320`)
+- `--process-concurrency <n>` processing concurrency (default: `4`)
+- `--process-update-concurrency <n>` update-pass concurrency (default: `8`)
 - `--no-images` skip embedding artwork
 - `--no-lyrics` skip embedding lyrics
 - `--exit-on-error` stop immediately on processing error

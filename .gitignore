@@ -3,6 +3,10 @@ dist/*
 node_modules/*
 cli/dist/*
 cli/node_modules/*
+converter/dist/*
+converter/node_modules/*
+suno-export/dist/*
+suno-export/node_modules/*
 cli/.env
 *.log
 .DS_Store

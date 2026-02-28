@@ -1,0 +1,15 @@
+{
+  "name": "suno-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unified Suno exporter and processor CLI",
+  "bin": {
+    "suno-export": "cli/dist/index.js"
+  },
+  "scripts": {
+    "build": "npm --prefix cli run build && npm --prefix converter run build",
+    "build:cli": "npm --prefix cli run build",
+    "build:converter": "npm --prefix converter run build",
+    "prepare": "npm run build"
+  }
+}

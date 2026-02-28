@@ -2,12 +2,12 @@
 import { Command } from "commander";
 import { SunoClient } from "./client";
 import { extractTokenFromBrowser } from "./auth";
-import { SunoTrackResponse } from "./types";
+import { SunoTrackResponse, ISongData } from "./types";
 import { Storage } from "./storage";
-import { normalizeMetadata, ISongData } from "./utils";
+import { normalizeMetadata } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
-import { spawn } from "child_process";
+import { runConverter } from "./converter-runner";
 
 const program = new Command();
 
@@ -214,61 +214,21 @@ async function runDownloadFlow(options: any): Promise<{ outputDir: string; downl
   return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
 }
 
-function getConverterEntrypoint(): string {
-  const converterEntrypoint = path.resolve(__dirname, "../../converter/dist/index.js");
-  if (!fs.existsSync(converterEntrypoint)) {
-    throw new Error(
-      `Converter binary not found at ${converterEntrypoint}. Build it first with: (cd converter && npm run build)`,
-    );
-  }
-  return converterEntrypoint;
-}
-
 async function runProcessFlow(options: any): Promise<void> {
-  const converterEntrypoint = getConverterEntrypoint();
-  const inputDir = path.resolve(options.input);
-  const outputDir = path.resolve(options.output);
-  const args = [
-    converterEntrypoint,
-    "-i",
-    inputDir,
-    "-o",
-    outputDir,
-    "-f",
-    options.processFormats || "flac,mp3,alac",
-    "-b",
-    options.processBitrate || "320",
-    "-c",
-    options.processConcurrency || "4",
-    "--update-concurrency",
-    options.processUpdateConcurrency || "8",
-  ];
-
-  if (options.images === false) args.push("--no-images");
-  if (options.lyrics === false) args.push("--no-lyrics");
-  if (options.exitOnError) args.push("--exit-on-error");
-  if (options.reconvertBefore) args.push("--reconvert-before", options.reconvertBefore);
-  if (options.reconvertAfter) args.push("--reconvert-after", options.reconvertAfter);
-  if (options.reconvertMissing) args.push("--reconvert-missing");
-  if (options.imageList) args.push("--image-list", options.imageList);
-
-  console.log(`\nStarting converter: ${converterEntrypoint}`);
-  console.log(`Converter input: ${inputDir}`);
-  console.log(`Converter output: ${outputDir}`);
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd: path.resolve(__dirname, "..", ".."),
-      stdio: "inherit",
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Converter exited with code ${code}`));
-      }
-    });
+  await runConverter({
+    input: options.input,
+    output: options.output,
+    processFormats: options.processFormats,
+    processBitrate: options.processBitrate,
+    processConcurrency: options.processConcurrency,
+    processUpdateConcurrency: options.processUpdateConcurrency,
+    images: options.images,
+    lyrics: options.lyrics,
+    exitOnError: options.exitOnError,
+    reconvertBefore: options.reconvertBefore,
+    reconvertAfter: options.reconvertAfter,
+    reconvertMissing: options.reconvertMissing,
+    imageList: options.imageList,
   });
 }
 
