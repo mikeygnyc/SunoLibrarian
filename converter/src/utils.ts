@@ -1,7 +1,11 @@
 import { ISongData } from "./types";
 
 export function normalizeMetadata(meta: ISongData): ISongData {
-  const normalized = { ...meta };
+  // operate on the object in place rather than producing a new copy.
+  // callers often retain references to the original song, so creating a
+  // fresh object caused later modifications (eg. timestamp updates) to
+  // be lost when the array was re‑assigned during persistence.
+  const normalized = meta;
 
   // Check if upload
   normalized.upload = normalized.rawApiResponse?.metadata?.type === "upload";
@@ -100,6 +104,13 @@ export function normalizeMetadata(meta: ISongData): ISongData {
   normalized.projectName = normalized.rawApiResponse?.project?.name || null;
   normalized.explicit = normalized.rawApiResponse?.explicit || false;
   normalized.flaggedReason = normalized.rawApiResponse?.reaction?.flagged_reason || null;
+
+  // preserve/initialize timestamp fields (they may be undefined coming
+  // from older metadata or when first downloaded).
+  if (normalized.mp3Timestamp == null) normalized.mp3Timestamp = null;
+  if (normalized.wavTimestamp == null) normalized.wavTimestamp = null;
+  if (normalized.alacTimestamp == null) normalized.alacTimestamp = null;
+  if (normalized.flacTimestamp == null) normalized.flacTimestamp = null;
 
   return normalized;
 }

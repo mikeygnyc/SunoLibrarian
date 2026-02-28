@@ -2,6 +2,8 @@ import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import puppeteer from 'puppeteer';
+import type { Page } from 'puppeteer';
 import { Storage } from './storage';
 
 export interface Track {
@@ -53,12 +55,14 @@ interface RateLimitConfig {
 export class SunoClient {
   private authToken: string;
   private deviceId: string;
+  private browserUrl?: string;
   private rateLimitConfig: RateLimitConfig;
   private metadataCache: Map<string, TrackMetadata>;
   private storage: Storage;
 
-  constructor(authToken: string, deviceId?: string) {
+  constructor(authToken: string, deviceId?: string, browserUrl?: string) {
     this.authToken = authToken;
+    this.browserUrl = browserUrl;
     this.storage = new Storage();
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
@@ -315,14 +319,16 @@ export class SunoClient {
     return allTracks;
   }
 
-  async fetchTrackMetadata(clipId: string): Promise<TrackMetadata> {
-    const cached = this.storage.getCachedMetadata(clipId);
-    if (cached) {
-      return cached;
-    }
+  async fetchTrackMetadata(clipId: string, forceRefresh: boolean = false): Promise<TrackMetadata> {
+    if (!forceRefresh) {
+      const cached = this.storage.getCachedMetadata(clipId);
+      if (cached) {
+        return cached;
+      }
 
-    if (this.metadataCache.has(clipId)) {
-      return this.metadataCache.get(clipId)!;
+      if (this.metadataCache.has(clipId)) {
+        return this.metadataCache.get(clipId)!;
+      }
     }
 
     return this.retryWithBackoff(async () => {
@@ -549,7 +555,29 @@ export class SunoClient {
     fs.writeFileSync(filepath, buffer);
   }
 
-  async downloadImage(imageUrl: string, filepath: string): Promise<void> {
+  async downloadImage(imageUrl: string, filepath: string, clipId?: string): Promise<void> {
+    try {
+      await this.downloadImageFromUrl(imageUrl, filepath);
+      return;
+    } catch (error) {
+      const status = this.extractHttpStatus(error);
+      if (status !== 403 || !clipId) {
+        throw error;
+      }
+    }
+
+    console.warn(`Image download returned 403 for ${clipId}. Regenerating artwork from song page...`);
+    await this.regenerateArtworkForTrack(clipId);
+    await this.delay(3000);
+    const refreshed = await this.fetchTrackMetadata(clipId, true);
+    if (!refreshed.coverArt) {
+      throw new Error(`Artwork regeneration finished but no cover URL was found for ${clipId}`);
+    }
+
+    await this.downloadImageFromUrl(refreshed.coverArt, filepath);
+  }
+
+  private async downloadImageFromUrl(imageUrl: string, filepath: string): Promise<void> {
     const tempPath = `${filepath}.tmp`;
     
     return new Promise((resolve, reject) => {
@@ -592,6 +620,334 @@ export class SunoClient {
         reject(err);
       });
     });
+  }
+
+  private extractHttpStatus(error: unknown): number | null {
+    if (!(error instanceof Error)) return null;
+    const match = error.message.match(/HTTP\s+(\d{3})/i);
+    if (!match) return null;
+    return Number(match[1]);
+  }
+
+  private async regenerateArtworkForTrack(clipId: string): Promise<void> {
+    const songUrl = `https://suno.com/song/${clipId}`;
+    console.log(`[artwork] Opening song page for ${clipId}: ${songUrl}`);
+    const browser = this.browserUrl
+      ? await puppeteer.connect({ browserURL: this.browserUrl })
+      : await puppeteer.launch({ headless: false, defaultViewport: null });
+    let page: Page | null = null;
+
+    try {
+      page = await browser.newPage();
+      await page.setDefaultTimeout(20000);
+      await page.goto(songUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      console.log(`[artwork] Loaded song page for ${clipId}`);
+
+      console.log(`[artwork] Opening Edit Song Details for ${clipId}`);
+      const clickedEdit =
+        (await this.clickSelectorIfPresent(page, 'button[aria-label="Edit Song Details"]', 12000)) ||
+        (await this.clickElementContainingText(page, ['edit song details'], 12000));
+
+      if (!clickedEdit) {
+        console.log(`[artwork] Failed to open Edit Song Details for ${clipId}`);
+        throw new Error('Could not open song details editor');
+      }
+      console.log(`[artwork] Edit Song Details opened for ${clipId}`);
+
+      console.log(`[artwork] Clicking Generate Cover Art for ${clipId}`);
+      const clickedGenerate =
+        (await this.clickAnySelector(
+          page,
+          [
+            'button[aria-label="Generate Cover Art"]',
+            'div.min-w-40 > div.flex > button:nth-of-type(1)',
+            'div.min-w-40 button:nth-of-type(1)',
+          ],
+          15000
+        )) ||
+        (await this.clickElementContainingText(page, ['generate cover art', 'generate cover'], 15000));
+      if (!clickedGenerate) {
+        console.log(`[artwork] Failed to click Generate Cover Art for ${clipId}`);
+        throw new Error('Could not find "Generate Cover" action');
+      }
+      console.log(`[artwork] Generate Cover Art clicked for ${clipId}`);
+
+      console.log(`[artwork] Selecting Text to Image mode for ${clipId}`);
+      await this.clickElementContainingText(page, ['text to image'], 5000);
+
+      console.log(`[artwork] Clicking prompt Generate button for ${clipId}`);
+      const clickedPromptGenerate =
+        (await this.clickAnySelector(
+          page,
+          [
+            '[role="dialog"] button[aria-label="Generate"]',
+            'button[aria-label="Generate"]',
+          ],
+          15000
+        )) ||
+        (await this.clickDialogButtonByText(page, ['generate'], ['cover'], 15000));
+      if (!clickedPromptGenerate) {
+        console.log(`[artwork] Failed to click prompt Generate for ${clipId}`);
+        throw new Error('Could not click prompt Generate button');
+      }
+      console.log(`[artwork] Waiting for text Generate button to appear for ${clipId}`);
+      const generateTextAppeared = await this.waitForDialogExactTextButton(page, 'generate', 30000);
+      if (!generateTextAppeared) {
+        console.log(`[artwork] Text Generate button did not appear for ${clipId}`);
+        throw new Error('Timed out waiting for text Generate button');
+      }
+
+      console.log(`[artwork] Clicking image Generate button for ${clipId}`);
+      const clickedImageGenerate = await this.clickDialogExactTextButton(page, 'generate', 45000);
+      if (!clickedImageGenerate) {
+        console.log(`[artwork] Failed to click image Generate for ${clipId}`);
+        throw new Error('Could not click image Generate button');
+      }
+
+      console.log(`[artwork] Waiting for generated images for ${clipId}`);
+      const imagesReady = await this.waitForVisibleSelector(page, '[role="dialog"] article', 45000);
+      if (!imagesReady) {
+        console.log(`[artwork] Generated images did not appear for ${clipId}`);
+        throw new Error('Timed out waiting for generated images');
+      }
+      console.log(`[artwork] Selecting first generated option for ${clipId}`);
+      await this.clickSelectorIfPresent(page, '[role="dialog"] article', 5000);
+
+      console.log(`[artwork] Saving generated image cover for ${clipId}`);
+      const clickedSave = await this.clickElementContainingText(
+        page,
+        ['save as image cover', 'save as image'],
+        30000
+      );
+      if (!clickedSave) {
+        console.log(`[artwork] Failed to save generated image cover for ${clipId}`);
+        throw new Error('Could not save generated cover artwork');
+      }
+      console.log(`[artwork] Save as Image clicked for ${clipId}`);
+
+      await this.delay(4000);
+      console.log(`[artwork] Artwork regeneration finished for ${clipId}`);
+    } finally {
+      if (page) {
+        try {
+          await page.close({ runBeforeUnload: false });
+          console.log(`[artwork] Closed song page tab for ${clipId}`);
+        } catch {
+          // no-op
+        }
+      }
+      if (this.browserUrl) {
+        await browser.disconnect();
+      } else {
+        await browser.close();
+      }
+    }
+  }
+
+  private async clickSelectorIfPresent(
+    page: Page,
+    selector: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    try {
+      await page.waitForSelector(selector, { visible: true, timeout: timeoutMs });
+      await page.click(selector);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async clickAnySelector(
+    page: Page,
+    selectors: string[],
+    timeoutMs: number
+  ): Promise<boolean> {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      for (const selector of selectors) {
+        const elements = await page.$$(selector);
+        for (const el of elements) {
+          const visible = await el.isVisible().catch(() => false);
+          if (!visible) continue;
+          try {
+            await el.evaluate((node: any) => node.scrollIntoView({ block: 'center', inline: 'center' }));
+            await el.click({ delay: 30 });
+            return true;
+          } catch {
+            continue;
+          }
+        }
+      }
+      await this.delay(250);
+    }
+    return false;
+  }
+
+  private async clickElementContainingText(
+    page: Page,
+    textCandidates: string[],
+    timeoutMs: number
+  ): Promise<boolean> {
+    const needles = textCandidates.map((text) => text.toLowerCase());
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const candidates = await page.$$('button, [role="button"], a');
+      for (const el of candidates) {
+        const text = await el.evaluate((node: any) => ((node.textContent || '') as string).trim().toLowerCase());
+        if (!text) continue;
+        if (!needles.some((term) => text.includes(term))) continue;
+        const visible = await el.isVisible().catch(() => false);
+        if (!visible) continue;
+        try {
+          await el.evaluate((node: any) => node.scrollIntoView({ block: 'center', inline: 'center' }));
+          await el.click({ delay: 30 });
+          return true;
+        } catch {
+          continue;
+        }
+      }
+
+      await this.delay(250);
+    }
+
+    return false;
+  }
+
+  private async clickDialogButtonByText(
+    page: Page,
+    includeTerms: string[],
+    excludeTerms: string[],
+    timeoutMs: number
+  ): Promise<boolean> {
+    const include = includeTerms.map((t) => t.toLowerCase());
+    const exclude = excludeTerms.map((t) => t.toLowerCase());
+    const started = Date.now();
+
+    while (Date.now() - started < timeoutMs) {
+      const candidates = await page.$$('[role="dialog"] button, [role="dialog"] [role="button"]');
+      for (const el of candidates) {
+        const text = await el.evaluate((node: any) => ((node.textContent || '') as string).trim().toLowerCase());
+        if (!text) continue;
+        if (!include.every((term) => text.includes(term))) continue;
+        if (exclude.some((term) => text.includes(term))) continue;
+        const visible = await el.isVisible().catch(() => false);
+        if (!visible) continue;
+        try {
+          await el.evaluate((node: any) => node.scrollIntoView({ block: 'center', inline: 'center' }));
+          await el.click({ delay: 30 });
+          return true;
+        } catch {
+          continue;
+        }
+      }
+
+      await this.delay(250);
+    }
+
+    return false;
+  }
+
+  private async clickDialogExactTextButton(
+    page: Page,
+    exactText: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    const needle = exactText.trim().toLowerCase();
+    const started = Date.now();
+
+    while (Date.now() - started < timeoutMs) {
+      const clicked = await page.evaluate((expected) => {
+        const d: any = (globalThis as any).document;
+        const w: any = (globalThis as any).window;
+        const dialog = d?.querySelector?.('[role="dialog"]');
+        if (!dialog) return false;
+
+        const nodes = Array.from(dialog.querySelectorAll('button, [role="button"]')) as any[];
+        for (const node of nodes) {
+          const text = (node.textContent || '').trim().toLowerCase();
+          if (text !== expected) continue;
+          const el: any = node;
+          const disabled =
+            Boolean(el.disabled) ||
+            el.getAttribute('aria-disabled') === 'true' ||
+            el.getAttribute('disabled') !== null;
+          if (disabled) continue;
+
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) continue;
+          const style = w.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+          el.scrollIntoView({ block: 'center', inline: 'center' });
+          el.click();
+          return true;
+        }
+        return false;
+      }, needle);
+
+      if (clicked) return true;
+      await this.delay(250);
+    }
+
+    return false;
+  }
+
+  private async waitForDialogExactTextButton(
+    page: Page,
+    exactText: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    const needle = exactText.trim().toLowerCase();
+    const started = Date.now();
+
+    while (Date.now() - started < timeoutMs) {
+      const existsAndEnabled = await page.evaluate((expected) => {
+        const d: any = (globalThis as any).document;
+        const w: any = (globalThis as any).window;
+        const dialog = d?.querySelector?.('[role="dialog"]');
+        if (!dialog) return false;
+
+        const nodes = Array.from(dialog.querySelectorAll('button, [role="button"]')) as any[];
+        for (const node of nodes) {
+          const text = (node.textContent || '').trim().toLowerCase();
+          if (text !== expected) continue;
+          const disabled =
+            Boolean(node.disabled) ||
+            node.getAttribute('aria-disabled') === 'true' ||
+            node.getAttribute('disabled') !== null;
+          if (disabled) continue;
+          const rect = node.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) continue;
+          const style = w.getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') continue;
+          return true;
+        }
+        return false;
+      }, needle);
+
+      if (existsAndEnabled) return true;
+      await this.delay(250);
+    }
+
+    return false;
+  }
+
+  private async waitForVisibleSelector(
+    page: Page,
+    selector: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const elements = await page.$$(selector);
+      for (const el of elements) {
+        const visible = await el.isVisible().catch(() => false);
+        if (visible) return true;
+      }
+      await this.delay(250);
+    }
+    return false;
   }
 
   async initiateWavConversion(clipId: string): Promise<void> {
