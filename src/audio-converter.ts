@@ -2,13 +2,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { ISongData, ProcessorConfig, AudioFormat } from "./lib/interfaces";
+import { ISongData, IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import * as logger from "./converter-logger";
 
 const execFileAsync = promisify(execFile);
 
 export class AudioConverter {
-  constructor(private config: ProcessorConfig) {}
+  constructor(private config: IProcessorConfig) {}
 
   async convert(metadata: ISongData, wavPath: string): Promise<void> {
     const tasks = [];

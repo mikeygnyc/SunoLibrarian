@@ -1,0 +1,68 @@
+.TH SUNO-EXPORT 1 "February 2026" "suno-export 1.0.0" "User Commands"
+.SH NAME
+suno-export \- download, process, and sync Suno tracks
+.SH SYNOPSIS
+.B suno-export
+[\fB--version\fR] [\fB--help\fR] <command> [options] [args]
+.SH DESCRIPTION
+.B suno-export
+is a CLI for downloading Suno tracks, fetching metadata, processing audio formats,
+and running end-to-end sync workflows.
+.SH COMMANDS
+.TP
+.B download
+Download tracks, metadata, and images.
+.TP
+.B sync
+Run download and process in one workflow.
+.TP
+.B process
+Run conversion and metadata embedding on an existing input root.
+.TP
+.B download-images
+Download artwork from an explicit list or auto-discover missing images.
+.TP
+.B list
+List tracks by workspace.
+.TP
+.B workspaces
+List available workspaces.
+.TP
+.B metadata <trackId>
+Fetch metadata for one track.
+.TP
+.B fetch-metadata
+Fetch and cache metadata for many tracks (IDs or workspace/date filters).
+.TP
+.B refresh
+Refresh cached tracks for all workspaces.
+.SH AUTHENTICATION
+For commands that expose \fB--token\fR or \fB--browser\fR, at least one is required.
+.SH DATE FILTERS
+Commands with creation date filters accept:
+.IP \(bu 2
+ISO timestamps (example: \fB2026-02-01T12:00:00Z\fR)
+.IP \(bu 2
+Date-only values (\fBYYYY-MM-DD\fR), interpreted as inclusive UTC day bounds.
+.SH SONGS METADATA
+Authoritative \fBsongs_metadata.json\fR lives on the input side.
+Backups are created there.
+If \fB--copy-songs-metadata-to-output\fR is provided, a finalized copy is written
+to the output side at completion.
+.SH EXAMPLES
+.TP
+\fBsuno-export download --token TOKEN --output ./downloads\fR
+Download tracks to \fB./downloads\fR.
+.TP
+\fBsuno-export sync --browser http://localhost:9222 --output ./downloads --library ./library\fR
+Download then convert into \fB./library\fR.
+.TP
+\fBsuno-export process -i ./downloads -o ./library --reconvert-missing\fR
+Process missing formats from an existing download root.
+.TP
+\fBsuno-export fetch-metadata --ids id1,id2,id3\fR
+Fetch metadata for explicit track IDs.
+.SH SEE ALSO
+.BR ffmpeg (1),
+.BR metaflac (1),
+.BR atomicparsley (1)

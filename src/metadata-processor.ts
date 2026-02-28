@@ -3,13 +3,13 @@ import * as path from "path";
 import * as os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { ISongData, ProcessorConfig } from "./lib/interfaces";
+import { ISongData, IProcessorConfig } from "./lib/interfaces";
 import { splitTags } from "./lib/metadata/normalize-metadata";
 
 const execFileAsync = promisify(execFile);
 
 export class MetadataProcessor {
-  constructor(private config: ProcessorConfig) {}
+  constructor(private config: IProcessorConfig) {}
 
   private async fileExists(p: string): Promise<boolean> {
     try { await fs.promises.access(p, fs.constants.F_OK); return true; }

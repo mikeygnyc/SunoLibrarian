@@ -1,14 +1,14 @@
 import * as path from "path";
-import * as fs from "fs";
-import { Processor } from "./library-processor";
-import { ProcessorConfig, AudioFormat } from "./lib/interfaces";
-import type { ConverterRunOptions } from "./lib/interfaces";
+import { IProcessorConfig, AudioFormat } from "./lib/interfaces";
+import type { IConverterRunOptions } from "./lib/interfaces";
 import * as logger from "./converter-logger";
+import { Processor } from "./library-processor";
 
-export async function runConverter(options: ConverterRunOptions): Promise<void> {
-  const config: ProcessorConfig = {
+export async function runConverter(options: IConverterRunOptions): Promise<void> {
+  const config: IProcessorConfig = {
     inputRoot: path.resolve(options.input),
     outputRoot: path.resolve(options.output),
+    copySongsMetadataToOutput: options.copySongsMetadataToOutput === true,
     formats: (options.processFormats || "flac,mp3,alac")
       .split(",")
       .map((f: string) => f.trim()) as AudioFormat[],
@@ -27,15 +27,6 @@ export async function runConverter(options: ConverterRunOptions): Promise<void> 
 
   if (config.reconvertMissing) {
     logger.log("Reconvert missing only mode enabled");
-  }
-
-  if (options.imageList) {
-    const processor = new Processor(config);
-    const list = await processor.getImagesNeedingDownload();
-    const outFile = path.resolve(options.imageList);
-    fs.writeFileSync(outFile, JSON.stringify(list, null, 2));
-    console.log(`Wrote ${list.length} images to ${outFile}`);
-    return;
   }
 
   logger.init(config.inputRoot);

@@ -1,0 +1,46 @@
+import type { ISunoTrackMetadata } from "./ISunoTrackMetadata";
+import type { ITrackReaction } from "./ITrackReaction";
+import type { ITrackProject } from "./ITrackProject";
+import type { ITrackOwnership } from "./ITrackOwnership";
+import type { ITrackPersona } from "./ITrackPersona";
+
+export interface ISunoTrackResponse {
+  status: string;
+  title: string;
+  play_count: number;
+  upvote_count: number;
+  allow_comments: boolean;
+  id: string;
+  entity_type: string;
+  video_url: string;
+  audio_url: string;
+  image_url: string;
+  image_large_url: string;
+  major_model_version: string;
+  model_name: string;
+  metadata: ISunoTrackMetadata;
+  is_liked: boolean;
+  user_id: string;
+  display_name: string;
+  handle: string;
+  is_handle_updated: boolean;
+  avatar_image_url: string;
+  is_trashed: boolean;
+  is_hidden?: boolean;
+  created_at: string;
+  is_public: boolean;
+  reaction?: ITrackReaction;
+  is_following_creator: boolean;
+  project?: ITrackProject;
+  ownership?: ITrackOwnership;
+  persona?: ITrackPersona;
+  explicit: boolean;
+  comment_count: number;
+  flag_count: number;
+  display_tags?: string;
+  is_contest_clip: boolean;
+  has_hook: boolean;
+  batch_index: number;
+}
+
+export type RawApiResponse = ISunoTrackResponse;

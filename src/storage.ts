@@ -1,13 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { CacheData, Track, TrackMetadata } from './lib/interfaces';
+import type { ICacheData, ITrack, ITrackMetadata } from './lib/interfaces';
 
 const STORAGE_DIR = path.join(os.homedir(), '.suno-export');
 const CACHE_FILE = path.join(STORAGE_DIR, 'cache.json');
 
 export class Storage {
-  private cache: CacheData;
+  private cache: ICacheData;
 
   constructor() {
     this.ensureStorageDir();
@@ -20,7 +20,7 @@ export class Storage {
     }
   }
 
-  private loadCache(): CacheData {
+  private loadCache(): ICacheData {
     if (fs.existsSync(CACHE_FILE)) {
       try {
         return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
@@ -35,13 +35,13 @@ export class Storage {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(this.cache, null, 2));
   }
 
-  cacheTracks(workspaceId: string, tracks: Track[]): void {
+  cacheTracks(workspaceId: string, tracks: ITrack[]): void {
     this.cache.tracks[workspaceId] = tracks;
     this.cache.timestamps[workspaceId] = Date.now();
     this.saveCache();
   }
 
-  getCachedTracks(workspaceId: string): { tracks: Track[]; timestamp: number } | null {
+  getCachedTracks(workspaceId: string): { tracks: ITrack[]; timestamp: number } | null {
     if (this.cache.tracks[workspaceId]) {
       return {
         tracks: this.cache.tracks[workspaceId],
@@ -55,12 +55,12 @@ export class Storage {
     return this.cache.timestamps[workspaceId] || null;
   }
 
-  cacheMetadata(trackId: string, metadata: TrackMetadata): void {
+  cacheMetadata(trackId: string, metadata: ITrackMetadata): void {
     this.cache.metadata[trackId] = metadata;
     this.saveCache();
   }
 
-  getCachedMetadata(trackId: string): TrackMetadata | null {
+  getCachedMetadata(trackId: string): ITrackMetadata | null {
     return this.cache.metadata[trackId] || null;
   }
 
