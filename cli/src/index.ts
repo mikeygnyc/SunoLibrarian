@@ -7,6 +7,7 @@ import { Storage } from "./storage";
 import { normalizeMetadata, ISongData } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
+import { spawn } from "child_process";
 
 const program = new Command();
 
@@ -31,6 +32,240 @@ function filterWorkspaces(workspaces: any[], workspaceId?: string) {
     : workspaces;
 }
 
+function getPreferredImageUrl(metadata: any, fallback?: string | null): string | null {
+  return (
+    metadata?.fullData?.image_large_url ||
+    metadata?.fullData?.metadata?.image_large_url ||
+    metadata?.coverArt ||
+    fallback ||
+    null
+  );
+}
+
+async function runDownloadFlow(options: any): Promise<{ outputDir: string; downloaded: number; skipped: number }> {
+  const client = await getAuthenticatedClient(options);
+
+  if (options.flushCache) {
+    console.log("Flushing cache...");
+    const storage = new Storage();
+    storage.clearCache();
+  }
+
+  const outputDir = path.resolve(options.output);
+  const delay = parseInt(options.delay, 10);
+
+  const mp3Dir = path.join(outputDir, "mp3");
+  const wavDir = path.join(outputDir, "wav");
+  const metadataDir = path.join(outputDir, "metadata");
+  const imagesDir = path.join(outputDir, "images");
+
+  [mp3Dir, wavDir, metadataDir, imagesDir].forEach((dir) => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+
+  const metadataFile = path.join(outputDir, "songs_metadata.json");
+  let songsMetadata: any[] = [];
+  if (fs.existsSync(metadataFile)) {
+    try {
+      const content = fs.readFileSync(metadataFile, "utf-8");
+      if (content.trim()) {
+        const parsed = JSON.parse(content);
+        songsMetadata = Array.isArray(parsed) ? parsed : [];
+      }
+    } catch {
+      console.warn("Failed to parse existing metadata file, starting fresh");
+    }
+  }
+
+  songsMetadata = songsMetadata.map((e) => normalizeMetadata(e));
+  try {
+    const tmp = `${metadataFile}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(songsMetadata, null, 2));
+    fs.renameSync(tmp, metadataFile);
+  } catch (err: any) {
+    console.warn(`Failed to initialize metadata file: ${err.message || err}`);
+  }
+
+  console.log("Fetching workspaces...");
+  const workspaces = await client.getWorkspaces();
+  console.log(`Found ${workspaces.length} workspace(s)`);
+
+  const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
+  if (targetWorkspaces.length === 0) {
+    throw new Error("No matching workspaces found");
+  }
+
+  let totalDownloaded = 0;
+  let totalSkipped = 0;
+
+  for (const workspace of targetWorkspaces) {
+    console.log(`\nProcessing workspace: ${workspace.name}`);
+    const tracks = await client.getTracks(workspace.id);
+    console.log(`Found ${tracks.length} track(s)`);
+
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+
+      if (track.status !== "complete" || !track.audio_url) {
+        console.log(`Skipping incomplete track: ${track.title || track.id}`);
+        totalSkipped++;
+        continue;
+      }
+
+      const existingEntry = songsMetadata.find((m) => m.clipId === track.id);
+      if (existingEntry) {
+        if (!existingEntry.rawApiResponse) {
+          console.log(`Updating metadata for: ${track.title || track.id}`);
+          const metadata = await client.fetchTrackMetadata(track.id);
+          existingEntry.rawApiResponse = metadata.fullData as SunoTrackResponse;
+          fs.writeFileSync(metadataFile, JSON.stringify(songsMetadata, null, 2));
+          fs.writeFileSync(
+            path.join(metadataDir, `${track.id}.json`),
+            JSON.stringify(normalizeMetadata(existingEntry), null, 2),
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          console.log(`Already downloaded: ${track.title || track.id}`);
+        }
+        totalSkipped++;
+        continue;
+      }
+
+      const audioDir = options.format === "wav" ? wavDir : mp3Dir;
+      const filename = `${track.id}.${options.format}`;
+      const filepath = path.join(audioDir, filename);
+      console.log(`Downloading (${i + 1}/${tracks.length}): ${track.title || track.id}`);
+
+      try {
+        const metadata = await client.fetchTrackMetadata(track.id);
+
+        if (options.format === "wav") {
+          await client.downloadWav(track.id, filepath, false);
+        } else {
+          await client.downloadMp3(track.audio_url, filepath, track.id, false);
+        }
+
+        const imageUrl = getPreferredImageUrl(metadata);
+        if (imageUrl) {
+          const imageExt = path.extname(imageUrl) || ".jpeg";
+          const imagePath = path.join(imagesDir, `${track.id}${imageExt}`);
+          try {
+            await client.downloadImage(imageUrl, imagePath, track.id);
+          } catch (err) {
+            console.warn(`Failed to download image: ${err}`);
+          }
+        }
+
+        const songEntry: ISongData = {
+          title: track.title || "Untitled",
+          clipId: track.id,
+          songUrl: `https://suno.com/song/${track.id}`,
+          style: null,
+          thumbnail: null,
+          model: null,
+          duration: null,
+          liked: false,
+          mp3Status: options.format === "mp3" ? "DOWNLOADED" : "PENDING",
+          wavStatus: options.format === "wav" ? "DOWNLOADED" : "PENDING",
+          alacStatus: "PENDING",
+          flacStatus: "PENDING",
+          artistName: null,
+          lyrics: metadata.lyrics || undefined,
+          creationDate: null,
+          weirdness: null,
+          styleStrength: null,
+          audioStrength: null,
+          remixParent: undefined,
+          tags: [],
+          rawApiResponse: metadata.fullData as SunoTrackResponse,
+          mp3Timestamp: options.format === "mp3" ? new Date() : null,
+          wavTimestamp: options.format === "wav" ? new Date() : null,
+          alacTimestamp: null,
+          flacTimestamp: null,
+        };
+
+        const normalizedEntry = normalizeMetadata(songEntry);
+        songsMetadata.push(normalizedEntry);
+        fs.writeFileSync(metadataFile, JSON.stringify(songsMetadata, null, 2));
+        fs.writeFileSync(
+          path.join(metadataDir, `${track.id}.json`),
+          JSON.stringify(normalizedEntry, null, 2),
+        );
+
+        console.log(`Saved: ${filename}`);
+        totalDownloaded++;
+      } catch (error) {
+        console.error(
+          `Failed to download ${track.title || track.id}:`,
+          error instanceof Error ? error.message : error,
+        );
+        totalSkipped++;
+      }
+
+      if (i < tracks.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  console.log(`\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`);
+  return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
+}
+
+async function runConverterChain(options: any, inputDir: string): Promise<void> {
+  const converterEntrypoint = path.resolve(__dirname, "../../converter/dist/index.js");
+  if (!fs.existsSync(converterEntrypoint)) {
+    throw new Error(
+      `Converter binary not found at ${converterEntrypoint}. Build it first with: (cd converter && npm run build)`,
+    );
+  }
+
+  const outputDir = path.resolve(options.library || inputDir);
+  const args = [
+    converterEntrypoint,
+    "-i",
+    inputDir,
+    "-o",
+    outputDir,
+    "-f",
+    options.processFormats || "flac,mp3,alac",
+    "-b",
+    options.processBitrate || "320",
+    "-c",
+    options.processConcurrency || "4",
+    "--update-concurrency",
+    options.processUpdateConcurrency || "8",
+  ];
+
+  if (options.images === false) args.push("--no-images");
+  if (options.lyrics === false) args.push("--no-lyrics");
+  if (options.exitOnError) args.push("--exit-on-error");
+  if (options.reconvertBefore) args.push("--reconvert-before", options.reconvertBefore);
+  if (options.reconvertAfter) args.push("--reconvert-after", options.reconvertAfter);
+  if (options.reconvertMissing) args.push("--reconvert-missing");
+
+  console.log(`\nStarting converter: ${converterEntrypoint}`);
+  console.log(`Converter input: ${inputDir}`);
+  console.log(`Converter output: ${outputDir}`);
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, args, {
+      cwd: path.resolve(__dirname, "..", ".."),
+      stdio: "inherit",
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Converter exited with code ${code}`));
+      }
+    });
+  });
+}
+
 program
   .command("download")
   .description("Download tracks from Suno")
@@ -47,205 +282,41 @@ program
   .option("--flush-cache", "Clear cache before starting")
   .action(async (options) => {
     try {
-      const client = await getAuthenticatedClient(options);
+      await runDownloadFlow(options);
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
 
-      if (options.flushCache) {
-        console.log("Flushing cache...");
-        const storage = new Storage();
-        storage.clearCache();
-      }
-      const outputDir = path.resolve(options.output);
-      const delay = parseInt(options.delay);
-
-      const mp3Dir = path.join(outputDir, "mp3");
-      const wavDir = path.join(outputDir, "wav");
-      const metadataDir = path.join(outputDir, "metadata");
-      const imagesDir = path.join(outputDir, "images");
-
-      [mp3Dir, wavDir, metadataDir, imagesDir].forEach((dir) => {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-      });
-
-      const metadataFile = path.join(outputDir, "songs_metadata.json");
-      let songsMetadata: any[] = [];
-      if (fs.existsSync(metadataFile)) {
-        try {
-          const content = fs.readFileSync(metadataFile, "utf-8");
-          if (content.trim()) {
-            const parsed = JSON.parse(content);
-            songsMetadata = Array.isArray(parsed) ? parsed : [];
-          }
-        } catch (error) {
-          console.warn(
-            "Failed to parse existing metadata file, starting fresh",
-          );
-        }
-      }
-
-      // ensure every entry has the new timestamp fields (and other derived
-      // properties) by normalizing the existing array – this will turn missing
-      // timestamps into `null` and prevent them from being dropped when we
-      // rewrite the JSON later.
-      songsMetadata = songsMetadata.map((e) => normalizeMetadata(e));
-      // save immediately in case normalization added fields (use atomic write)
-      try {
-        const tmp = `${metadataFile}.tmp`;
-        fs.writeFileSync(tmp, JSON.stringify(songsMetadata, null, 2));
-        fs.renameSync(tmp, metadataFile);
-      } catch (err: any) {
-        console.warn(`Failed to initialize metadata file: ${err.message || err}`);
-      }
-
-      console.log("Fetching workspaces...");
-      const workspaces = await client.getWorkspaces();
-      console.log(`Found ${workspaces.length} workspace(s)`);
-
-      const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
-
-      if (targetWorkspaces.length === 0) {
-        console.error("No matching workspaces found");
-        process.exit(1);
-      }
-
-      let totalDownloaded = 0;
-      let totalSkipped = 0;
-
-      for (const workspace of targetWorkspaces) {
-        console.log(`\nProcessing workspace: ${workspace.name}`);
-        const tracks = await client.getTracks(workspace.id);
-        console.log(`Found ${tracks.length} track(s)`);
-
-        for (let i = 0; i < tracks.length; i++) {
-          const track = tracks[i];
-
-          if (track.status !== "complete" || !track.audio_url) {
-            console.log(
-              `Skipping incomplete track: ${track.title || track.id}`,
-            );
-            totalSkipped++;
-            continue;
-          }
-
-          if (songsMetadata.find((m) => m.clipId === track.id)) {
-            const existingEntry = songsMetadata.find(
-              (m) => m.clipId === track.id,
-            );
-            if (existingEntry && !existingEntry.rawApiResponse) {
-              console.log(`Updating metadata for: ${track.title || track.id}`);
-              const metadata = await client.fetchTrackMetadata(track.id);
-              existingEntry.rawApiResponse =
-                metadata.fullData as SunoTrackResponse;
-              fs.writeFileSync(
-                metadataFile,
-                JSON.stringify(songsMetadata, null, 2),
-              );
-              fs.writeFileSync(
-                path.join(metadataDir, `${track.id}.json`),
-                JSON.stringify(existingEntry, null, 2),
-              );
-              await new Promise((resolve) => setTimeout(resolve, delay)); // Small delay to avoid hitting API too quickly for metadata requests
-            } else {
-              console.log(`Already downloaded: ${track.title || track.id}`);
-            }
-            totalSkipped++;
-            continue;
-          }
-
-          const audioDir = options.format === "wav" ? wavDir : mp3Dir;
-          const filename = `${track.id}.${options.format}`;
-          const filepath = path.join(audioDir, filename);
-
-          console.log(
-            `Downloading (${i + 1}/${tracks.length}): ${track.title || track.id}`,
-          );
-
-          try {
-            const metadata = await client.fetchTrackMetadata(track.id);
-
-            if (options.format === "wav") {
-              await client.downloadWav(track.id, filepath, false);
-            } else {
-              await client.downloadMp3(
-                track.audio_url,
-                filepath,
-                track.id,
-                false,
-              );
-            }
-
-            if (metadata.coverArt) {
-              const imageExt = path.extname(metadata.coverArt) || ".jpeg";
-              const imagePath = path.join(imagesDir, `${track.id}${imageExt}`);
-              try {
-                await client.downloadImage(metadata.coverArt, imagePath, track.id);
-              } catch (err) {
-                console.warn(`Failed to download image: ${err}`);
-              }
-            }
-
-            const songEntry: ISongData = {
-              title: track.title || "Untitled",
-              clipId: track.id,
-              songUrl: `https://suno.com/song/${track.id}`,
-              style: null,
-              thumbnail: null,
-              model: null,
-              duration: null,
-              liked: false,
-              mp3Status: options.format === "mp3" ? "DOWNLOADED" : "PENDING",
-              wavStatus: options.format === "wav" ? "DOWNLOADED" : "PENDING",
-              alacStatus: "PENDING",
-              flacStatus: "PENDING",
-              artistName: null,
-              lyrics: metadata.lyrics || undefined,
-              creationDate: null,
-              weirdness: null,
-              styleStrength: null,
-              audioStrength: null,
-              remixParent: undefined,
-              tags: [],
-              rawApiResponse: metadata.fullData as SunoTrackResponse,
-
-              // timestamp for downloaded format
-              mp3Timestamp: options.format === "mp3" ? new Date() : null,
-              wavTimestamp: options.format === "wav" ? new Date() : null,
-              alacTimestamp: null,
-              flacTimestamp: null,
-            };
-
-            const normalizedEntry = normalizeMetadata(songEntry);
-
-            songsMetadata.push(normalizedEntry);
-            fs.writeFileSync(
-              metadataFile,
-              JSON.stringify(songsMetadata, null, 2),
-            );
-            fs.writeFileSync(
-              path.join(metadataDir, `${track.id}.json`),
-              JSON.stringify(normalizedEntry, null, 2),
-            );
-
-            console.log(`Saved: ${filename}`);
-            totalDownloaded++;
-          } catch (error) {
-            console.error(
-              `Failed to download ${track.title || track.id}:`,
-              error instanceof Error ? error.message : error,
-            );
-            totalSkipped++;
-          }
-
-          if (i < tracks.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-      }
-
-      console.log(
-        `\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`,
-      );
+program
+  .command("sync")
+  .description("Download tracks, then run converter in one chained workflow")
+  .option("-t, --token <token>", "Authentication token")
+  .option(
+    "-b, --browser <url>",
+    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+  )
+  .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
+  .option("-f, --format <format>", "Download format: mp3 or wav", "mp3")
+  .option("-o, --output <dir>", "Download/output directory for source files", "./downloads")
+  .option("--delay <ms>", "Delay between downloads in ms", "1000")
+  .option("--flush-cache", "Clear cache before starting")
+  .option("--library <dir>", "Final converted library output (default: same as --output)")
+  .option("--process-formats <formats>", "Converter formats", "flac,mp3,alac")
+  .option("--process-bitrate <kbps>", "Converter MP3 bitrate", "320")
+  .option("--process-concurrency <n>", "Converter processing concurrency", "4")
+  .option("--process-update-concurrency <n>", "Converter update concurrency", "8")
+  .option("--no-images", "Skip embedding images during conversion")
+  .option("--no-lyrics", "Skip embedding lyrics during conversion")
+  .option("--exit-on-error", "Exit immediately on conversion errors")
+  .option("--reconvert-before <iso>", "Converter reconvert-before filter")
+  .option("--reconvert-after <iso>", "Converter reconvert-after filter")
+  .option("--reconvert-missing", "Converter reconvert only missing files")
+  .action(async (options) => {
+    try {
+      const result = await runDownloadFlow(options);
+      await runConverterChain(options, result.outputDir);
     } catch (error) {
       console.error("Error:", error instanceof Error ? error.message : error);
       process.exit(1);
@@ -286,11 +357,19 @@ program
       for (let i = 0; i < entries.length; i++) {
         const { clipId, thumbnail } = entries[i];
         if (!thumbnail) continue;
-        const ext = path.extname(thumbnail) || ".jpeg";
+        let preferredImageUrl = thumbnail;
+        try {
+          const metadata = await client.fetchTrackMetadata(clipId);
+          preferredImageUrl = getPreferredImageUrl(metadata, thumbnail) || thumbnail;
+        } catch (err) {
+          console.warn(`Failed to refresh metadata for ${clipId}, using list thumbnail: ${err}`);
+        }
+
+        const ext = path.extname(preferredImageUrl) || ".jpeg";
         const imagePath = path.join(imagesDir, `${clipId}${ext}`);
         console.log(`Downloading image ${i + 1}/${entries.length}: ${clipId}`);
         try {
-          await client.downloadImage(thumbnail, imagePath, clipId);
+          await client.downloadImage(preferredImageUrl, imagePath, clipId);
         } catch (err) {
           console.warn(`Failed downloading ${clipId}: ${err}`);
         }

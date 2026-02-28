@@ -1,87 +1,66 @@
 # Suno Tracks Exporter Chrome Extension
 
-A Chrome extension to quickly export your Suno tracks from each workspace as MP3 or WAV files.
+Browser extension that exports Suno tracks directly from Chrome.
+
+## Role In This Repo
+
+- `cli/`: recommended automation path for bulk downloads and converter chaining
+- `converter/`: audio/metadata processor for downloaded files
+- `extension/`: browser UI alternative for interactive downloading
+
+If you want end-to-end CLI automation, prefer `suno-export sync`.
 
 ## Features
 
-- 🔐 **Automatic Token Extraction**: Automatically captures your authentication token from Suno.com
-- 📋 **List All Tracks**: Fetches all your available tracks with pagination
-- 📥 **Batch Download**: Download multiple tracks at once
-- 🎵 **Format Support**: Download as MP3 or WAV (WAV requires conversion)
-- ✅ **Progress Tracking**: See download progress in real-time
-- 🎯 **Selective Download**: Choose specific tracks or download all
+- Automatic token extraction from active Suno session
+- Workspace and track listing with pagination
+- Batch MP3 download
+- WAV conversion + download flow
+- Selective per-track download controls
 
-## Installation
+## Install (Unpacked Extension)
 
-1. **Download/Clone** this extension folder
-2. **Create Icons** (required):
-   - Open `create-icons.html` in a browser
-   - Click the download buttons to generate `icon16.png`, `icon48.png`, and `icon128.png`
-   - Place them in the `chrome-extension` folder
-   - Or create your own 16x16, 48x48, and 128x128 PNG icons
-3. **Open Chrome** and navigate to `chrome://extensions/`
-4. **Enable Developer Mode** (toggle in top-right)
-5. **Click "Load unpacked"** and select the `chrome-extension` folder
-6. **Visit suno.com** and log in to your account
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable Developer Mode
+3. Click **Load unpacked**
+4. Select this repo's `extension/` directory
+5. Visit `https://suno.com` and sign in
 
 ## Usage
 
-### Using the Extension
-- Click the extension icon in Chrome toolbar
-- Click "Open Downloader" to open the export interface
+1. Click the extension icon
+2. Click **Open Downloader**
+3. Choose tracks and format (MP3 or WAV)
 
-### Download Options
-- **Download Selected MP3**: Downloads only selected tracks as MP3
-- **Convert & Download Selected WAV**: Converts and downloads selected tracks as WAV
-- **Individual Download**: Click the MP3 or WAV button next to each track
+## File Layout
 
-## How It Works
-
-1. **Token Extraction**: The extension intercepts API requests to capture your authentication token
-2. **Track Listing**: Uses the Suno API to fetch all your tracks with pagination
-3. **Download**: Uses Chrome's download API to save files to your Downloads folder
-
-## File Structure
-
-```
-chrome-extension/
-├── manifest.json       # Extension manifest
-├── background.js      # Service worker for API calls
-├── content.js         # Content script injected into suno.com
-├── content.css        # Styles for injected UI
-├── popup.html         # Extension popup UI
-├── popup.js           # Popup script
-└── README.md          # This file
+```text
+extension/
+├── manifest.json
+├── background.js
+├── content.js
+├── content.css
+├── popup.html
+├── popup.js
+└── README.md
 ```
 
-## Permissions
+## Permissions Used
 
-- **storage**: To save authentication tokens
-- **downloads**: To download files
-- **tabs**: To interact with suno.com tabs
-- **scripting**: To inject content scripts
-- **host_permissions**: Access to suno.com and API endpoints
+- `storage`
+- `downloads`
+- `tabs`
+- `scripting`
+- host permissions for `suno.com` and Suno API domains
 
 ## Notes
 
-- Files are downloaded to your default Chrome Downloads folder
-- Filenames follow the format: `workspace-trackname-trackid.extension`
-- The extension automatically handles pagination to fetch all tracks from all workspaces
-- Token is stored locally in Chrome storage
-- WAV conversion requires additional API calls and polling
-- Tracks are grouped by workspace with collapsible sections
+- Downloads go to Chrome's default download directory
+- WAV requires additional conversion/polling API calls
+- Pagination and workspace grouping are handled automatically
 
 ## Troubleshooting
 
-- **No tracks found**: Make sure you're logged into suno.com
-- **Download fails**: Check that you have permission to download files
-- **Token expired**: Visit suno.com again to refresh the token
-
-## Development
-
-To modify the extension:
-1. Make changes to the files
-2. Go to `chrome://extensions/`
-3. Click the refresh icon on the extension card
-4. Reload suno.com to test changes
-
+- No tracks shown: confirm you're signed in on `suno.com`
+- Download failures: verify Chrome download permissions
+- Token issues: reload `suno.com` and reopen the downloader
