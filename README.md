@@ -1,6 +1,6 @@
 # suno-export
 
-Unified TypeScript CLI for downloading, processing, and syncing Suno tracks.
+Unified TypeScript CLI for downloading, processing, and syncing Suno tracks to a local filesystem.
 
 ## Install
 
