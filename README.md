@@ -4,8 +4,6 @@ Unified TypeScript CLI for downloading, processing, and syncing Suno tracks to a
 
 ## Install
 
-Use `nvm` before running Node/npm commands.
-
 ```bash
 npm install
 npm run build
