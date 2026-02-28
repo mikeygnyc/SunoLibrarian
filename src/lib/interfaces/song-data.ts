@@ -1,0 +1,43 @@
+import type { RawApiResponse, SunoTrackResponse } from "./suno-api";
+
+export interface SongData {
+  title?: string | null;
+  clipId: string;
+  style?: string | null;
+  thumbnail?: string | null;
+  model?: string | null;
+  duration?: string | null;
+  songUrl: string;
+  liked: boolean;
+  artistName?: string | null;
+  lyrics?: string;
+  creationDate?: Date | null;
+  weirdness?: number | null;
+  styleStrength?: number | null;
+  audioStrength?: number | null;
+  remixParent?: string;
+  tags?: string[];
+  comment?: string;
+  upload?: boolean;
+  negativeTags?: string[];
+  isHidden?: boolean;
+  gptDescriptionPrompt?: string | null;
+  mashupSource?: string[];
+  personaId?: string | null;
+  personaName?: string | null;
+  projectName?: string | null;
+  explicit?: boolean;
+  flaggedReason?: string | null;
+  mp3Status?: string;
+  wavStatus?: string;
+  alacStatus?: string;
+  flacStatus?: string;
+  imageStatus?: string;
+  mp3Timestamp?: Date | null;
+  wavTimestamp?: Date | null;
+  alacTimestamp?: Date | null;
+  flacTimestamp?: Date | null;
+  rawApiResponse?: RawApiResponse | SunoTrackResponse;
+}
+
+export type ISongData = SongData;
