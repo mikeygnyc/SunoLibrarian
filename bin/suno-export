@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_ROOT=$(dirname -- "$SCRIPT_DIR")
+ENTRYPOINT="$PROJECT_ROOT/dist/index.js"
+
+if [ ! -f "$ENTRYPOINT" ]; then
+  echo "suno-export: dist/index.js not found. Build first with: npm run build" >&2
+  exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "suno-export: node is not in PATH. Load your Node environment (for example: nvm use)." >&2
+  exit 1
+fi
+
+exec node "$ENTRYPOINT" "$@"

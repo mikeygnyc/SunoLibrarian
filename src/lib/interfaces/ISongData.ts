@@ -1,6 +1,6 @@
-import type { RawApiResponse, SunoTrackResponse } from "./suno-api";
+import type { RawApiResponse, ISunoTrackResponse } from "./ISunoTrackResponse";
 
-export interface SongData {
+export interface ISongData {
   title?: string | null;
   clipId: string;
   style?: string | null;
@@ -37,7 +37,5 @@ export interface SongData {
   wavTimestamp?: Date | null;
   alacTimestamp?: Date | null;
   flacTimestamp?: Date | null;
-  rawApiResponse?: RawApiResponse | SunoTrackResponse;
+  rawApiResponse?: RawApiResponse | ISunoTrackResponse;
 }
-
-export type ISongData = SongData;

@@ -4,12 +4,14 @@
   "description": "Unified Suno downloader and processor CLI",
   "main": "dist/index.js",
   "bin": {
-    "suno-export": "./dist/index.js"
+    "suno-export": "./bin/suno-export"
   },
   "scripts": {
     "build": "npm install && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "postinstall": "node scripts/install-manpage.js",
+    "preuninstall": "node scripts/uninstall-manpage.js"
   },
   "license": "MIT",
   "dependencies": {

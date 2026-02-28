@@ -4,27 +4,15 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import puppeteer from 'puppeteer';
 import type { Page } from 'puppeteer';
-import type { Track, Workspace, TrackMetadata } from './lib/interfaces';
+import type { IRateLimitConfig, ITrack, IWorkspace, ITrackMetadata } from './lib/interfaces';
 import { Storage } from './storage';
-
-interface RateLimitConfig {
-  baseDelay: number;
-  workspaceDelay: number;
-  trackDelay: number;
-  metadataDelay: number;
-  maxRetries: number;
-  initialBackoff: number;
-  maxBackoff: number;
-  backoffMultiplier: number;
-  rateLimitDetected: boolean;
-}
 
 export class SunoClient {
   private authToken: string;
   private deviceId: string;
   private browserUrl?: string;
-  private rateLimitConfig: RateLimitConfig;
-  private metadataCache: Map<string, TrackMetadata>;
+  private rateLimitConfig: IRateLimitConfig;
+  private metadataCache: Map<string, ITrackMetadata>;
   private storage: Storage;
 
   constructor(authToken: string, deviceId?: string, browserUrl?: string) {
@@ -145,8 +133,8 @@ export class SunoClient {
     }, `workspace page ${page}`);
   }
 
-  async getWorkspaces(): Promise<Workspace[]> {
-    const allWorkspaces: Workspace[] = [];
+  async getWorkspaces(): Promise<IWorkspace[]> {
+    const allWorkspaces: IWorkspace[] = [];
     let page = 1;
     let hasMore = true;
     const pageSize = 20;
@@ -226,8 +214,8 @@ export class SunoClient {
     }, `workspace ${workspaceId}`);
   }
 
-  async getTracks(workspaceId: string = 'default'): Promise<Track[]> {
-    const allTracks: Track[] = [];
+  async getTracks(workspaceId: string = 'default'): Promise<ITrack[]> {
+    const allTracks: ITrack[] = [];
     let cursor: string | null = null;
     let hasMore = true;
 
@@ -247,8 +235,8 @@ export class SunoClient {
     return allTracks;
   }
 
-  async refreshWorkspaceTracks(workspaceId: string): Promise<Track[]> {
-    const allTracks: Track[] = [];
+  async refreshWorkspaceTracks(workspaceId: string): Promise<ITrack[]> {
+    const allTracks: ITrack[] = [];
     let cursor: string | null = null;
     let hasMore = true;
 
@@ -286,7 +274,7 @@ export class SunoClient {
     return allTracks;
   }
 
-  async fetchTrackMetadata(clipId: string, forceRefresh: boolean = false): Promise<TrackMetadata> {
+  async fetchTrackMetadata(clipId: string, forceRefresh: boolean = false): Promise<ITrackMetadata> {
     if (!forceRefresh) {
       const cached = this.storage.getCachedMetadata(clipId);
       if (cached) {
@@ -320,7 +308,7 @@ export class SunoClient {
         throw new Error('No track data found in API response');
       }
 
-      const metadata: TrackMetadata = {
+      const metadata: ITrackMetadata = {
         title: track.title || null,
         id: track.id || clipId,
         lyrics:
@@ -410,7 +398,7 @@ export class SunoClient {
     return { successCount, failedCount };
   }
 
-  async refreshAllWorkspaces(): Promise<Workspace[]> {
+  async refreshAllWorkspaces(): Promise<IWorkspace[]> {
     const workspaces = await this.getWorkspaces();
 
     for (let i = 0; i < workspaces.length; i++) {
@@ -444,7 +432,7 @@ export class SunoClient {
     return this.storage.getCacheTimestamp(workspaceId);
   }
 
-  generateSidecarFile(metadata: TrackMetadata, filename: string): string {
+  generateSidecarFile(metadata: ITrackMetadata, filename: string): string {
     const lines: string[] = [];
     lines.push(`Metadata for: ${filename}`);
     lines.push(`Generated: ${new Date().toISOString()}`);
@@ -1096,7 +1084,7 @@ export class SunoClient {
     filename: string,
     clipId: string,
     format: string,
-    trackMetadata: TrackMetadata | null = null,
+    trackMetadata: ITrackMetadata | null = null,
     metadata: any = {}
   ): Promise<void> {
     const fileSize = audioBuffer.length;
@@ -1133,7 +1121,7 @@ export class SunoClient {
     filename: string,
     clipId: string,
     format: string,
-    trackMetadata: TrackMetadata | null = null,
+    trackMetadata: ITrackMetadata | null = null,
     metadata: any = {}
   ): Promise<void> {
     const response = await fetch(downloadUrl);

@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { ISongData, ProcessorConfig, AudioFormat } from "./lib/interfaces";
+import { ISongData, IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import { AudioConverter } from "./audio-converter";
 import { MetadataProcessor } from "./metadata-processor";
 import { normalizeMetadata } from "./lib/metadata/normalize-metadata";
@@ -52,7 +52,7 @@ export class Processor {
     return { wavPath: null, source: "none" };
   }
 
-  constructor(private config: ProcessorConfig) {
+  constructor(private config: IProcessorConfig) {
     this.converter = new AudioConverter(config);
     this.metadataProc = new MetadataProcessor(config);
     // retry worker can start immediately; directories will be ensured in process()
@@ -165,6 +165,7 @@ export class Processor {
     await this.updateExistingFiles(this.songs);
     // Persist final state (async)
     await this.persistState();
+    await this.copyFinalMetadataToOutput();
     
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     logger.log(`\nTotal time: ${elapsed}s`);
@@ -377,7 +378,7 @@ export class Processor {
 
   /**
    * Returns a list of tracks whose artwork either doesn't exist or is invalid.
-   * This is intended to power a lightweight ``--image-list`` mode so the CLI can
+   * This is intended to power a lightweight ``download-images --fetch-image-list`` mode so the CLI can
    * download images separately without needing to run the full processing
    * pipeline.
    */
@@ -615,9 +616,8 @@ export class Processor {
     // later processing steps) has the normalized data to write.
     this.songs = normalizedSongs;
 
-    // immediately persist the normalized metadata if the file originally
-    // existed.  this will rewrite both the input and output copies (if they
-    // differ) and fix any fields that changed due to normalization.
+    // immediately persist normalized metadata back to the input-side file so
+    // subsequent runs always start from canonical metadata values.
     if (this.metadataFileExisted) {
       try {
         await this.saveMetadata();
@@ -643,16 +643,15 @@ export class Processor {
     this.songs = this.songs.map(song => normalizeMetadata(song));
 
     const data = JSON.stringify(this.songs, null, 2);
-    const outFile = path.join(this.config.outputRoot, "songs_metadata.json");
     const inFile = path.join(this.config.inputRoot, "songs_metadata.json");
 
-    // backup output copy if it exists; we keep the three most recent
-    if (await this.fileExists(outFile)) {
-      const bak = `${outFile}.${Date.now()}.bak`;
+    // backups always live on the input side; that's the authoritative source.
+    if (await this.fileExists(inFile)) {
+      const bak = `${inFile}.${Date.now()}.bak`;
       try {
-        await fs.promises.copyFile(outFile, bak);
+        await fs.promises.copyFile(inFile, bak);
         logger.log(`  backed up existing metadata to ${bak}`);
-        await this.cleanupOldBackups(outFile);
+        await this.cleanupOldBackups(inFile);
       } catch {}
     }
 
@@ -662,25 +661,31 @@ export class Processor {
       await fs.promises.rename(tmp, file);
     };
 
-    // write the output copy first; it's the authoritative version used by the
-    // converter output directory.
+    // persist authoritative metadata to the input side.
     try {
-      await writeAtomic(outFile, data);
+      await writeAtomic(inFile, data);
     } catch (err: any) {
-      logger.warn(`Failed to write output metadata: ${err.message || err}`);
+      logger.warn(`Failed to update input metadata: ${err.message || err}`);
+    }
+  }
+
+  private async copyFinalMetadataToOutput(): Promise<void> {
+    if (this.config.copySongsMetadataToOutput !== true) return;
+
+    const inFile = path.join(this.config.inputRoot, "songs_metadata.json");
+    const outFile = path.join(this.config.outputRoot, "songs_metadata.json");
+    if (inFile === outFile) return;
+
+    if (!(await this.fileExists(inFile))) {
+      logger.warn(`Cannot copy songs_metadata.json to output; input file not found: ${inFile}`);
+      return;
     }
 
-    // if the input and output roots are different mirror the file back to
-    // the input path, so the next invocation of the tool sees the updated
-    // timestamps.  failures here are non‑fatal since the output copy remains
-    // correct.
-    if (inFile !== outFile) {
-      try {
-        await writeAtomic(inFile, data);
-        logger.log(`  also updated input metadata file`);
-      } catch (err: any) {
-        logger.warn(`Failed to update input metadata: ${err.message || err}`);
-      }
+    try {
+      await fs.promises.copyFile(inFile, outFile);
+      logger.log(`Copied finalized songs_metadata.json to output: ${outFile}`);
+    } catch (err: any) {
+      logger.warn(`Failed to copy songs_metadata.json to output: ${err.message || err}`);
     }
   }
 

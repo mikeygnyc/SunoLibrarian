@@ -1,6 +1,7 @@
-export interface ConverterRunOptions {
+export interface IConverterRunOptions {
   input: string;
   output: string;
+  copySongsMetadataToOutput?: boolean;
   processFormats?: string;
   processBitrate?: string;
   processConcurrency?: string;
@@ -11,5 +12,4 @@ export interface ConverterRunOptions {
   reconvertBefore?: string;
   reconvertAfter?: string;
   reconvertMissing?: boolean;
-  imageList?: string;
 }

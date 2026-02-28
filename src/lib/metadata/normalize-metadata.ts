@@ -1,4 +1,4 @@
-import type { ISongData } from "../interfaces/song-data";
+import type { ISongData } from "../interfaces/ISongData";
 
 export function splitTags(tags: string | undefined): string[] {
   if (!tags) return [];
