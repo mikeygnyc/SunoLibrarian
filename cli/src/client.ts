@@ -32,7 +32,7 @@ export interface TrackMetadata {
   bpm?: number;
   key?: string;
   prompt?: string;
-  coverArt?: string;
+  coverArt?: string | null;
   duration?: number;
   tags?: string;
   genre?: string;
@@ -381,15 +381,7 @@ export class SunoClient {
           track.prompt ||
           track.metadata?.tags ||
           null,
-        coverArt:
-          track.image_url ||
-          track.image_large_url ||
-          track.cover_url ||
-          track.metadata?.image_url ||
-          track.metadata?.cover_url ||
-          track.image ||
-          track.cover_image ||
-          null,
+        coverArt: this.getPreferredCoverArt(track),
         duration: track.metadata?.duration || track.duration || null,
         tags: track.metadata?.tags || track.tags || null,
         genre: track.metadata?.genre || track.genre || null,
@@ -560,21 +552,23 @@ export class SunoClient {
       await this.downloadImageFromUrl(imageUrl, filepath);
       return;
     } catch (error) {
-      const status = this.extractHttpStatus(error);
-      if (status !== 403 || !clipId) {
+      if (!clipId) {
         throw error;
       }
+      const status = this.extractHttpStatus(error);
+      const statusText = status ? `HTTP ${status}` : 'non-HTTP error';
+      console.warn(`Image download failed for ${clipId} (${statusText}). Regenerating artwork from song page...`);
     }
 
-    console.warn(`Image download returned 403 for ${clipId}. Regenerating artwork from song page...`);
     await this.regenerateArtworkForTrack(clipId);
     await this.delay(3000);
     const refreshed = await this.fetchTrackMetadata(clipId, true);
-    if (!refreshed.coverArt) {
+    const regeneratedCover = this.getPreferredCoverArt(refreshed.fullData || refreshed);
+    if (!regeneratedCover) {
       throw new Error(`Artwork regeneration finished but no cover URL was found for ${clipId}`);
     }
 
-    await this.downloadImageFromUrl(refreshed.coverArt, filepath);
+    await this.downloadImageFromUrl(regeneratedCover, filepath);
   }
 
   private async downloadImageFromUrl(imageUrl: string, filepath: string): Promise<void> {
@@ -627,6 +621,21 @@ export class SunoClient {
     const match = error.message.match(/HTTP\s+(\d{3})/i);
     if (!match) return null;
     return Number(match[1]);
+  }
+
+  private getPreferredCoverArt(track: any): string | null {
+    if (!track) return null;
+    return (
+      track.image_large_url ||
+      track.metadata?.image_large_url ||
+      track.image_url ||
+      track.cover_url ||
+      track.metadata?.image_url ||
+      track.metadata?.cover_url ||
+      track.image ||
+      track.cover_image ||
+      null
+    );
   }
 
   private async regenerateArtworkForTrack(clipId: string): Promise<void> {
@@ -1100,15 +1109,7 @@ export class SunoClient {
         trackData.metadata?.prompt ||
         trackData.prompt ||
         null,
-      coverArt:
-        trackData.image_url ||
-        trackData.image_large_url ||
-        trackData.cover_url ||
-        trackData.metadata?.image_url ||
-        trackData.metadata?.cover_url ||
-        trackData.image ||
-        trackData.cover_image ||
-        null,
+      coverArt: this.getPreferredCoverArt(trackData),
       trackNumber: null,
       albumArtist: 'Suno AI',
       fullData: trackData,

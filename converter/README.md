@@ -1,27 +1,25 @@
 # Suno Audio Processor
 
-Process and convert Suno audio files with comprehensive metadata embedding.
+Converts downloaded Suno audio and embeds rich metadata into output files.
 
-## Features
+## Role In This Repo
 
-- Converts WAV files to FLAC, ALAC (M4A), and MP3 formats
-- Embeds comprehensive metadata including:
-  - Title, Artist, Date, Duration
-  - Suno-specific fields (ID, Model, Style, Tags)
-  - AI generation parameters (Weirdness, Style Strength, Audio Strength)
-  - Remix parent information
-  - Lyrics (optional)
-  - Album artwork (optional)
-- Updates incomplete metadata in existing files
-- Matches directory structure of existing utilities
+- `cli/`: downloads source audio, metadata, and images from Suno
+- `converter/`: processes those downloads into your library formats
+- `extension/`: browser extension alternative to CLI download
+
+Recommended flow:
+1. Download with `suno-export download` (or use `suno-export sync`)
+2. Process with `suno-process`
 
 ## Prerequisites
 
 - Node.js 18+
-- FFmpeg (for audio conversion)
-- metaflac (for FLAC metadata embedding)
+- `ffmpeg`
+- `flac` package (`metaflac`)
 
-Install dependencies:
+Install tools:
+
 ```bash
 # macOS
 brew install ffmpeg flac
@@ -30,112 +28,111 @@ brew install ffmpeg flac
 apt-get install ffmpeg flac
 ```
 
-## Installation
+## Install
 
 ```bash
+cd converter
+npm install
 npm run build
-npm link  # Optional: makes 'suno-process' available globally
+```
+
+Global install (optional):
+
+```bash
+npm link
 ```
 
 ## Usage
 
 ```bash
-# Basic usage
-node dist/index.js -i /path/to/input -o /path/to/output
-
-# Specify formats
-node dist/index.js -i ./downloads -o ./library -f flac,mp3,alac
-
-# Custom MP3 bitrate
-node dist/index.js -i ./downloads -o ./library -b 256
-
-# Skip image/lyrics embedding
-node dist/index.js -i ./downloads -o ./library --no-images --no-lyrics
+suno-process -i ./downloads -o ./library
 ```
 
-## Directory Structure
+Examples:
 
-### Input Directory
+```bash
+# specific output formats
+suno-process -i ./downloads -o ./library -f flac,mp3,alac
+
+# custom MP3 bitrate
+suno-process -i ./downloads -o ./library -b 256
+
+# skip embedding images and lyrics
+suno-process -i ./downloads -o ./library --no-images --no-lyrics
+
+# generate only a JSON image worklist
+suno-process -i ./downloads -o ./library --image-list ./downloads/image-list.json
 ```
+
+## Input And Output
+
+Expected input root:
+
+```text
 input/
-├── wav/              # Source WAV files
-├── metadata/         # JSON metadata files
-├── images/           # Album artwork
-├── lyrics/           # Lyrics text files
-└── songs_metadata.json  # Combined metadata
+├── wav/
+├── mp3/                # optional source fallback depending on workflow
+├── metadata/
+├── images/
+├── lyrics/
+└── songs_metadata.json
 ```
 
-**Log files** (`process.log`, `processed.log`, `skipped.log`, `images.log`) are written alongside this input tree rather than the output, making it easy to keep diagnostics with the source material.
+Output root:
 
-**Metadata persistence:** when the converter writes `songs_metadata.json` it updates both the output root and, if different, the input root.  This ensures the timestamps used to decide whether a format needs reconverting are saved in the source metadata so subsequent runs don’t re‑encode already‑processed tracks.
-
-
-### Output Directory
-```
+```text
 output/
-├── flac/             # Converted FLAC files
-├── alac/             # Converted ALAC (M4A) files
-├── mp3/              # Converted MP3 files
-├── wav/              # Original WAV files (if specified)
-├── metadata/         # Temporary metadata files
-├── images/           # Album artwork
-└── lyrics/           # Lyrics text files
+├── flac/
+├── alac/
+├── mp3/
+├── wav/
+├── metadata/
+├── images/
+├── lyrics/
+└── songs_metadata.json
 ```
+
+Log files are written to the input root:
+- `process.log`
+- `processed.log`
+- `skipped.log`
+- `images.log`
+
+Metadata persistence behavior:
+- converter writes `songs_metadata.json` to output root
+- converter also updates input root metadata (if different) to preserve per-format timestamps for future reconvert decisions
 
 ## Options
 
-- `-i, --input <path>` - Input root directory (required)
-- `-o, --output <path>` - Output root directory (required)
-- `-f, --formats <formats>` - Comma-separated formats: flac,alac,mp3,wav (default: flac,mp3,alac)
-- `-b, --bitrate <kbps>` - MP3 bitrate in kbps (default: 320)
-- `--no-images` - Skip embedding album artwork
-- `--no-lyrics` - Skip embedding lyrics
-- `--reconvert-before <ISO date>` - only reconvert formats whose timestamp is missing or on/ before the specified date
-- `--reconvert-after <ISO date>` - only reconvert formats whose timestamp is missing or on/ after the specified date
-- `--reconvert-missing` - only convert formats that have never been produced (ignores existing timestamps)
-- `--image-list <file>` - instead of processing, write a JSON file containing tracks whose artwork needs downloading
+- `-i, --input <path>` input root (required)
+- `-o, --output <path>` output root (required)
+- `-f, --formats <formats>` comma list: `flac,alac,mp3,wav` (default: `flac,mp3,alac`)
+- `-b, --bitrate <kbps>` MP3 bitrate (default: `320`)
+- `-c, --concurrency <n>` processing concurrency (default: `4`)
+- `--update-concurrency <n>` update-pass concurrency (default: `8`)
+- `--no-images` skip embedding artwork
+- `--no-lyrics` skip embedding lyrics
+- `--exit-on-error` stop immediately on processing error
+- `--reconvert-before <iso>` reconvert when timestamp is missing or `<=` date
+- `--reconvert-after <iso>` reconvert when timestamp is missing or `>=` date
+- `--reconvert-missing` only process missing formats
+- `--image-list <file>` write image worklist JSON and exit
 
-## Metadata Fields
+## Metadata Notes
 
-In addition to the previous column data, the combined `songs_metadata.json` now also holds per‑format timestamps. These are recorded each time a file is converted or recreated and can be used to filter future processing runs.
+Converter normalizes and persists metadata in `songs_metadata.json` (including fields derived from `rawApiResponse`). It also tracks per-format timestamps:
+- `mp3Timestamp`
+- `wavTimestamp`
+- `alacTimestamp`
+- `flacTimestamp`
 
-### Standard Fields
-- Title, Artist, Date, Genre, Comment
+These timestamps drive `reconvert-*` filtering.
 
-### Suno-Specific Fields (FLAC)
-- `SUNO_ID` - Clip identifier
-- `AI_MODEL` - Suno model version
-- `SUNO_TAGS` - Genre/style tags
-- `SUNO_WEIRDNESS` - Weirdness parameter
-- `SUNO_STYLE_STRENGTH` - Style strength parameter
-- `SUNO_AUDIO_STRENGTH` - Audio strength parameter
-- `SUNO_REMIX_PARENT` - Parent clip ID for remixes
-- `FAVORITE` - Liked status
-- `CONTACT` - Song URL
-- `LENGTH` - Duration
-
-### New Timestamp Fields
-- `mp3Timestamp` – ISO datetime when the MP3 was last generated
-- `wavTimestamp` – ISO datetime when the WAV was last copied/updated
-- `alacTimestamp` – ISO datetime for ALAC/M4A
-- `flacTimestamp` – ISO datetime for FLAC
-
-These values are written automatically during processing and can be inspected or used with the `--reconvert-before/after` options.
-## Examples
+## Development
 
 ```bash
-# Process all formats with high-quality MP3
-suno-process -i ~/Downloads/suno -o ~/Music/suno -f flac,alac,mp3 -b 320
-
-# FLAC only, no images
-suno-process -i ./input -o ./output -f flac --no-images
-
-# Update existing library with new metadata
-suno-process -i ./downloads -o ./library
-
-# only re‑encode formats whose timestamp is missing or on/before a cutoff
-suno-process -i ./downloads -o ./library --reconvert-before 2025-01-01T00:00:00Z
-
-# re‑encode only files whose timestamp is missing or on/after a cutoff
-suno-process -i ./downloads -o ./library --reconvert-after 2025-01-01T00:00:00Z
+cd converter
+npm install
+npm run build
+node dist/index.js -i ./downloads -o ./library
 ```
