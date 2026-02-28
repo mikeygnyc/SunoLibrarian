@@ -8,12 +8,22 @@
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "program": "${workspaceFolder}/cli/dist/index.js",
       "preLaunchTask": "tsc: build - cli/tsconfig.json",
-      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/cli/dist/**/*.js"
+      ],
       "sourceMaps": true,
       "cwd": "${workspaceFolder}/cli",
-      "args": ["download","--browser", "http://localhost:9222", "-f", "wav"],
+      "args": [
+        "download",
+        "--browser",
+        "http://localhost:9222",
+        "-f",
+        "wav"
+      ],
       "console": "internalConsole",
-      "skipFiles": ["<node_internals>/**"]
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     },
     {
       "type": "node",
@@ -22,12 +32,20 @@
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "program": "${workspaceFolder}/cli/dist/index.js",
       "preLaunchTask": "tsc: build - cli/tsconfig.json",
-      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/cli/dist/**/*.js"
+      ],
       "sourceMaps": true,
       "cwd": "${workspaceFolder}/cli",
-      "args": ["list", "--token", "YOUR_TOKEN_HERE"],
+      "args": [
+        "list",
+        "--token",
+        "YOUR_TOKEN_HERE"
+      ],
       "console": "internalConsole",
-      "skipFiles": ["<node_internals>/**"]
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     },
     {
       "type": "node",
@@ -36,12 +54,44 @@
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "program": "${workspaceFolder}/cli/dist/index.js",
       "preLaunchTask": "tsc: build - cli/tsconfig.json",
-      "outFiles": ["${workspaceFolder}/cli/dist/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/cli/dist/**/*.js"
+      ],
       "sourceMaps": true,
       "cwd": "${workspaceFolder}/cli",
-      "args": ["workspaces", "--token", "YOUR_TOKEN_HERE"],
+      "args": [
+        "workspaces",
+        "--token",
+        "YOUR_TOKEN_HERE"
+      ],
       "console": "internalConsole",
-      "skipFiles": ["<node_internals>/**"]
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Image List",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/cli/dist/index.js",
+      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/cli/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/cli",
+      "args": [
+        "download-images",
+        "--list",
+        "/Users/mikegales/Projects/SunoTrackExporterExt/image_list.json",
+        "--browser",
+        "http://localhost:9222"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     },
     {
       "type": "node",
@@ -50,12 +100,50 @@
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "program": "${workspaceFolder}/converter/dist/index.js",
       "preLaunchTask": "tsc: build - converter/tsconfig.json",
-      "outFiles": ["${workspaceFolder}/converter/dist/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/converter/dist/**/*.js"
+      ],
       "sourceMaps": true,
       "cwd": "${workspaceFolder}/converter",
-      "args": ["-i", "/Users/mikegales/Projects/SunoTrackExporterExt/downloads", "-o", "/Volumes/StudioProjects/suno_lib", "-f", "flac,mp3,alac,wav", "--exit-on-error"],
+      "args": [
+        "-i",
+        "/Users/mikegales/Projects/SunoTrackExporterExt/downloads",
+        "-o",
+        "/Volumes/StudioProjects/suno_lib",
+        "-f",
+        "flac,mp3,alac,wav",
+        "--exit-on-error",
+        "--reconvert-missing"
+      ],
       "console": "internalConsole",
-      "skipFiles": ["<node_internals>/**"]
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Converter Image List",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "program": "${workspaceFolder}/converter/dist/index.js",
+      "preLaunchTask": "tsc: build - converter/tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/converter/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/converter",
+      "args": [
+        "-i",
+        "/Users/mikegales/Projects/SunoTrackExporterExt/downloads",
+        "-o",
+        "/Volumes/StudioProjects/suno_lib",
+        "--image-list",
+        "/Users/mikegales/Projects/SunoTrackExporterExt/image_list.json"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     }
   ]
 }

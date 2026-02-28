@@ -32,11 +32,21 @@ export interface ISongData {
   alacStatus?: string;
   flacStatus?: string;
   imageStatus?: string;
+  
+  // track when the audio file for each format was last obtained/processed
+  mp3Timestamp?: Date | null;
+  wavTimestamp?: Date | null;
+  alacTimestamp?: Date | null;
+  flacTimestamp?: Date | null;
+
   rawApiResponse?: SunoTrackResponse;
 }
 
 export function normalizeMetadata(meta: ISongData): ISongData {
-  const normalized = { ...meta };
+  // mutate the passed-in object rather than copying it.  this ensures any
+  // callers holding references (like the converter's song list) see updates
+  // such as timestamp writes.
+  const normalized = meta;
 
   normalized.upload = normalized.rawApiResponse?.metadata?.type === "upload";
 
@@ -117,6 +127,13 @@ export function normalizeMetadata(meta: ISongData): ISongData {
   normalized.projectName = normalized.rawApiResponse?.project?.name || null;
   normalized.explicit = normalized.rawApiResponse?.explicit || false;
   normalized.flaggedReason = normalized.rawApiResponse?.reaction?.flagged_reason || null;
+
+  // ensure the new timestamp fields are present so later logic can rely
+  // on them being at least null (not undefined).
+  if (normalized.mp3Timestamp == null) normalized.mp3Timestamp = null;
+  if (normalized.wavTimestamp == null) normalized.wavTimestamp = null;
+  if (normalized.alacTimestamp == null) normalized.alacTimestamp = null;
+  if (normalized.flacTimestamp == null) normalized.flacTimestamp = null;
 
   return normalized;
 }

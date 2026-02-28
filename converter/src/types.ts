@@ -34,6 +34,12 @@ export interface ISongData {
   flacStatus?: string;
   imageStatus?: string;
   
+  // Timestamps for when each format was last generated/updated
+  mp3Timestamp?: Date | null;
+  wavTimestamp?: Date | null;
+  alacTimestamp?: Date | null;
+  flacTimestamp?: Date | null;
+  
   // Keep for backwards compatibility and full API response
   rawApiResponse?: RawApiResponse;
 }
@@ -196,4 +202,21 @@ export interface ProcessorConfig {
   embedImages: boolean;
   embedLyrics: boolean;
   exitOnError: boolean;
+
+  // Optional time filters used when deciding whether to reconvert/recreate
+  // A format will be (re)processed if its timestamp is missing or if it
+  // compares against these boundaries.  The comparison is inclusive:
+  //   * reconvertBefore: date <= cutoff
+  //   * reconvertAfter:  date >= cutoff
+  // If both fields are provided we treat them independently (either
+  // condition will trigger a conversion).
+  reconvertBefore?: Date;
+  reconvertAfter?: Date;
+  // if true, ignore timestamps and only (re)convert when the track has
+  // never been produced before.  this is a much clearer flag for the
+  // "missing only" CLI option than the previous extreme-date hack.
+  reconvertMissing?: boolean;
+  // Concurrency controls
+  processConcurrency?: number;
+  updateConcurrency?: number;
 }

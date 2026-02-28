@@ -22,7 +22,7 @@ async function getAuthenticatedClient(options: any): Promise<SunoClient> {
     token = await extractTokenFromBrowser(options.browser);
     console.log("Token extracted successfully!");
   }
-  return new SunoClient(token);
+  return new SunoClient(token, undefined, options.browser);
 }
 
 function filterWorkspaces(workspaces: any[], workspaceId?: string) {
@@ -82,6 +82,20 @@ program
             "Failed to parse existing metadata file, starting fresh",
           );
         }
+      }
+
+      // ensure every entry has the new timestamp fields (and other derived
+      // properties) by normalizing the existing array – this will turn missing
+      // timestamps into `null` and prevent them from being dropped when we
+      // rewrite the JSON later.
+      songsMetadata = songsMetadata.map((e) => normalizeMetadata(e));
+      // save immediately in case normalization added fields (use atomic write)
+      try {
+        const tmp = `${metadataFile}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify(songsMetadata, null, 2));
+        fs.renameSync(tmp, metadataFile);
+      } catch (err: any) {
+        console.warn(`Failed to initialize metadata file: ${err.message || err}`);
       }
 
       console.log("Fetching workspaces...");
@@ -165,7 +179,7 @@ program
               const imageExt = path.extname(metadata.coverArt) || ".jpeg";
               const imagePath = path.join(imagesDir, `${track.id}${imageExt}`);
               try {
-                await client.downloadImage(metadata.coverArt, imagePath);
+                await client.downloadImage(metadata.coverArt, imagePath, track.id);
               } catch (err) {
                 console.warn(`Failed to download image: ${err}`);
               }
@@ -193,6 +207,12 @@ program
               remixParent: undefined,
               tags: [],
               rawApiResponse: metadata.fullData as SunoTrackResponse,
+
+              // timestamp for downloaded format
+              mp3Timestamp: options.format === "mp3" ? new Date() : null,
+              wavTimestamp: options.format === "wav" ? new Date() : null,
+              alacTimestamp: null,
+              flacTimestamp: null,
             };
 
             const normalizedEntry = normalizeMetadata(songEntry);
@@ -226,6 +246,58 @@ program
       console.log(
         `\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`,
       );
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("download-images")
+  .description("Download artwork for tracks listed in a JSON file")
+  .requiredOption("-l, --list <file>", "JSON file containing clipId/thumbnail objects")
+  .option("-t, --token <token>", "Authentication token")
+  .option(
+    "-b, --browser <url>",
+    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+  )
+  .option("-o, --output <dir>", "Output directory", "./downloads")
+  .option("--delay <ms>", "Delay between downloads in ms", "1000")
+  .action(async (options) => {
+    try {
+      const client = await getAuthenticatedClient(options);
+      const outputDir = path.resolve(options.output);
+      const imagesDir = path.join(outputDir, "images");
+      if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
+
+      const listPath = path.resolve(options.list);
+      if (!fs.existsSync(listPath)) {
+        console.error("Image list file not found: " + listPath);
+        process.exit(1);
+      }
+      let entries: Array<{ clipId: string; thumbnail: string | null }> = [];
+      try {
+        entries = JSON.parse(fs.readFileSync(listPath, "utf-8"));
+      } catch (err) {
+        console.error("Failed to parse image list:", err);
+        process.exit(1);
+      }
+
+      for (let i = 0; i < entries.length; i++) {
+        const { clipId, thumbnail } = entries[i];
+        if (!thumbnail) continue;
+        const ext = path.extname(thumbnail) || ".jpeg";
+        const imagePath = path.join(imagesDir, `${clipId}${ext}`);
+        console.log(`Downloading image ${i + 1}/${entries.length}: ${clipId}`);
+        try {
+          await client.downloadImage(thumbnail, imagePath, clipId);
+        } catch (err) {
+          console.warn(`Failed downloading ${clipId}: ${err}`);
+        }
+        if (i < entries.length - 1) {
+          await new Promise(r => setTimeout(r, parseInt(options.delay)));
+        }
+      }
     } catch (error) {
       console.error("Error:", error instanceof Error ? error.message : error);
       process.exit(1);

@@ -65,6 +65,11 @@ input/
 └── songs_metadata.json  # Combined metadata
 ```
 
+**Log files** (`process.log`, `processed.log`, `skipped.log`, `images.log`) are written alongside this input tree rather than the output, making it easy to keep diagnostics with the source material.
+
+**Metadata persistence:** when the converter writes `songs_metadata.json` it updates both the output root and, if different, the input root.  This ensures the timestamps used to decide whether a format needs reconverting are saved in the source metadata so subsequent runs don’t re‑encode already‑processed tracks.
+
+
 ### Output Directory
 ```
 output/
@@ -85,8 +90,14 @@ output/
 - `-b, --bitrate <kbps>` - MP3 bitrate in kbps (default: 320)
 - `--no-images` - Skip embedding album artwork
 - `--no-lyrics` - Skip embedding lyrics
+- `--reconvert-before <ISO date>` - only reconvert formats whose timestamp is missing or on/ before the specified date
+- `--reconvert-after <ISO date>` - only reconvert formats whose timestamp is missing or on/ after the specified date
+- `--reconvert-missing` - only convert formats that have never been produced (ignores existing timestamps)
+- `--image-list <file>` - instead of processing, write a JSON file containing tracks whose artwork needs downloading
 
 ## Metadata Fields
+
+In addition to the previous column data, the combined `songs_metadata.json` now also holds per‑format timestamps. These are recorded each time a file is converted or recreated and can be used to filter future processing runs.
 
 ### Standard Fields
 - Title, Artist, Date, Genre, Comment
@@ -103,6 +114,13 @@ output/
 - `CONTACT` - Song URL
 - `LENGTH` - Duration
 
+### New Timestamp Fields
+- `mp3Timestamp` – ISO datetime when the MP3 was last generated
+- `wavTimestamp` – ISO datetime when the WAV was last copied/updated
+- `alacTimestamp` – ISO datetime for ALAC/M4A
+- `flacTimestamp` – ISO datetime for FLAC
+
+These values are written automatically during processing and can be inspected or used with the `--reconvert-before/after` options.
 ## Examples
 
 ```bash
@@ -114,4 +132,10 @@ suno-process -i ./input -o ./output -f flac --no-images
 
 # Update existing library with new metadata
 suno-process -i ./downloads -o ./library
+
+# only re‑encode formats whose timestamp is missing or on/before a cutoff
+suno-process -i ./downloads -o ./library --reconvert-before 2025-01-01T00:00:00Z
+
+# re‑encode only files whose timestamp is missing or on/after a cutoff
+suno-process -i ./downloads -o ./library --reconvert-after 2025-01-01T00:00:00Z
 ```

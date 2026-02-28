@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer';
 
 export async function extractTokenFromBrowser(browserUrl?: string): Promise<string> {
   console.log(browserUrl ? 'Connecting to existing browser...' : 'Launching browser...');
+  const isRemoteBrowser = Boolean(browserUrl);
   const browser = browserUrl
     ? await puppeteer.connect({ browserURL: browserUrl })
     : await puppeteer.launch({
@@ -52,8 +53,10 @@ export async function extractTokenFromBrowser(browserUrl?: string): Promise<stri
 
   console.log('Authentication complete! You can continue using the browser.');
 
-  if (!browserUrl) {
+  if (isRemoteBrowser) {
     await browser.disconnect();
+  } else {
+    await browser.close();
   }
 
   if (!capturedToken) {

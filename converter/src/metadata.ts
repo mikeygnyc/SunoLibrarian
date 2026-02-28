@@ -11,6 +11,11 @@ const execFileAsync = promisify(execFile);
 export class MetadataProcessor {
   constructor(private config: ProcessorConfig) {}
 
+  private async fileExists(p: string): Promise<boolean> {
+    try { await fs.promises.access(p, fs.constants.F_OK); return true; }
+    catch { return false; }
+  }
+
   async embedMetadata(metadata: ISongData, format: string, filePath: string): Promise<void> {
     if (format === "flac") await this.embedFlac(metadata, filePath);
     else if (format === "m4a") await this.embedAlac(metadata, filePath);
@@ -32,13 +37,13 @@ export class MetadataProcessor {
     delete (cleanMeta as any).flacStatus;
     delete (cleanMeta as any).alacStatus;
     delete (cleanMeta as any).wavStatus;
-    fs.writeFileSync(metadataPath, JSON.stringify(cleanMeta, null, 2));
+    await fs.promises.writeFile(metadataPath, JSON.stringify(cleanMeta, null, 2));
   }
 
   private async saveLyrics(meta: ISongData): Promise<void> {
     if (!meta.lyrics) return;
     const lyricsPath = path.join(this.config.outputRoot, "lyrics", `${meta.clipId}.txt`);
-    fs.writeFileSync(lyricsPath, meta.lyrics);
+    await fs.promises.writeFile(lyricsPath, meta.lyrics);
   }
 
   private async copyImage(meta: ISongData): Promise<void> {
@@ -46,15 +51,15 @@ export class MetadataProcessor {
     const ext = path.extname(meta.thumbnail) || ".jpeg";
     const inputPath = path.join(this.config.inputRoot, "images", `${meta.clipId}${ext}`);
     const outputPath = path.join(this.config.outputRoot, "images", `${meta.clipId}${ext}`);
-    
-    if (!fs.existsSync(inputPath)) {
-      const { Processor } = require("./processor");
-      const processor = new Processor(this.config);
-      await processor.ensureImage(meta);
-    }
-    
-    if (fs.existsSync(inputPath) && !fs.existsSync(outputPath)) {
-      fs.copyFileSync(inputPath, outputPath);
+
+    // processSong already downloaded the image when necessary, so we avoid
+    // re-downloading here.  Just copy if the source exists and target is
+    // missing.
+    if (await this.fileExists(inputPath) && !(await this.fileExists(outputPath))) {
+      const start = Date.now();
+      await fs.promises.copyFile(inputPath, outputPath);
+      const dur = ((Date.now() - start) / 1000).toFixed(2);
+      console.log(`  copyImage took ${dur}s`);
     }
   }
 
@@ -96,24 +101,24 @@ export class MetadataProcessor {
     if (meta.rawApiResponse) lines.push(`SUNO_RAW_DATA=${this.clean(JSON.stringify(meta.rawApiResponse))}`);
 
     const tmpFile = path.join(this.config.outputRoot, "metadata", `${meta.clipId}_vorbis.txt`);
-    fs.writeFileSync(tmpFile, lines.join(os.EOL));
+    await fs.promises.writeFile(tmpFile, lines.join(os.EOL));
     
     const args = [`--import-tags-from=${tmpFile}`];
     
     if (this.config.embedLyrics && meta.lyrics) {
       const lyricsPath = path.join(this.config.outputRoot, "lyrics", `${meta.clipId}.txt`);
-      if (fs.existsSync(lyricsPath)) args.push(`--set-tag-from-file=LYRICS=${lyricsPath}`);
+      if (await this.fileExists(lyricsPath)) args.push(`--set-tag-from-file=LYRICS=${lyricsPath}`);
     }
     
     if (this.config.embedImages && meta.thumbnail) {
-      const imgPath = this.getImagePath(meta);
-      if (imgPath && fs.existsSync(imgPath) && this.isValidImage(imgPath)) args.push(`--import-picture-from=3||||${imgPath}`);
+      const imgPath = await this.getImagePath(meta);
+      if (imgPath && await this.fileExists(imgPath) && await this.isValidImage(imgPath)) args.push(`--import-picture-from=3||||${imgPath}`);
     }
     
     args.push(flacPath);
     console.log(`    metaflac command: ${JSON.stringify(args)}`);
     await execFileAsync("metaflac", args);
-    fs.rmSync(tmpFile);
+    try { await fs.promises.rm(tmpFile); } catch {}
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`    metaflac: ${elapsed}s`);
   }
@@ -155,13 +160,20 @@ export class MetadataProcessor {
     if (isSourceMaterial) args.push(...this.createCustomAtom("SSRC", "text", "true", "SunoIsSourceMaterial"));
     if (this.config.embedLyrics && meta.lyrics) {
       const lyricsPath = path.join(this.config.outputRoot, "lyrics", `${meta.clipId}.txt`);
-      if (fs.existsSync(lyricsPath)) args.push("--lyricsFile", lyricsPath);
+      if (await this.fileExists(lyricsPath)) args.push("--lyricsFile", lyricsPath);
     }
     if (this.config.embedImages && meta.thumbnail) {
-      const imgPath = this.getImagePath(meta);
-      if (imgPath && fs.existsSync(imgPath) && this.isValidImage(imgPath)) args.push("--artwork", imgPath);
+      const imgPath = await this.getImagePath(meta);
+      if (imgPath && await this.fileExists(imgPath) && await this.isValidImage(imgPath)) args.push("--artwork", imgPath);
     }
-    await execFileAsync("atomicparsley", args);
+    console.log(`    atomicparsley command: ${JSON.stringify(args)}`);
+    try {
+      await execFileAsync("atomicparsley", args);
+    } catch (err: any) {
+      console.error(`    atomicparsley stderr: ${err.stderr}`);
+      console.error(`    atomicparsley stdout: ${err.stdout}`);
+      throw err;
+    }
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`    atomicparsley: ${elapsed}s`);
   }
@@ -180,8 +192,8 @@ export class MetadataProcessor {
     const args = ["-loglevel", "error", "-i", mp3Path, "-y"];
     
     if (this.config.embedImages && meta.thumbnail) {
-      const imgPath = this.getImagePath(meta);
-      if (imgPath && fs.existsSync(imgPath) && this.isValidImage(imgPath)) {
+      const imgPath = await this.getImagePath(meta);
+      if (imgPath && await this.fileExists(imgPath) && await this.isValidImage(imgPath)) {
         args.push("-i", imgPath, "-map", "0:a", "-map", "1:v");
       } else {
         args.push("-map", "0:a");
@@ -220,8 +232,8 @@ export class MetadataProcessor {
     if (isSourceMaterial) args.push("-metadata", `is_source_material=true`);
     
     if (this.config.embedImages && meta.thumbnail) {
-      const imgPath = this.getImagePath(meta);
-      if (imgPath && fs.existsSync(imgPath) && this.isValidImage(imgPath)) {
+      const imgPath = await this.getImagePath(meta);
+      if (imgPath && await this.fileExists(imgPath) && await this.isValidImage(imgPath)) {
         args.push("-disposition:v:0", "attached_pic");
       }
     }
@@ -230,14 +242,14 @@ export class MetadataProcessor {
     
     console.log(`    ffmpeg command: ${JSON.stringify(args)}`);
     await execFileAsync("ffmpeg", args);
-    fs.renameSync(tempPath, mp3Path);
+    try { await fs.promises.rename(tempPath, mp3Path); } catch (err) { throw err; }
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`    ffmpeg: ${elapsed}s`);
   }
 
-  private isValidImage(imgPath: string): boolean {
+  private async isValidImage(imgPath: string): Promise<boolean> {
     try {
-      const buffer = fs.readFileSync(imgPath);
+      const buffer = await fs.promises.readFile(imgPath);
       if (buffer.length < 100) return false;
       if (buffer[0] !== 0xFF || buffer[1] !== 0xD8) return false;
       
@@ -258,44 +270,44 @@ export class MetadataProcessor {
     }
   }
 
-  private getImagePath(meta: ISongData): string | null {
+  private async getImagePath(meta: ISongData): Promise<string | null> {
     if (!meta.thumbnail) return null;
     const imgPath = path.join(this.config.outputRoot, "images", `${meta.clipId}${path.extname(meta.thumbnail)}`);
     
-    if (!fs.existsSync(imgPath)) {
+    if (!(await this.fileExists(imgPath))) {
       const inputPath = path.join(this.config.inputRoot, "images", `${meta.clipId}${path.extname(meta.thumbnail)}`);
-      if (!fs.existsSync(inputPath)) {
+      if (!(await this.fileExists(inputPath))) {
         const { Processor } = require("./processor");
         const processor = new Processor(this.config);
-        processor.ensureImage(meta);
+        await processor.ensureImage(meta);
       }
-      if (fs.existsSync(inputPath)) {
-        fs.copyFileSync(inputPath, imgPath);
+      if (await this.fileExists(inputPath)) {
+        await fs.promises.copyFile(inputPath, imgPath);
       }
     }
     
-    if (fs.existsSync(imgPath)) {
-      const dimensions = this.getImageDimensions(imgPath);
+    if (await this.fileExists(imgPath)) {
+      const dimensions = await this.getImageDimensions(imgPath);
       if (dimensions && (dimensions.width < 1024 || dimensions.height < 1024)) {
         console.log(`  Image too small (${dimensions.width}x${dimensions.height}), re-downloading`);
         const { Processor } = require("./processor");
         const processor = new Processor(this.config);
         const inputPath = path.join(this.config.inputRoot, "images", `${meta.clipId}${path.extname(meta.thumbnail)}`);
-        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
-        processor.ensureImage(meta);
-        if (fs.existsSync(inputPath)) {
-          fs.copyFileSync(inputPath, imgPath);
+        if (await this.fileExists(inputPath)) await fs.promises.unlink(inputPath);
+        if (await this.fileExists(imgPath)) await fs.promises.unlink(imgPath);
+        await processor.ensureImage(meta);
+        if (await this.fileExists(inputPath)) {
+          await fs.promises.copyFile(inputPath, imgPath);
         }
       }
     }
     
-    return fs.existsSync(imgPath) ? imgPath : null;
+    return (await this.fileExists(imgPath)) ? imgPath : null;
   }
 
-  private getImageDimensions(imgPath: string): { width: number; height: number } | null {
+  private async getImageDimensions(imgPath: string): Promise<{ width: number; height: number } | null> {
     try {
-      const buffer = fs.readFileSync(imgPath);
+      const buffer = await fs.promises.readFile(imgPath);
       if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
         let offset = 2;
         while (offset < buffer.length) {
