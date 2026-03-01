@@ -2,10 +2,10 @@ import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import puppeteer from 'puppeteer';
 import type { Page } from 'puppeteer';
 import type { IRateLimitConfig, ITrack, IWorkspace, ITrackMetadata } from './lib/interfaces';
 import { Storage } from './storage';
+import { connectOrLaunchBrowser } from './auth';
 
 export class SunoClient {
   private authToken: string;
@@ -596,9 +596,7 @@ export class SunoClient {
   private async regenerateArtworkForTrack(clipId: string): Promise<void> {
     const songUrl = `https://suno.com/song/${clipId}`;
     console.log(`[artwork] Opening song page for ${clipId}: ${songUrl}`);
-    const browser = this.browserUrl
-      ? await puppeteer.connect({ browserURL: this.browserUrl })
-      : await puppeteer.launch({ headless: false, defaultViewport: null });
+    const { browser, isRemoteBrowser } = await connectOrLaunchBrowser(this.browserUrl);
     let page: Page | null = null;
 
     try {
@@ -700,7 +698,7 @@ export class SunoClient {
           // no-op
         }
       }
-      if (this.browserUrl) {
+      if (isRemoteBrowser) {
         await browser.disconnect();
       } else {
         await browser.close();

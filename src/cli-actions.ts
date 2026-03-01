@@ -9,12 +9,18 @@ import { AudioFormat, ISongData, ISunoTrackResponse, IWorkspace } from "./lib/in
 import { Storage } from "./storage";
 
 type CliOptions = Record<string, any>;
+const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
 
 type DownloadFlowResult = {
   outputDir: string;
   downloaded: number;
   skipped: number;
 };
+
+type DownloadedTrackHook = (params: {
+  clipId: string;
+  outputDir: string;
+}) => void;
 
 type DateBoundary = "start" | "end";
 
@@ -93,18 +99,31 @@ function shouldCopySongsMetadataToOutput(options: CliOptions): boolean {
   return options.copySongsMetadataToOutput === true;
 }
 
+function resolveBrowserEndpoint(options: CliOptions): string | undefined {
+  const browser = options.browser;
+  if (browser == null || browser === false) return undefined;
+  if (browser === true) return DEFAULT_BROWSER_ENDPOINT;
+  if (typeof browser === "string") {
+    const trimmed = browser.trim();
+    return trimmed.length > 0 ? trimmed : DEFAULT_BROWSER_ENDPOINT;
+  }
+  return DEFAULT_BROWSER_ENDPOINT;
+}
+
 async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
-  if (!options.token && !options.browser) {
+  const browserEndpoint = resolveBrowserEndpoint(options);
+
+  if (!options.token && !browserEndpoint) {
     throw new Error("Authentication required: provide either --token or --browser");
   }
 
   let token = options.token;
   if (!token) {
     console.log("No token provided. Launching browser to extract token...");
-    token = await extractTokenFromBrowser(options.browser);
+    token = await extractTokenFromBrowser(browserEndpoint);
     console.log("Token extracted successfully!");
   }
-  return new SunoClient(token, undefined, options.browser);
+  return new SunoClient(token, undefined, browserEndpoint);
 }
 
 function filterWorkspaces(workspaces: IWorkspace[], workspaceId?: string): IWorkspace[] {
@@ -185,6 +204,8 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 
   let totalDownloaded = 0;
   let totalSkipped = 0;
+  const onTrackDownloaded: DownloadedTrackHook | undefined =
+    typeof options.onTrackDownloaded === "function" ? options.onTrackDownloaded : undefined;
 
   for (const workspace of targetWorkspaces) {
     console.log(`\nProcessing workspace: ${workspace.name}`);
@@ -288,6 +309,13 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 
         console.log(`Saved: ${filename}`);
         totalDownloaded++;
+        if (onTrackDownloaded) {
+          try {
+            onTrackDownloaded({ clipId: track.id, outputDir });
+          } catch (hookError) {
+            console.warn(`Download hook failed for ${track.id}: ${hookError}`);
+          }
+        }
       } catch (error) {
         console.error(
           `Failed to download ${track.title || track.id}:`,
@@ -328,19 +356,51 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {
-  const downloadResult = await runDownloadFlow(options);
-  await runProcessFlow({
-    input: downloadResult.outputDir,
-    output: options.library || downloadResult.outputDir,
-    copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
-    processFormats: options.processFormats,
-    processBitrate: options.processBitrate,
-    processConcurrency: options.processConcurrency,
-    processUpdateConcurrency: options.processUpdateConcurrency,
-    images: options.images,
-    lyrics: options.lyrics,
-    exitOnError: options.exitOnError,
+  const outputDir = path.resolve(options.output);
+  const conversionOutput = options.library || outputDir;
+  let conversionChain: Promise<void> = Promise.resolve();
+  let queuedConversions = 0;
+  let conversionFailed: Error | null = null;
+
+  const queueConversion = (): void => {
+    queuedConversions++;
+    conversionChain = conversionChain.then(async () => {
+      if (conversionFailed) return;
+      await runProcessFlow({
+        input: outputDir,
+        output: conversionOutput,
+        copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
+        processFormats: options.processFormats,
+        processBitrate: options.processBitrate,
+        processConcurrency: options.processConcurrency,
+        processUpdateConcurrency: options.processUpdateConcurrency,
+        images: options.images,
+        lyrics: options.lyrics,
+        exitOnError: options.exitOnError,
+      });
+    }).catch((err: any) => {
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      conversionFailed = wrapped;
+      if (!options.exitOnError) {
+        console.error(`Conversion run failed during sync: ${wrapped.message}`);
+      }
+    });
+  };
+
+  const downloadResult = await runDownloadFlow({
+    ...options,
+    output: outputDir,
+    onTrackDownloaded: () => queueConversion(),
   });
+
+  if (queuedConversions === 0 && downloadResult.downloaded > 0) {
+    queueConversion();
+  }
+
+  await conversionChain;
+  if (conversionFailed) {
+    throw conversionFailed;
+  }
 }
 
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {

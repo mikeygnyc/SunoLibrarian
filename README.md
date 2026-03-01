@@ -97,6 +97,8 @@ suno-export [--version] [--help] <command> [command options] [arguments]
 2. Processing downloaded assets into library formats.
 3. Running combined workflows (`sync` = `download` + `process`).
 
+When using default output paths, required directories are created automatically if missing.
+
 ### GLOBAL OPTIONS
 
 - `-V, --version`: print CLI version.
@@ -105,6 +107,7 @@ suno-export [--version] [--help] <command> [command options] [arguments]
 ### AUTHENTICATION REQUIREMENT
 
 For commands that include `--token` / `--browser` options, at least one must be provided.
+When `--browser` is provided without a value, it defaults to `http://localhost:9222`.
 
 ### BROWSER SESSION SETUP (`--browser`)
 
@@ -112,7 +115,9 @@ Use this when you want the CLI to read auth from a live Chrome session instead o
 
 1. Start Chrome in remote-debug mode with a dedicated temp profile directory.
 2. Open `https://suno.com` in that browser and complete login.
-3. Keep that Chrome instance running while you run `suno-export ... --browser <url>`.
+3. Keep that Chrome instance running while you run `suno-export ... --browser [url]`.
+
+If a specified browser endpoint is unavailable, the CLI will automatically launch a local Chrome debug session (OS-appropriate defaults) and continue.
 
 macOS example:
 
@@ -152,6 +157,7 @@ Verification and troubleshooting:
 
 - Confirm the debug endpoint is reachable: `http://localhost:9222/json/version`
 - If connection fails, make sure the debug Chrome process is still running.
+- If the endpoint is unavailable, the CLI automatically falls back to launching a local debug browser session.
 - If login state is wrong/stale, stop Chrome, delete the temp profile directory, and start again.
 
 ### COMMANDS
@@ -167,10 +173,10 @@ suno-export download [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint (example: `http://localhost:9222`).
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `-w, --workspace <id>`: only process the given workspace ID.
-- `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `mp3`.
-- `-o, --output <dir>`: output root directory. Default: `./downloads`.
+- `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
+- `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output on completion.
 - `--no-metadata`: skip metadata sidecar file behavior.
 - `--created-after <date>`: include only tracks created on/after this date.
@@ -189,10 +195,10 @@ suno-export sync [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `-w, --workspace <id>`: only process the given workspace ID.
-- `-f, --format <format>`: download format, `mp3` or `wav`. Default: `mp3`.
-- `-o, --output <dir>`: download/output root for source files. Default: `./downloads`.
+- `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
+- `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to conversion output on completion.
 - `--created-after <date>`: include only tracks created on/after this date.
 - `--created-before <date>`: include only tracks created on/before this date.
@@ -206,6 +212,10 @@ Options:
 - `--no-images`: skip image embedding during conversion.
 - `--no-lyrics`: skip lyric embedding during conversion.
 - `--exit-on-error`: stop on first conversion error.
+
+Sync behavior note:
+
+- Conversion is queued immediately after each successful download (pipelined flow).
 
 #### `process`
 
@@ -243,8 +253,8 @@ Options:
 
 - `-l, --list <file>`: JSON file with objects containing `clipId` and `thumbnail`.
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
-- `-o, --output <dir>`: output root directory. Default: `./downloads`.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
 - `--copy-songs-metadata-to-output`: on completion, verify/copy finalized `songs_metadata.json` to output root.
 - `--fetch-image-list <file>`: discover missing images and write JSON list to file.
 - `--fetch-missing`: discover missing images and download them directly.
@@ -266,7 +276,7 @@ suno-export list [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `-w, --workspace <id>`: only list this workspace ID.
 - `--json`: emit JSON output.
 
@@ -281,7 +291,7 @@ suno-export workspaces [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `--json`: emit JSON output.
 
 #### `metadata`
@@ -299,7 +309,7 @@ Arguments:
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 
 #### `fetch-metadata`
 
@@ -312,7 +322,7 @@ suno-export fetch-metadata [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `--ids <ids>`: comma-separated list of track IDs to fetch.
 - `-w, --workspace <id>`: only process this workspace ID.
 - `--created-after <date>`: include only tracks created on/after this date.
@@ -335,7 +345,7 @@ suno-export refresh [options]
 Options:
 
 - `-t, --token <token>`: authentication token.
-- `-b, --browser <url>`: connect to an existing Chrome DevTools endpoint.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 
 ### DATE FILTER FORMAT
 
