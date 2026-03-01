@@ -1,6 +1,16 @@
 #!/usr/bin/env sh
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SOURCE="$0"
+while [ -h "$SOURCE" ]; do
+  SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd)
+  LINK_TARGET=$(readlink "$SOURCE")
+  case "$LINK_TARGET" in
+    /*) SOURCE="$LINK_TARGET" ;;
+    *) SOURCE="$SCRIPT_DIR/$LINK_TARGET" ;;
+  esac
+done
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd)
 PROJECT_ROOT=$(dirname -- "$SCRIPT_DIR")
 ENTRYPOINT="$PROJECT_ROOT/dist/index.js"
 

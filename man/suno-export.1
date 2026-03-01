@@ -8,36 +8,331 @@ suno-export \- download, process, and sync Suno tracks
 .B suno-export
 is a CLI for downloading Suno tracks, fetching metadata, processing audio formats,
 and running end-to-end sync workflows.
-.SH COMMANDS
-.TP
-.B download
-Download tracks, metadata, and images.
-.TP
-.B sync
-Run download and process in one workflow.
-.TP
-.B process
-Run conversion and metadata embedding on an existing input root.
-.TP
-.B download-images
-Download artwork from an explicit list or auto-discover missing images.
-.TP
-.B list
-List tracks by workspace.
-.TP
-.B workspaces
-List available workspaces.
-.TP
-.B metadata <trackId>
-Fetch metadata for one track.
-.TP
-.B fetch-metadata
-Fetch and cache metadata for many tracks (IDs or workspace/date filters).
-.TP
-.B refresh
-Refresh cached tracks for all workspaces.
+Default output directories are created automatically when needed.
 .SH AUTHENTICATION
 For commands that expose \fB--token\fR or \fB--browser\fR, at least one is required.
+If \fB--browser\fR is passed without a value, default endpoint is \fBhttp://localhost:9222\fR.
+If the specified endpoint is unavailable, the CLI falls back to launching a local debug browser session.
+.SH BROWSER SESSION SETUP
+Use \fB--browser\fR when you want to authenticate via a live Chrome debug session
+instead of passing \fB--token\fR.
+.TP
+.B STEPS
+1) Launch Chrome with remote debugging and a dedicated temp profile.
+.br
+2) Open https://suno.com and sign in.
+.br
+3) Keep that Chrome process running while executing \fBsuno-export ... --browser [url]\fR.
+.TP
+.B macOS example
+\fBTMP_PROFILE="$(mktemp -d /tmp/suno-export-chrome.XXXXXX)"\fR
+.br
+\fB"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$TMP_PROFILE"\fR
+.TP
+.B Linux example
+\fBTMP_PROFILE="$(mktemp -d /tmp/suno-export-chrome.XXXXXX)"\fR
+.br
+\fBgoogle-chrome --remote-debugging-port=9222 --user-data-dir="$TMP_PROFILE"\fR
+.TP
+.B Windows PowerShell example
+\fB$tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath()) -Name ("suno-export-chrome-" + [guid]::NewGuid())\fR
+.br
+\fB& "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$($tmp.FullName)"\fR
+.TP
+.B Verify endpoint
+\fBhttp://localhost:9222/json/version\fR
+.TP
+.B Troubleshooting
+If connection fails, ensure the debug Chrome process is still running.
+If unavailable, the CLI will auto-launch a local debug browser session and continue.
+If auth state is stale, stop Chrome, remove the temp profile directory, and relaunch.
+.SH GLOBAL OPTIONS
+.TP
+.B \-V, --version
+Print version.
+.TP
+.B \-h, --help
+Print help.
+.SH COMMANDS
+.SS download
+Download tracks from Suno.
+.TP
+.B SYNOPSIS
+\fBsuno-export download\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B \-w, --workspace <id>
+Only process one workspace ID.
+.TP
+.B \-f, --format <format>
+Audio format: mp3|wav (default: wav).
+.TP
+.B \-o, --output <dir>
+Output root (default: OS Downloads directory + /suno-export).
+.TP
+.B --copy-songs-metadata-to-output
+Copy finalized songs_metadata.json to output on completion.
+.TP
+.B --no-metadata
+Skip metadata sidecar behavior.
+.TP
+.B --created-after <date>
+Only include tracks created on/after date.
+.TP
+.B --created-before <date>
+Only include tracks created on/before date.
+.TP
+.B --delay <ms>
+Delay between downloads (default: 1000).
+.TP
+.B --flush-cache
+Clear local cache before run.
+.SS sync
+Run download then process.
+.TP
+.B SYNOPSIS
+\fBsuno-export sync\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B \-w, --workspace <id>
+Only process one workspace ID.
+.TP
+.B \-f, --format <format>
+Download format: mp3|wav (default: wav).
+.TP
+.B \-o, --output <dir>
+Download/output root (default: OS Downloads directory + /suno-export).
+.TP
+.B --copy-songs-metadata-to-output
+Copy finalized songs_metadata.json to conversion output on completion.
+.TP
+.B --created-after <date>
+Only include tracks created on/after date.
+.TP
+.B --created-before <date>
+Only include tracks created on/before date.
+.TP
+.B --delay <ms>
+Delay between downloads (default: 1000).
+.TP
+.B --flush-cache
+Clear local cache before run.
+.TP
+.B --library <dir>
+Converted output root (default: same as --output).
+.TP
+.B --process-formats <formats>
+Formats CSV (default: flac,mp3,alac).
+.TP
+.B --process-bitrate <kbps>
+MP3 bitrate (default: 320).
+.TP
+.B --process-concurrency <n>
+Processing concurrency (default: 4).
+.TP
+.B --process-update-concurrency <n>
+Update concurrency (default: 8).
+.TP
+.B --no-images
+Skip image embedding.
+.TP
+.B --no-lyrics
+Skip lyric embedding.
+.TP
+.B --exit-on-error
+Stop on first conversion error.
+.TP
+.B NOTE
+Conversion is queued immediately after each successful download (pipelined flow).
+.SS process
+Convert/embed metadata using an existing input root.
+.TP
+.B SYNOPSIS
+\fBsuno-export process\fR \-i <path> \-o <path> [options]
+.TP
+.B OPTIONS
+.TP
+.B \-i, --input <path>
+Input root. Required.
+.TP
+.B \-o, --output <path>
+Output root. Required.
+.TP
+.B --copy-songs-metadata-to-output
+Copy finalized songs_metadata.json to output on completion.
+.TP
+.B --process-formats <formats>
+Formats CSV (default: flac,mp3,alac).
+.TP
+.B --process-bitrate <kbps>
+MP3 bitrate (default: 320).
+.TP
+.B --process-concurrency <n>
+Processing concurrency (default: 4).
+.TP
+.B --process-update-concurrency <n>
+Update concurrency (default: 8).
+.TP
+.B --no-images
+Skip image embedding.
+.TP
+.B --no-lyrics
+Skip lyric embedding.
+.TP
+.B --exit-on-error
+Exit on processing error.
+.TP
+.B --reconvert-before <iso>
+Only reconvert on/before timestamp.
+.TP
+.B --reconvert-after <iso>
+Only reconvert on/after timestamp.
+.TP
+.B --reconvert-missing
+Only process missing formats.
+.SS download-images
+Download artwork from explicit list or discovered missing items.
+.TP
+.B SYNOPSIS
+\fBsuno-export download-images\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-l, --list <file>
+Input JSON list with clipId/thumbnail.
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B \-o, --output <dir>
+Output root (default: OS Downloads directory + /suno-export).
+.TP
+.B --copy-songs-metadata-to-output
+Copy finalized songs_metadata.json to output on completion.
+.TP
+.B --fetch-image-list <file>
+Discover missing images and write JSON list.
+.TP
+.B --fetch-missing
+Discover missing images and download directly.
+.TP
+.B --delay <ms>
+Delay between image downloads (default: 1000).
+.TP
+.B NOTES
+Pass at least one of --list, --fetch-image-list, --fetch-missing.
+Do not combine --list with --fetch-image-list.
+.SS list
+List tracks.
+.TP
+.B SYNOPSIS
+\fBsuno-export list\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B \-w, --workspace <id>
+Only list this workspace.
+.TP
+.B --json
+Emit JSON.
+.SS workspaces
+List workspaces.
+.TP
+.B SYNOPSIS
+\fBsuno-export workspaces\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B --json
+Emit JSON.
+.SS metadata
+Fetch metadata for one track.
+.TP
+.B SYNOPSIS
+\fBsuno-export metadata\fR <trackId> [options]
+.TP
+.B ARGUMENTS
+.TP
+.B <trackId>
+Suno track ID.
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.SS fetch-metadata
+Fetch and cache metadata for many tracks.
+.TP
+.B SYNOPSIS
+\fBsuno-export fetch-metadata\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
+.TP
+.B --ids <ids>
+Comma-separated track IDs.
+.TP
+.B \-w, --workspace <id>
+Workspace scope for discovery mode.
+.TP
+.B --created-after <date>
+Only include tracks created on/after date.
+.TP
+.B --created-before <date>
+Only include tracks created on/before date.
+.TP
+.B NOTES
+--ids cannot be combined with --workspace/--created-after/--created-before.
+.SS refresh
+Refresh cached tracks.
+.TP
+.B SYNOPSIS
+\fBsuno-export refresh\fR [options]
+.TP
+.B OPTIONS
+.TP
+.B \-t, --token <token>
+Authentication token.
+.TP
+.B \-b, --browser [url]
+Chrome DevTools endpoint (default: http://localhost:9222).
 .SH DATE FILTERS
 Commands with creation date filters accept:
 .IP \(bu 2
@@ -54,11 +349,20 @@ to the output side at completion.
 \fBsuno-export download --token TOKEN --output ./downloads\fR
 Download tracks to \fB./downloads\fR.
 .TP
+\fBsuno-export download --browser http://localhost:9222 --created-after 2026-01-01\fR
+Download with browser auth and date filter.
+.TP
 \fBsuno-export sync --browser http://localhost:9222 --output ./downloads --library ./library\fR
 Download then convert into \fB./library\fR.
 .TP
 \fBsuno-export process -i ./downloads -o ./library --reconvert-missing\fR
 Process missing formats from an existing download root.
+.TP
+\fBsuno-export download-images --fetch-image-list ./image_list.json\fR
+Generate image download list.
+.TP
+\fBsuno-export download-images --fetch-missing --browser http://localhost:9222\fR
+Discover and download missing images.
 .TP
 \fBsuno-export fetch-metadata --ids id1,id2,id3\fR
 Fetch metadata for explicit track IDs.

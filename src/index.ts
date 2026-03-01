@@ -11,6 +11,7 @@ import {
   runSyncFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
+import { DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 
 const program = new Command();
 
@@ -37,12 +38,12 @@ program
   .description("Download tracks from Suno")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
-  .option("-f, --format <format>", "Download format: mp3 or wav", "mp3")
-  .option("-o, --output <dir>", "Output directory", "./downloads")
+  .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
+  .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--no-metadata", "Skip metadata sidecar files")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
@@ -56,12 +57,12 @@ program
   .description("Download tracks, then run converter in one chained workflow")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
-  .option("-f, --format <format>", "Download format: mp3 or wav", "mp3")
-  .option("-o, --output <dir>", "Download/output directory for source files", "./downloads")
+  .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
+  .option("-o, --output <dir>", "Download/output directory for source files", DEFAULT_DOWNLOAD_ROOT)
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
@@ -101,10 +102,10 @@ program
   .option("-l, --list <file>", "JSON file containing clipId/thumbnail objects")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
-  .option("-o, --output <dir>", "Output directory", "./downloads")
+  .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
   .option("--fetch-missing", "Find missing images and download them directly")
@@ -116,8 +117,8 @@ program
   .description("List all tracks")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--json", "Output as JSON")
@@ -128,8 +129,8 @@ program
   .description("List all workspaces")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--json", "Output as JSON")
   .action(withCliError(runWorkspacesFlow));
@@ -139,8 +140,8 @@ program
   .description("Fetch metadata for a specific track")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .action(withCliError(runMetadataFlow));
 
@@ -149,8 +150,8 @@ program
   .description("Fetch and cache metadata for all tracks")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
@@ -163,8 +164,8 @@ program
   .description("Refresh cached tracks for all workspaces")
   .option("-t, --token <token>", "Authentication token")
   .option(
-    "-b, --browser <url>",
-    "Connect to existing Chrome instance (e.g., http://localhost:9222)",
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .action(withCliError(runRefreshFlow));
 

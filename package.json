@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "description": "Unified Suno downloader and processor CLI",
   "main": "dist/index.js",
+  "files": [
+    "bin",
+    "dist",
+    "man",
+    "scripts",
+    "README.md",
+    "package.json"
+  ],
   "bin": {
     "suno-export": "./bin/suno-export"
   },
