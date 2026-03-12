@@ -12,3 +12,5 @@ cli/.env
 .DS_Store
 *.token
 image-list.json
+node_modules
+apps/server/.next/cache/*
