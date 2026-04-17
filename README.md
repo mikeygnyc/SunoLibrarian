@@ -5,8 +5,7 @@ Unified TypeScript CLI for downloading, processing, and syncing Suno tracks to a
 ## Install
 
 ```bash
-npm install
-npm run build
+./scripts/install.sh
 ```
 
 Run the built CLI:
@@ -23,11 +22,10 @@ npm run dev -- --help
 
 ### Global Install (Direct CLI Command)
 
-Build once, then install globally from this repo:
+Install dependencies, build, and install globally from this repo:
 
 ```bash
-npm run build
-npm install -g .
+./scripts/install-global.sh
 ```
 
 After that, run directly from any shell:
@@ -39,6 +37,7 @@ suno-export --help
 If you are actively developing this repo and want a global command that tracks local changes, use:
 
 ```bash
+npm run build
 npm link
 ```
 
@@ -108,6 +107,8 @@ When using default output paths, required directories are created automatically 
 
 For commands that include `--token` / `--browser` options, at least one must be provided.
 When `--browser` is provided without a value, it defaults to `http://localhost:9222`.
+Use `--browser-profile <dir>` to launch Chrome with a specific user data directory. If omitted, the CLI uses a temporary profile directory as before.
+When `--browser-profile` points at Chrome's default user data directory, the CLI copies it to a temporary debug profile before launching Chrome. Chrome 136+ ignores remote debugging for the default data directory itself, even if Chrome is fully closed.
 
 ### BROWSER SESSION SETUP (`--browser`)
 
@@ -118,6 +119,8 @@ Use this when you want the CLI to read auth from a live Chrome session instead o
 3. Keep that Chrome instance running while you run `suno-export ... --browser [url]`.
 
 If a specified browser endpoint is unavailable, the CLI will automatically launch a local Chrome debug session (OS-appropriate defaults) and continue.
+When the CLI launches Chrome itself, `--browser-profile <dir>` controls the `--user-data-dir` used for that browser session.
+For your regular Chrome account, you can pass the default Chrome user data directory and let the CLI clone it, use a dedicated CLI profile directory and sign in once there, or launch Chrome manually with a non-default `--user-data-dir`, `--remote-debugging-port=9222`, and pass `--browser http://localhost:9222`.
 
 macOS example:
 
@@ -174,6 +177,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
@@ -196,6 +200,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
@@ -254,6 +259,7 @@ Options:
 - `-l, --list <file>`: JSON file with objects containing `clipId` and `thumbnail`.
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
 - `--copy-songs-metadata-to-output`: on completion, verify/copy finalized `songs_metadata.json` to output root.
 - `--fetch-image-list <file>`: discover missing images and write JSON list to file.
@@ -277,6 +283,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only list this workspace ID.
 - `--json`: emit JSON output.
 
@@ -292,6 +299,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `--json`: emit JSON output.
 
 #### `metadata`
@@ -310,6 +318,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 
 #### `fetch-metadata`
 
@@ -323,6 +332,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `--ids <ids>`: comma-separated list of track IDs to fetch.
 - `-w, --workspace <id>`: only process this workspace ID.
 - `--created-after <date>`: include only tracks created on/after this date.
@@ -346,6 +356,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 
 ### DATE FILTER FORMAT
 

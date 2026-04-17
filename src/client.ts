@@ -11,13 +11,15 @@ export class SunoClient {
   private authToken: string;
   private deviceId: string;
   private browserUrl?: string;
+  private browserUserDataDir?: string;
   private rateLimitConfig: IRateLimitConfig;
   private metadataCache: Map<string, ITrackMetadata>;
   private storage: Storage;
 
-  constructor(authToken: string, deviceId?: string, browserUrl?: string) {
+  constructor(authToken: string, deviceId?: string, browserUrl?: string, browserUserDataDir?: string) {
     this.authToken = authToken;
     this.browserUrl = browserUrl;
+    this.browserUserDataDir = browserUserDataDir;
     this.storage = new Storage();
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
@@ -596,7 +598,9 @@ export class SunoClient {
   private async regenerateArtworkForTrack(clipId: string): Promise<void> {
     const songUrl = `https://suno.com/song/${clipId}`;
     console.log(`[artwork] Opening song page for ${clipId}: ${songUrl}`);
-    const { browser, isRemoteBrowser } = await connectOrLaunchBrowser(this.browserUrl);
+    const { browser, isRemoteBrowser } = await connectOrLaunchBrowser(this.browserUrl, {
+      userDataDir: this.browserUserDataDir,
+    });
     let page: Page | null = null;
 
     try {

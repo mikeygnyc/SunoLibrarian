@@ -110,8 +110,15 @@ function resolveBrowserEndpoint(options: CliOptions): string | undefined {
   return DEFAULT_BROWSER_ENDPOINT;
 }
 
+function resolveBrowserUserDataDir(options: CliOptions): string | undefined {
+  if (typeof options.browserProfile !== "string") return undefined;
+  const trimmed = options.browserProfile.trim();
+  return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
+}
+
 async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
   const browserEndpoint = resolveBrowserEndpoint(options);
+  const browserUserDataDir = resolveBrowserUserDataDir(options);
 
   if (!options.token && !browserEndpoint) {
     throw new Error("Authentication required: provide either --token or --browser");
@@ -120,10 +127,10 @@ async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> 
   let token = options.token;
   if (!token) {
     console.log("No token provided. Launching browser to extract token...");
-    token = await extractTokenFromBrowser(browserEndpoint);
+    token = await extractTokenFromBrowser(browserEndpoint, { userDataDir: browserUserDataDir });
     console.log("Token extracted successfully!");
   }
-  return new SunoClient(token, undefined, browserEndpoint);
+  return new SunoClient(token, undefined, browserEndpoint, browserUserDataDir);
 }
 
 function filterWorkspaces(workspaces: IWorkspace[], workspaceId?: string): IWorkspace[] {
