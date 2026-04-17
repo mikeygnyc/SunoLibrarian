@@ -6,17 +6,22 @@
       "request": "launch",
       "name": "Debug CLI",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/cli/dist/index.js",
-      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
-        "${workspaceFolder}/cli/dist/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "sourceMaps": true,
-      "cwd": "${workspaceFolder}/cli",
+      "cwd": "${workspaceFolder}",
       "args": [
         "download",
         "--browser",
         "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/user/Library/Application Support/Google/Chrome",
         "-f",
         "wav"
       ],
@@ -30,17 +35,22 @@
       "request": "launch",
       "name": "Debug CLI - List",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/cli/dist/index.js",
-      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
-        "${workspaceFolder}/cli/dist/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "sourceMaps": true,
-      "cwd": "${workspaceFolder}/cli",
+      "cwd": "${workspaceFolder}",
       "args": [
         "list",
-        "--token",
-        "YOUR_TOKEN_HERE"
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/user/Library/Application Support/Google/Chrome",
       ],
       "console": "internalConsole",
       "skipFiles": [
@@ -52,13 +62,16 @@
       "request": "launch",
       "name": "Debug CLI - Workspaces",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/cli/dist/index.js",
-      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
-        "${workspaceFolder}/cli/dist/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "sourceMaps": true,
-      "cwd": "${workspaceFolder}/cli",
+      "cwd": "${workspaceFolder}",
       "args": [
         "workspaces",
         "--token",
@@ -74,13 +87,16 @@
       "request": "launch",
       "name": "Debug CLI - Image List",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/cli/dist/index.js",
-      "preLaunchTask": "tsc: build - cli/tsconfig.json",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
-        "${workspaceFolder}/cli/dist/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "sourceMaps": true,
-      "cwd": "${workspaceFolder}/cli",
+      "cwd": "${workspaceFolder}",
       "args": [
         "download-images",
         "--list",
@@ -96,49 +112,28 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug Converter",
+      "name": "Debug Process",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/converter/dist/index.js",
-      "preLaunchTask": "tsc: build - converter/tsconfig.json",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
-        "${workspaceFolder}/converter/dist/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "sourceMaps": true,
-      "cwd": "${workspaceFolder}/converter",
+      "cwd": "${workspaceFolder}",
       "args": [
+        "process",
         "-i",
         "${workspaceFolder}/downloads",
         "-o",
         "${workspaceFolder}/library",
-        "-f",
+        "--process-formats",
         "flac,mp3,alac,wav",
         "--exit-on-error",
         "--reconvert-missing"
-      ],
-      "console": "internalConsole",
-      "skipFiles": [
-        "<node_internals>/**"
-      ]
-    }
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Debug Converter Image List",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "program": "${workspaceFolder}/converter/dist/index.js",
-      "preLaunchTask": "tsc: build - converter/tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/converter/dist/**/*.js"
-      ],
-      "sourceMaps": true,
-      "cwd": "${workspaceFolder}/converter",
-      "args": [
-        "-i",
-        "${workspaceFolder}/downloads",
-        "-o",
-        "${workspaceFolder}/library",
-        "--image-list",
-        "${workspaceFolder}/image_list.json"
       ],
       "console": "internalConsole",
       "skipFiles": [

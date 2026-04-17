@@ -41,6 +41,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
@@ -60,6 +61,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Download/output directory for source files", DEFAULT_DOWNLOAD_ROOT)
@@ -105,6 +107,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
@@ -120,6 +123,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--json", "Output as JSON")
   .action(withCliError(runListFlow));
@@ -132,6 +136,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--json", "Output as JSON")
   .action(withCliError(runWorkspacesFlow));
 
@@ -143,6 +148,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .action(withCliError(runMetadataFlow));
 
 program
@@ -153,6 +159,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
@@ -167,6 +174,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .action(withCliError(runRefreshFlow));
 
 program.parse();
