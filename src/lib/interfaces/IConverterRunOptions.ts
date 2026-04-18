@@ -1,6 +1,7 @@
 export interface IConverterRunOptions {
   input: string;
   output: string;
+  metadataDatabase?: string;
   metadataFile?: string;
   copySongsMetadataToOutput?: boolean;
   processFormats?: string;

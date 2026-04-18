@@ -218,6 +218,30 @@ Verification and troubleshooting:
 
 ### COMMANDS
 
+### METADATA STORAGE
+
+The authoritative combined song metadata now lives in a SQLite database. By default, the database is created at:
+
+```text
+data/suno-export.sqlite
+```
+
+Use `--database <path>` on `download`, `sync`, `process`, and `download-images` to store metadata somewhere else. The database stores each song as the same normalized object used by the previous `songs_metadata.json` array, which keeps export compatibility and leaves room for a future Postgres-backed store.
+
+Import an existing current-format JSON file into SQLite:
+
+```bash
+suno-export import-metadata-json --input ./downloads/songs_metadata.json
+```
+
+Export the SQLite database back to the current JSON format:
+
+```bash
+suno-export export-metadata-json --output ./downloads/songs_metadata.json
+```
+
+Workflow commands also accept `--import-metadata-json <path>` before running and `--export-metadata-json <path>` after running. `--metadata-file` is retained as a legacy JSON export path used with `--copy-songs-metadata-to-output`; it is no longer the authoritative metadata store.
+
 #### `clear-auth-token`
 
 Clear the cached Suno authentication token.
@@ -227,6 +251,32 @@ suno-export clear-auth-token
 ```
 
 This command removes only the auth token from `~/.suno-export/cache.json`; it does not clear cached tracks, metadata, or the stored device ID.
+
+#### `import-metadata-json`
+
+Import an existing current-format metadata JSON array into the SQLite metadata database.
+
+```text
+suno-export import-metadata-json --input <path> [--database <path>]
+```
+
+Options:
+
+- `-i, --input <path>`: current-format metadata JSON file. Required.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+
+#### `export-metadata-json`
+
+Export the SQLite metadata database to the current `songs_metadata.json` array format.
+
+```text
+suno-export export-metadata-json --output <path> [--database <path>]
+```
+
+Options:
+
+- `-o, --output <path>`: output metadata JSON file. Required.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
 
 #### `download`
 
@@ -245,8 +295,11 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
-- `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output on completion.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
+- `--export-metadata-json <path>`: export the database to current-format JSON after running.
+- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
+- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output on completion.
 - `--no-metadata`: skip metadata sidecar file behavior.
 - `--created-after <date>`: include only tracks created on/after this date.
 - `--created-before <date>`: include only tracks created on/before this date.
@@ -270,8 +323,11 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
-- `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to conversion output on completion.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
+- `--export-metadata-json <path>`: export the database to current-format JSON after running.
+- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
+- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to conversion output on completion.
 - `--created-after <date>`: include only tracks created on/after this date.
 - `--created-before <date>`: include only tracks created on/before this date.
 - `--delay <ms>`: delay between downloads in milliseconds. Default: `1000`.
@@ -302,8 +358,11 @@ Options:
 
 - `-i, --input <path>`: input root directory. Required.
 - `-o, --output <path>`: output root directory. Required.
-- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
-- `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output root on completion.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
+- `--export-metadata-json <path>`: export the database to current-format JSON after running.
+- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
+- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output root on completion.
 - `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
 - `--process-concurrency <n>`: processing concurrency. Default: `4`.
@@ -331,8 +390,11 @@ Options:
 - `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--metadata-file <path>`: combined metadata JSON file path for missing-image discovery. Default: `<output>/songs_metadata.json`.
-- `--copy-songs-metadata-to-output`: on completion, verify/copy finalized `songs_metadata.json` to output root.
+- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
+- `--export-metadata-json <path>`: export the database to current-format JSON after running.
+- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
+- `--copy-songs-metadata-to-output`: on completion, export finalized `songs_metadata.json` to output root.
 - `--fetch-image-list <file>`: discover missing images and write JSON list to file.
 - `--fetch-missing`: discover missing images and download them directly.
 - `--delay <ms>`: delay between image downloads in milliseconds. Default: `1000`.
@@ -340,7 +402,7 @@ Options:
 Notes:
 
 - You must pass at least one of: `--list`, `--fetch-image-list`, `--fetch-missing`.
-- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and `<output>/songs_metadata.json` unless `--metadata-file` is set.
+- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and the configured SQLite metadata database.
 
 #### `list`
 
@@ -455,16 +517,17 @@ Download flow writes:
 - `wav/`
 - `metadata/`
 - `images/`
-- `songs_metadata.json`
+- `songs_metadata.json` only when exported with `--export-metadata-json` or `--copy-songs-metadata-to-output`
 
 Process flow reads a download-style input root and writes converted output.
 
-### SONGS METADATA FILE LOCATION
+### SONGS METADATA DATABASE LOCATION
 
-- The authoritative metadata file defaults to `<output>/songs_metadata.json`.
-- Use `--metadata-file <path>` with `download`, `sync`, `process`, or `download-images` to override the combined metadata JSON path.
-- Backups (`<metadata-file>.<timestamp>.bak`) are created next to the authoritative metadata file only.
-- If `--copy-songs-metadata-to-output` is set, a finalized copy is written to the output side only after completion, using the metadata file's basename.
+- The authoritative metadata database defaults to `data/suno-export.sqlite`.
+- Use `--database <path>` with `download`, `sync`, `process`, or `download-images` to override the SQLite database path.
+- Use `import-metadata-json` or `--import-metadata-json <path>` to migrate an existing `songs_metadata.json` file into SQLite.
+- Use `export-metadata-json` or `--export-metadata-json <path>` to write a compatibility JSON file matching the previous format.
+- If `--copy-songs-metadata-to-output` is set, a finalized JSON export is written to the output side only after completion, using `--metadata-file` when provided.
 
 ### PROJECT STRUCTURE
 
@@ -474,6 +537,7 @@ Process flow reads a download-style input root and writes converted output.
 - `src/client.ts`: Suno API client + download helpers.
 - `src/auth.ts`: browser token extraction (Puppeteer).
 - `src/converter.ts`: converter entrypoint used by the CLI.
+- `src/metadata-store.ts`: SQLite metadata store plus JSON import/export helpers.
 - `src/library-processor.ts`: processing pipeline coordinator.
 - `src/audio-converter.ts`: audio conversion (ffmpeg).
 - `src/metadata-processor.ts`: metadata/tag embedding + sidecar writes.
