@@ -3,6 +3,7 @@ export type AudioFormat = "flac" | "alac" | "mp3" | "wav";
 export interface IProcessorConfig {
   inputRoot: string;
   outputRoot: string;
+  metadataDatabasePath?: string;
   metadataFilePath?: string;
   copySongsMetadataToOutput?: boolean;
   formats: AudioFormat[];

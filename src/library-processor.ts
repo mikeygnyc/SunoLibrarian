@@ -5,6 +5,7 @@ import { AudioConverter } from "./audio-converter";
 import { MetadataProcessor } from "./metadata-processor";
 import { normalizeMetadata } from "./lib/metadata/normalize-metadata";
 import * as logger from "./converter-logger"; // dual console/file logger
+import { exportMetadataDatabaseToJson, resolveDatabasePath, SqliteMetadataStore } from "./metadata-store";
 
 
 export class Processor {
@@ -63,6 +64,10 @@ export class Processor {
     return this.config.metadataFilePath
       ? path.resolve(this.config.metadataFilePath)
       : path.join(this.config.outputRoot, "songs_metadata.json");
+  }
+
+  private getMetadataDatabasePath(): string {
+    return resolveDatabasePath(this.config.metadataDatabasePath);
   }
 
   private getProcessTargetClipIds(): Set<string> | null {
@@ -585,47 +590,26 @@ export class Processor {
       this.persistState().catch(() => {});
     }
   }
-  private metadataFileExisted = false;
+  private metadataDatabaseExisted = false;
 
   private async loadMetadata(): Promise<ISongData[]> {
-    const metaFile = this.getMetadataFilePath();
-    this.metadataFileExisted = await this.fileExists(metaFile);
-    if (!this.metadataFileExisted) {
-      logger.error(`Metadata file not found: ${metaFile}`);
-      return [];
-    }
-
-    let raw: string;
+    const databasePath = this.getMetadataDatabasePath();
+    this.metadataDatabaseExisted = await this.fileExists(databasePath);
+    const store = new SqliteMetadataStore(databasePath);
+    let songs: ISongData[];
     try {
-      raw = await fs.promises.readFile(metaFile, "utf-8");
+      songs = await store.loadAll();
     } catch (err: any) {
-      logger.error(`Failed to read metadata file: ${err.message || err}`);
-      // cannot proceed safely
+      logger.error(`Failed to read metadata database: ${err.message || err}`);
+      store.close();
       throw err;
     }
+    store.close();
 
-    let data: any;
-    try {
-      data = JSON.parse(raw, this.dateReviver);
-    } catch (err: any) {
-      logger.error(`Metadata JSON corrupt: ${err.message}`);
-      const backup = `${metaFile}.tmp`;
-      if (await this.fileExists(backup)) {
-        try {
-          raw = await fs.promises.readFile(backup, "utf-8");
-          data = JSON.parse(raw, this.dateReviver);
-          logger.warn("Recovery succeeded using temporary backup");
-        } catch (err2: any) {
-          logger.error(`Backup recovery failed: ${err2.message}. Aborting to avoid wiping data.`);
-          throw err2;
-        }
-      } else {
-        logger.error("No backup file available; aborting to avoid wiping metadata.");
-        throw err;
-      }
+    if (!this.metadataDatabaseExisted) {
+      logger.warn(`Metadata database not found; created empty database: ${databasePath}`);
+      return [];
     }
-
-    const songs = Array.isArray(data) ? data : [];
 
     // apply normalization rules to every song immediately.  this handles
     // things like "Untitled" titles which can be derived from lyrics or
@@ -633,7 +617,7 @@ export class Processor {
     // part of processing individual files, which meant a user could repeatedly
     // re-run the converter without ever touching audio and never see the
     // updated titles written back to disk.  performing the normalization here
-    // ensures the combined `songs_metadata.json` is always kept up-to-date.
+    // ensures the metadata database is always kept up-to-date.
     const normalizedSongs: ISongData[] = songs.map(song => normalizeMetadata(song));
 
     // keep a copy on the instance so that saveMetadata (called below or by
@@ -642,7 +626,7 @@ export class Processor {
 
     // immediately persist normalized metadata back to the authoritative file so
     // subsequent runs always start from canonical metadata values.
-    if (this.metadataFileExisted) {
+    if (this.metadataDatabaseExisted) {
       try {
         await this.saveMetadata();
       } catch (err) {
@@ -653,9 +637,9 @@ export class Processor {
     return normalizedSongs;
   }
   private async saveMetadata(): Promise<void> {
-    // if the file existed originally and we have no songs, don't truncate it
-    if (this.metadataFileExisted && this.songs.length === 0) {
-      logger.warn("Skipping metadata write: original file existed but loaded as empty")
+    // if the database existed originally and we have no songs, don't truncate it
+    if (this.metadataDatabaseExisted && this.songs.length === 0) {
+      logger.warn("Skipping metadata write: original database existed but loaded as empty")
       return;
     }
 
@@ -666,51 +650,27 @@ export class Processor {
     // normalizes when loading, but persisting should also re-run just in case.
     this.songs = this.songs.map(song => normalizeMetadata(song));
 
-    const data = JSON.stringify(this.songs, null, 2);
-    const inFile = this.getMetadataFilePath();
-
-    // backups always live next to the authoritative metadata file.
-    if (await this.fileExists(inFile)) {
-      const bak = `${inFile}.${Date.now()}.bak`;
-      try {
-        await fs.promises.copyFile(inFile, bak);
-        logger.log(`  backed up existing metadata to ${bak}`);
-        await this.cleanupOldBackups(inFile);
-      } catch {}
-    }
-
-    const writeAtomic = async (file: string, contents: string) => {
-      const tmp = `${file}.tmp`;
-      await fs.promises.mkdir(path.dirname(file), { recursive: true });
-      await fs.promises.writeFile(tmp, contents);
-      await fs.promises.rename(tmp, file);
-    };
-
-    // persist authoritative metadata.
+    const databasePath = this.getMetadataDatabasePath();
+    const store = new SqliteMetadataStore(databasePath);
     try {
-      await writeAtomic(inFile, data);
+      await store.saveAll(this.songs);
     } catch (err: any) {
-      logger.warn(`Failed to update metadata file: ${err.message || err}`);
+      logger.warn(`Failed to update metadata database: ${err.message || err}`);
+    } finally {
+      store.close();
     }
   }
 
   private async copyFinalMetadataToOutput(): Promise<void> {
     if (this.config.copySongsMetadataToOutput !== true) return;
 
-    const inFile = this.getMetadataFilePath();
-    const outFile = path.join(this.config.outputRoot, path.basename(inFile));
-    if (inFile === outFile) return;
-
-    if (!(await this.fileExists(inFile))) {
-      logger.warn(`Cannot copy songs_metadata.json to output; metadata file not found: ${inFile}`);
-      return;
-    }
-
+    const databasePath = this.getMetadataDatabasePath();
+    const outFile = this.getMetadataFilePath();
     try {
-      await fs.promises.copyFile(inFile, outFile);
-      logger.log(`Copied finalized songs_metadata.json to output: ${outFile}`);
+      await exportMetadataDatabaseToJson(outFile, databasePath);
+      logger.log(`Exported finalized songs_metadata.json to output: ${outFile}`);
     } catch (err: any) {
-      logger.warn(`Failed to copy songs_metadata.json to output: ${err.message || err}`);
+      logger.warn(`Failed to export songs_metadata.json: ${err.message || err}`);
     }
   }
 
@@ -770,7 +730,7 @@ export class Processor {
     return false;
   }
   /**
-   * Save metadata file and log files immediately.  This is called after each
+   * Save metadata database and log files immediately.  This is called after each
    * song is processed so that a crash part-way through a run leaves behind a
    * useful state and log.
    */

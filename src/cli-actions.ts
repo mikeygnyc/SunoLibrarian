@@ -7,6 +7,12 @@ import { Processor } from "./library-processor";
 import { normalizeMetadata } from "./lib/metadata/normalize-metadata";
 import { AudioFormat, ISongData, ISunoTrackResponse, IWorkspace } from "./lib/interfaces";
 import { Storage } from "./storage";
+import {
+  exportMetadataDatabaseToJson,
+  importMetadataJsonToDatabase,
+  resolveDatabasePath,
+  SqliteMetadataStore,
+} from "./metadata-store";
 
 type CliOptions = Record<string, any>;
 const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
@@ -107,14 +113,47 @@ function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
     : path.join(rootDir, DEFAULT_METADATA_FILENAME);
 }
 
+function resolveMetadataJsonExportPath(rootDir: string, options: CliOptions): string {
+  return typeof options.exportMetadataJson === "string" && options.exportMetadataJson.trim().length > 0
+    ? path.resolve(options.exportMetadataJson.trim())
+    : resolveMetadataFilePath(rootDir, options);
+}
+
+function resolveMetadataDatabasePath(options: CliOptions): string {
+  return resolveDatabasePath(typeof options.database === "string" ? options.database : undefined);
+}
+
+async function importMetadataJsonIfRequested(options: CliOptions, databasePath: string): Promise<void> {
+  if (typeof options.importMetadataJson !== "string" || options.importMetadataJson.trim().length === 0) {
+    return;
+  }
+  const result = await importMetadataJsonToDatabase(options.importMetadataJson, databasePath);
+  console.log(`Imported ${result.imported} metadata entr${result.imported === 1 ? "y" : "ies"} to ${result.databasePath}`);
+}
+
+async function exportMetadataJsonIfRequested(
+  options: CliOptions,
+  databasePath: string,
+  fallbackJsonPath: string,
+): Promise<void> {
+  const shouldExport = typeof options.exportMetadataJson === "string" && options.exportMetadataJson.trim().length > 0;
+  if (!shouldExport && !shouldCopySongsMetadataToOutput(options)) return;
+
+  const jsonPath = shouldExport
+    ? path.resolve(options.exportMetadataJson.trim())
+    : fallbackJsonPath;
+  const result = await exportMetadataDatabaseToJson(jsonPath, databasePath);
+  console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
+}
+
 async function getImagesNeedingDownload(
   rootDir: string,
-  metadataFilePath?: string,
+  databasePath?: string,
 ): Promise<Array<{ clipId: string; thumbnail: string | null }>> {
   const processor = new Processor({
     inputRoot: rootDir,
     outputRoot: rootDir,
-    metadataFilePath,
+    metadataDatabasePath: databasePath,
     formats: ["flac", "mp3", "alac"] as AudioFormat[],
     mp3Bitrate: 320,
     embedImages: true,
@@ -272,30 +311,16 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
     }
   });
 
-  const metadataFile = resolveMetadataFilePath(outputDir, options);
-  let songsMetadata: any[] = [];
-  if (fs.existsSync(metadataFile)) {
-    try {
-      const content = fs.readFileSync(metadataFile, "utf-8");
-      if (content.trim()) {
-        const parsed = JSON.parse(content);
-        songsMetadata = Array.isArray(parsed) ? parsed : [];
-      }
-    } catch {
-      console.warn("Failed to parse existing metadata file, starting fresh");
-    }
-  }
-
+  const databasePath = resolveMetadataDatabasePath(options);
+  const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
+  await importMetadataJsonIfRequested(options, databasePath);
+  const metadataStore = new SqliteMetadataStore(databasePath);
+  let songsMetadata = await metadataStore.loadAll();
   songsMetadata = songsMetadata.map((entry) => normalizeMetadata(entry));
-  try {
-    const tmp = `${metadataFile}.tmp`;
-    fs.mkdirSync(path.dirname(metadataFile), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(songsMetadata, null, 2));
-    fs.renameSync(tmp, metadataFile);
-  } catch (err: any) {
-    console.warn(`Failed to initialize metadata file: ${err.message || err}`);
-  }
+  await metadataStore.saveAll(songsMetadata);
+  console.log(`Metadata database: ${metadataStore.location}`);
 
+  try {
   console.log("Fetching workspaces...");
   const workspaces = await client.getWorkspaces();
   console.log(`Found ${workspaces.length} workspace(s)`);
@@ -342,7 +367,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
           console.log(`Updating metadata for: ${track.title || track.id}`);
           const metadata = await client.fetchTrackMetadata(track.id);
           existingEntry.rawApiResponse = metadata.fullData as ISunoTrackResponse;
-          fs.writeFileSync(metadataFile, JSON.stringify(songsMetadata, null, 2));
+          await metadataStore.upsert(existingEntry);
           fs.writeFileSync(
             path.join(metadataDir, `${track.id}.json`),
             JSON.stringify(normalizeMetadata(existingEntry), null, 2),
@@ -410,7 +435,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 
         const normalizedEntry = normalizeMetadata(songEntry);
         songsMetadata.push(normalizedEntry);
-        fs.writeFileSync(metadataFile, JSON.stringify(songsMetadata, null, 2));
+        await metadataStore.upsert(normalizedEntry);
         fs.writeFileSync(
           path.join(metadataDir, `${track.id}.json`),
           JSON.stringify(normalizedEntry, null, 2),
@@ -440,17 +465,21 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   }
 
   console.log(`\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`);
-  if (shouldCopySongsMetadataToOutput(options)) {
-    console.log(`Metadata file maintained at: ${metadataFile}`);
-  }
+  await exportMetadataJsonIfRequested(options, databasePath, metadataJsonPath);
   return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
+  } finally {
+    metadataStore.close();
+  }
 }
 
 export async function runProcessFlow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
+  const databasePath = resolveMetadataDatabasePath(options);
+  await importMetadataJsonIfRequested(options, databasePath);
   await runConverter({
     input: options.input,
     output: outputDir,
+    metadataDatabase: databasePath,
     metadataFile: resolveMetadataFilePath(outputDir, options),
     copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
     processFormats: options.processFormats,
@@ -465,6 +494,11 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
     reconvertMissing: options.reconvertMissing,
     processClipIds: options.processClipIds,
   });
+  await exportMetadataJsonIfRequested(
+    { ...options, copySongsMetadataToOutput: false },
+    databasePath,
+    resolveMetadataJsonExportPath(outputDir, options),
+  );
 }
 
 export async function runClearAuthTokenFlow(): Promise<void> {
@@ -473,10 +507,23 @@ export async function runClearAuthTokenFlow(): Promise<void> {
   console.log("Cached authentication token cleared.");
 }
 
+export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
+  const databasePath = resolveMetadataDatabasePath(options);
+  const result = await importMetadataJsonToDatabase(options.input, databasePath);
+  console.log(`Imported ${result.imported} metadata entr${result.imported === 1 ? "y" : "ies"} to ${result.databasePath}`);
+}
+
+export async function runExportMetadataJsonFlow(options: CliOptions): Promise<void> {
+  const databasePath = resolveMetadataDatabasePath(options);
+  const result = await exportMetadataDatabaseToJson(options.output, databasePath);
+  console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
+}
+
 export async function runSyncFlow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
   const conversionOutput = options.library || outputDir;
-  const metadataFile = resolveMetadataFilePath(outputDir, options);
+  const databasePath = resolveMetadataDatabasePath(options);
+  const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
   const processDownloadedOnly = options.processDownloadedOnly === true;
   const downloadedClipIds = new Set<string>();
   let conversionChain: Promise<void> = Promise.resolve();
@@ -490,8 +537,8 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
       await runProcessFlow({
         input: outputDir,
         output: conversionOutput,
-        metadataFile,
-        copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
+        database: databasePath,
+        copySongsMetadataToOutput: false,
         processFormats: options.processFormats,
         processBitrate: options.processBitrate,
         processConcurrency: options.processConcurrency,
@@ -513,7 +560,9 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   const downloadResult = await runDownloadFlow({
     ...options,
     output: outputDir,
-    metadataFile,
+    database: databasePath,
+    exportMetadataJson: undefined,
+    copySongsMetadataToOutput: false,
     onTrackDownloaded: ({ clipId }: { clipId: string }) => {
       downloadedClipIds.add(clipId);
       queueConversion();
@@ -528,12 +577,15 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   if (conversionFailed) {
     throw conversionFailed;
   }
+  await exportMetadataJsonIfRequested(options, databasePath, metadataJsonPath);
 }
 
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const outputDir = path.resolve(options.output);
-  const metadataFile = resolveMetadataFilePath(outputDir, options);
+  const databasePath = resolveMetadataDatabasePath(options);
+  const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
+  await importMetadataJsonIfRequested(options, databasePath);
   const imagesDir = path.join(outputDir, "images");
   if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
 
@@ -560,7 +612,7 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
       throw new Error(`Failed to parse image list: ${err}`);
     }
   } else {
-    entries = await getImagesNeedingDownload(outputDir, metadataFile);
+    entries = await getImagesNeedingDownload(outputDir, databasePath);
     console.log(`Found ${entries.length} image(s) needing download`);
 
     if (wantsFetchedList) {
@@ -606,13 +658,7 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
     }
   }
 
-  if (shouldCopySongsMetadataToOutput(options)) {
-    if (fs.existsSync(metadataFile)) {
-      console.log(`Metadata file available: ${metadataFile}`);
-    } else {
-      console.warn(`Metadata file not found: ${metadataFile}`);
-    }
-  }
+  await exportMetadataJsonIfRequested(options, databasePath, metadataJsonPath);
 }
 
 export async function runListFlow(options: CliOptions): Promise<void> {

@@ -54,6 +54,32 @@ Print version.
 .B \-h, --help
 Print help.
 .SH COMMANDS
+.SS import-metadata-json
+Import an existing current-format songs_metadata.json array into the SQLite metadata database.
+.TP
+.B SYNOPSIS
+\fBsuno-export import-metadata-json\fR --input <path> [--database <path>]
+.TP
+.B OPTIONS
+.TP
+.B \-i, --input <path>
+Current-format metadata JSON file. Required.
+.TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
+.SS export-metadata-json
+Export the SQLite metadata database to the current songs_metadata.json array format.
+.TP
+.B SYNOPSIS
+\fBsuno-export export-metadata-json\fR --output <path> [--database <path>]
+.TP
+.B OPTIONS
+.TP
+.B \-o, --output <path>
+Output metadata JSON file. Required.
+.TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
 .SS download
 Download tracks from Suno.
 .TP
@@ -77,8 +103,20 @@ Audio format: mp3|wav (default: wav).
 .B \-o, --output <dir>
 Output root (default: OS Downloads directory + /suno-export).
 .TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
+.TP
+.B --import-metadata-json <path>
+Import current-format metadata JSON into the database before running.
+.TP
+.B --export-metadata-json <path>
+Export metadata database to current-format JSON after running.
+.TP
+.B --metadata-file <path>
+Legacy JSON export path used by --copy-songs-metadata-to-output.
+.TP
 .B --copy-songs-metadata-to-output
-Copy finalized songs_metadata.json to output on completion.
+Export finalized songs_metadata.json to output on completion.
 .TP
 .B --no-metadata
 Skip metadata sidecar behavior.
@@ -117,8 +155,20 @@ Download format: mp3|wav (default: wav).
 .B \-o, --output <dir>
 Download/output root (default: OS Downloads directory + /suno-export).
 .TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
+.TP
+.B --import-metadata-json <path>
+Import current-format metadata JSON into the database before running.
+.TP
+.B --export-metadata-json <path>
+Export metadata database to current-format JSON after running.
+.TP
+.B --metadata-file <path>
+Legacy JSON export path used by --copy-songs-metadata-to-output.
+.TP
 .B --copy-songs-metadata-to-output
-Copy finalized songs_metadata.json to conversion output on completion.
+Export finalized songs_metadata.json to conversion output on completion.
 .TP
 .B --created-after <date>
 Only include tracks created on/after date.
@@ -172,8 +222,20 @@ Input root. Required.
 .B \-o, --output <path>
 Output root. Required.
 .TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
+.TP
+.B --import-metadata-json <path>
+Import current-format metadata JSON into the database before running.
+.TP
+.B --export-metadata-json <path>
+Export metadata database to current-format JSON after running.
+.TP
+.B --metadata-file <path>
+Legacy JSON export path used by --copy-songs-metadata-to-output.
+.TP
 .B --copy-songs-metadata-to-output
-Copy finalized songs_metadata.json to output on completion.
+Export finalized songs_metadata.json to output on completion.
 .TP
 .B --process-formats <formats>
 Formats CSV (default: flac,mp3,alac).
@@ -224,8 +286,20 @@ Chrome DevTools endpoint (default: http://localhost:9222).
 .B \-o, --output <dir>
 Output root (default: OS Downloads directory + /suno-export).
 .TP
+.B --database <path>
+SQLite metadata database path (default: data/suno-export.sqlite).
+.TP
+.B --import-metadata-json <path>
+Import current-format metadata JSON into the database before running.
+.TP
+.B --export-metadata-json <path>
+Export metadata database to current-format JSON after running.
+.TP
+.B --metadata-file <path>
+Legacy JSON export path used by --copy-songs-metadata-to-output.
+.TP
 .B --copy-songs-metadata-to-output
-Copy finalized songs_metadata.json to output on completion.
+Export finalized songs_metadata.json to output on completion.
 .TP
 .B --fetch-image-list <file>
 Discover missing images and write JSON list.
@@ -340,9 +414,11 @@ ISO timestamps (example: \fB2026-02-01T12:00:00Z\fR)
 .IP \(bu 2
 Date-only values (\fBYYYY-MM-DD\fR), interpreted as inclusive UTC day bounds.
 .SH SONGS METADATA
-Authoritative \fBsongs_metadata.json\fR lives on the input side.
-Backups are created there.
-If \fB--copy-songs-metadata-to-output\fR is provided, a finalized copy is written
+Authoritative combined metadata lives in SQLite at \fBdata/suno-export.sqlite\fR by default.
+Use \fB--database <path>\fR to choose another SQLite database location.
+Use \fBimport-metadata-json\fR or \fB--import-metadata-json <path>\fR to migrate an existing current-format \fBsongs_metadata.json\fR file into SQLite.
+Use \fBexport-metadata-json\fR or \fB--export-metadata-json <path>\fR to write a compatibility JSON file matching the previous format.
+If \fB--copy-songs-metadata-to-output\fR is provided, a finalized JSON export is written
 to the output side at completion.
 .SH EXAMPLES
 .TP

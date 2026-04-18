@@ -4,7 +4,9 @@ import {
   runClearAuthTokenFlow,
   runDownloadFlow,
   runDownloadImagesFlow,
+  runExportMetadataJsonFlow,
   runFetchMetadataFlow,
+  runImportMetadataJsonFlow,
   runListFlow,
   runMetadataFlow,
   runProcessFlow,
@@ -12,7 +14,7 @@ import {
   runSyncFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
-import { DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
+import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 
 const program = new Command();
 
@@ -40,6 +42,20 @@ program
   .action(withCliError(runClearAuthTokenFlow));
 
 program
+  .command("import-metadata-json")
+  .description("Import existing songs_metadata.json data into the SQLite metadata database")
+  .requiredOption("-i, --input <path>", "Current-format metadata JSON file")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .action(withCliError(runImportMetadataJsonFlow));
+
+program
+  .command("export-metadata-json")
+  .description("Export SQLite metadata database data as current-format JSON")
+  .requiredOption("-o, --output <path>", "Output metadata JSON file")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .action(withCliError(runExportMetadataJsonFlow));
+
+program
   .command("download")
   .description("Download tracks from Suno")
   .option("-t, --token <token>", "Authentication token")
@@ -53,8 +69,11 @@ program
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
-  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
-  .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
+  .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
+  .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
+  .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--no-metadata", "Skip metadata sidecar files")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
@@ -76,8 +95,11 @@ program
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Download/output directory for source files", DEFAULT_DOWNLOAD_ROOT)
-  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
-  .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
+  .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
+  .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
+  .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
   .option("--delay <ms>", "Delay between downloads in ms", "1000")
@@ -98,8 +120,11 @@ program
   .description("Run audio conversion/metadata embedding (converter functionality)")
   .requiredOption("-i, --input <path>", "Input root directory")
   .requiredOption("-o, --output <path>", "Output root directory")
-  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
-  .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
+  .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
+  .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
+  .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--process-formats <formats>", "Audio formats", "flac,mp3,alac")
   .option("--process-bitrate <kbps>", "MP3 bitrate", "320")
   .option("--process-concurrency <n>", "Processing concurrency", "4")
@@ -125,8 +150,11 @@ program
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
-  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
-  .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
+  .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
+  .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
+  .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
   .option("--fetch-missing", "Find missing images and download them directly")
   .option("--delay <ms>", "Delay between downloads in ms", "1000")

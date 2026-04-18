@@ -1,4 +1,7 @@
 downloads/*
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 dist/*
 node_modules/*
 cli/dist/*

@@ -90,41 +90,55 @@ flowchart LR
 - `src/client.ts`
   - `SunoClient`: API client used after authentication.
 
-## Metadata File Path Rule
+## Metadata Storage Rule
 
-The combined metadata JSON file defaults to `songs_metadata.json`, but callers
-can override the path with `--metadata-file`.
+The authoritative combined metadata store is SQLite. The default database path
+is `data/suno-export.sqlite`, but callers can override it with `--database`.
+Current-format JSON compatibility is handled through import/export commands and
+options.
 
 ```mermaid
 flowchart TD
-  A{"--metadata-file set?"}
-  A -- yes --> B["Use provided absolute/resolved path"]
-  A -- no --> C["<output>/songs_metadata.json"]
+  A{"--database set?"}
+  A -- yes --> B["Use provided absolute/resolved SQLite path"]
+  A -- no --> C["data/suno-export.sqlite"]
+  C --> D["SqliteMetadataStore"]
+  B --> D
+  E["--import-metadata-json"] --> D
+  D --> F["--export-metadata-json / export-metadata-json"]
 ```
 
-### Metadata Path Notes
+### Metadata Storage Notes
 
 - `src/index.ts`
-  - Registers `--metadata-file <path>` on `download`, `sync`, `process`, and
+  - Registers `--database <path>`, `--import-metadata-json <path>`, and
+    `--export-metadata-json <path>` on `download`, `sync`, `process`, and
     `download-images`.
+  - Registers `import-metadata-json` and `export-metadata-json` compatibility
+    commands.
 - `src/cli-actions.ts`
-  - `resolveMetadataFilePath(rootDir, options)`: resolves the authoritative
-    metadata file path from the command output root.
-  - `runDownloadFlow(...)`: reads, initializes, normalizes, and writes the
-    metadata file during download.
-  - `runProcessFlow(...)`: passes `metadataFile` into the converter.
-  - `runDownloadImagesFlow(...)`: uses the metadata file for missing-image
-    discovery.
+  - `resolveMetadataDatabasePath(options)`: resolves the authoritative SQLite
+    database path.
+  - `runDownloadFlow(...)`: reads, initializes, normalizes, and writes metadata
+    through `SqliteMetadataStore`.
+  - `runImportMetadataJsonFlow(...)`: imports existing `songs_metadata.json`
+    arrays into SQLite.
+  - `runExportMetadataJsonFlow(...)`: exports SQLite data back to the current
+    JSON array format.
 - `src/converter.ts`
-  - `runConverter(options)`: maps `metadataFile` to
-    `IProcessorConfig.metadataFilePath`.
+  - `runConverter(options)`: maps `metadataDatabase` to
+    `IProcessorConfig.metadataDatabasePath`.
 - `src/library-processor.ts`
-  - `Processor.getMetadataFilePath()`: resolves the processor's authoritative
-    metadata file.
-  - `Processor.loadMetadata()`: reads and normalizes metadata.
-  - `Processor.saveMetadata()`: persists full metadata with tmp plus rename.
-  - `Processor.copyFinalMetadataToOutput()`: optionally copies finalized metadata
-    to the output root.
+  - `Processor.getMetadataDatabasePath()`: resolves the processor's
+    authoritative SQLite database.
+  - `Processor.loadMetadata()`: reads and normalizes metadata from SQLite.
+  - `Processor.saveMetadata()`: persists full metadata to SQLite.
+  - `Processor.copyFinalMetadataToOutput()`: optionally exports finalized
+    metadata JSON to the output root.
+- `src/metadata-store.ts`
+  - `SqliteMetadataStore`: SQLite-backed metadata store.
+  - `importMetadataJsonToDatabase(...)`: JSON-to-SQLite migration helper.
+  - `exportMetadataDatabaseToJson(...)`: SQLite-to-JSON compatibility export.
 
 ## Download Command
 
@@ -136,7 +150,7 @@ flowchart TD
   A["download<br/>src/index.ts"] --> B["runDownloadFlow<br/>src/cli-actions.ts"]
   B --> C["getAuthenticatedClient"]
   C --> D["resolve output dirs"]
-  D --> E["load/create metadata file"]
+  D --> E["load/create metadata database"]
   E --> F["client.getWorkspaces"]
   F --> G["client.getTracks per workspace"]
   G --> H{"track downloadable<br/>and date filters pass?"}
@@ -270,13 +284,13 @@ flowchart TD
   C --> D{"--process-downloaded-only?"}
   D -- yes --> E["Processor filters conversion/update work to downloadedClipIds"]
   D -- no --> F["Processor considers all songs in metadata"]
-  E --> G["full metadata file is still preserved when saved"]
+  E --> G["full metadata database is still preserved when saved"]
   F --> G
 ```
 
 Important behavior:
 
-- Existing entries in the metadata file remain in memory and are written back
+- Existing entries in the metadata database remain in memory and are written back
   when metadata is persisted.
 - With `--process-downloaded-only`, only tracks downloaded during that sync run
   are considered for conversion and update work.
@@ -306,7 +320,7 @@ flowchart TD
 - `src/cli-actions.ts`
   - `runDownloadImagesFlow(options)`: validates image-list/discovery options and
     downloads artwork.
-  - `getImagesNeedingDownload(rootDir, metadataFilePath)`: creates a `Processor`
+  - `getImagesNeedingDownload(rootDir, databasePath)`: creates a `Processor`
     solely for missing-image discovery.
 - `src/library-processor.ts`
   - `Processor.getImagesNeedingDownload()`: loads metadata, checks image
@@ -349,7 +363,8 @@ Download-style output root:
 - `wav/`: downloaded WAV source files.
 - `metadata/`: per-track metadata sidecar JSON.
 - `images/`: downloaded artwork.
-- `songs_metadata.json`: default combined metadata file.
+- `songs_metadata.json`: compatibility export when requested.
+- `data/suno-export.sqlite`: default authoritative metadata database.
 
 Process output root:
 
@@ -360,6 +375,7 @@ Process output root:
 
 Authoritative combined metadata:
 
-- Commands use `<output>/songs_metadata.json` by default.
-- `--metadata-file <path>` overrides the combined metadata JSON location.
-- Processor backups are created next to the authoritative metadata file.
+- Commands use `data/suno-export.sqlite` by default.
+- `--database <path>` overrides the SQLite metadata database location.
+- `--import-metadata-json` and `--export-metadata-json` bridge the previous
+  `songs_metadata.json` format.

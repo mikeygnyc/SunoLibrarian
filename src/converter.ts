@@ -3,11 +3,13 @@ import { IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import type { IConverterRunOptions } from "./lib/interfaces";
 import * as logger from "./converter-logger";
 import { Processor } from "./library-processor";
+import { resolveDatabasePath } from "./metadata-store";
 
 export async function runConverter(options: IConverterRunOptions): Promise<void> {
   const config: IProcessorConfig = {
     inputRoot: path.resolve(options.input),
     outputRoot: path.resolve(options.output),
+    metadataDatabasePath: resolveDatabasePath(options.metadataDatabase),
     metadataFilePath: options.metadataFile
       ? path.resolve(options.metadataFile)
       : path.join(path.resolve(options.output), "songs_metadata.json"),
@@ -38,7 +40,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   logger.log("===================");
   logger.log(`Input:  ${config.inputRoot}`);
   logger.log(`Output: ${config.outputRoot}`);
-  logger.log(`Metadata file: ${config.metadataFilePath}`);
+  logger.log(`Metadata database: ${config.metadataDatabasePath}`);
   logger.log(`Formats: ${config.formats.join(", ")}`);
   logger.log(`MP3 Bitrate: ${config.mp3Bitrate}kbps`);
   logger.log(`Embed Images: ${config.embedImages}`);
