@@ -82,6 +82,11 @@ export class Storage {
     return this.cache.authToken || null;
   }
 
+  clearAuthToken(): void {
+    delete this.cache.authToken;
+    this.saveCache();
+  }
+
   clearAll(): void {
     this.cache = { tracks: {}, timestamps: {}, metadata: {} };
     this.saveCache();

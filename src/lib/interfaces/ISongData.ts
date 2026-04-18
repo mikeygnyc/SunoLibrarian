@@ -1,4 +1,4 @@
-import type { RawApiResponse, ISunoTrackResponse } from "./ISunoTrackResponse";
+import type { ISunoTrackResponse } from "./ISunoTrackResponse";
 
 export interface ISongData {
   title?: string | null;
@@ -37,5 +37,5 @@ export interface ISongData {
   wavTimestamp?: Date | null;
   alacTimestamp?: Date | null;
   flacTimestamp?: Date | null;
-  rawApiResponse?: RawApiResponse | ISunoTrackResponse;
+  rawApiResponse?: ISunoTrackResponse;
 }

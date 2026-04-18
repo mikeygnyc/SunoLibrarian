@@ -12,6 +12,24 @@ type CliOptions = Record<string, any>;
 const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 
+export type AuthStorage = Pick<Storage, "getAuthToken" | "setAuthToken">;
+
+export type AuthClient = {
+  fetchWorkspacesPage(page?: number): Promise<any>;
+};
+
+export type AuthDeps<TClient extends AuthClient> = {
+  storage: AuthStorage;
+  createClient: (
+    token: string,
+    browserEndpoint?: string,
+    browserUserDataDir?: string,
+    browserProfileDirectory?: string,
+  ) => TClient;
+  extractTokenFromBrowser: typeof extractTokenFromBrowser;
+  log: Pick<Console, "error" | "log" | "warn">;
+};
+
 type DownloadFlowResult = {
   outputDir: string;
   downloaded: number;
@@ -133,24 +151,16 @@ function resolveBrowserProfileDirectory(options: CliOptions): string | undefined
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
-  const browserEndpoint = resolveBrowserEndpoint(options);
-  const browserUserDataDir = resolveBrowserUserDataDir(options);
-  const browserProfileDirectory = resolveBrowserProfileDirectory(options);
+function isAuthFailure(error: any): boolean {
+  return error?.status === 401 || error?.status === 403;
+}
 
-  if (!options.token && !browserEndpoint) {
-    throw new Error("Authentication required: provide either --token or --browser");
-  }
-
-  let token = options.token;
-  if (!token) {
-    console.log("No token provided. Launching browser to extract token...");
-    token = await extractTokenFromBrowser(browserEndpoint, {
-      userDataDir: browserUserDataDir,
-      profileDirectory: browserProfileDirectory,
-    });
-    console.log("Token extracted successfully!");
-  }
+function createClient(
+  token: string,
+  browserEndpoint?: string,
+  browserUserDataDir?: string,
+  browserProfileDirectory?: string,
+): SunoClient {
   return new SunoClient(
     token,
     undefined,
@@ -158,6 +168,70 @@ async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> 
     browserUserDataDir,
     browserProfileDirectory,
   );
+}
+
+export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>(
+  options: CliOptions,
+  deps: AuthDeps<TClient>,
+): Promise<TClient> {
+  const browserEndpoint = resolveBrowserEndpoint(options);
+  const browserUserDataDir = resolveBrowserUserDataDir(options);
+  const browserProfileDirectory = resolveBrowserProfileDirectory(options);
+  const ignoreCachedToken = options.ignoreCachedToken === true;
+
+  if (!ignoreCachedToken) {
+    const cachedToken = deps.storage.getAuthToken();
+    if (cachedToken) {
+      const cachedClient = deps.createClient(
+        cachedToken,
+        browserEndpoint,
+        browserUserDataDir,
+        browserProfileDirectory,
+      );
+
+      try {
+        await cachedClient.fetchWorkspacesPage(1);
+        deps.log.error("Using cached authentication token.");
+        return cachedClient;
+      } catch (error: any) {
+        if (!isAuthFailure(error)) {
+          throw error;
+        }
+        deps.log.warn("Cached authentication token was rejected. Falling back to configured auth method.");
+      }
+    }
+  }
+
+  if (!options.token && !browserEndpoint) {
+    throw new Error("Authentication required: provide either --token or --browser");
+  }
+
+  let token = options.token;
+  if (!token) {
+    deps.log.log("No token provided. Launching browser to extract token...");
+    token = await deps.extractTokenFromBrowser(browserEndpoint, {
+      userDataDir: browserUserDataDir,
+      profileDirectory: browserProfileDirectory,
+    });
+    deps.log.log("Token extracted successfully!");
+  }
+
+  deps.storage.setAuthToken(token);
+  return deps.createClient(
+    token,
+    browserEndpoint,
+    browserUserDataDir,
+    browserProfileDirectory,
+  );
+}
+
+async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
+  return getAuthenticatedClientWithDeps(options, {
+    storage: new Storage(),
+    createClient,
+    extractTokenFromBrowser,
+    log: console,
+  });
 }
 
 function filterWorkspaces(workspaces: IWorkspace[], workspaceId?: string): IWorkspace[] {
@@ -391,6 +465,12 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
     reconvertMissing: options.reconvertMissing,
     processClipIds: options.processClipIds,
   });
+}
+
+export async function runClearAuthTokenFlow(): Promise<void> {
+  const storage = new Storage();
+  storage.clearAuthToken();
+  console.log("Cached authentication token cleared.");
 }
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {

@@ -112,6 +112,24 @@ Commands that access Suno need one of these authentication methods:
 - `--token <token>`: use an existing bearer token directly.
 - `--browser [url]`: read a bearer token from a Chrome session. If no URL is provided, the CLI uses `http://localhost:9222`.
 
+### TOKEN CACHE
+
+By default, any token supplied with `--token` or captured with `--browser` is saved in the local cache at `~/.suno-export/cache.json`. On later runs, commands that access Suno try the cached token first. If Suno rejects it with `401` or `403`, the CLI falls back to the auth method you passed for that run.
+
+Use `--ignore-cached-token` when you want to skip the cached token and force the command to use `--token` or `--browser`.
+
+```bash
+suno-export list --ignore-cached-token --browser http://localhost:9222
+```
+
+Clear only the cached auth token with:
+
+```bash
+suno-export clear-auth-token
+```
+
+This leaves other cached data, such as tracks, metadata, and device ID, intact.
+
 ### BROWSER AUTH (`--browser`)
 
 Use browser auth when you want the CLI to launch or connect to Chrome and capture the token from logged-in Suno requests.
@@ -195,9 +213,20 @@ Verification and troubleshooting:
 - Confirm the debug endpoint is reachable: `http://localhost:9222/json/version`
 - If connection fails, make sure the debug Chrome process is still running and no other process is using port `9222`.
 - If login state is wrong or stale, stop Chrome, delete the dedicated CLI profile directory, launch Chrome again, and sign in to Suno.
+- If you need a fresh token from browser or `--token`, pass `--ignore-cached-token` or run `suno-export clear-auth-token` first.
 - Never log or commit real bearer tokens.
 
 ### COMMANDS
+
+#### `clear-auth-token`
+
+Clear the cached Suno authentication token.
+
+```text
+suno-export clear-auth-token
+```
+
+This command removes only the auth token from `~/.suno-export/cache.json`; it does not clear cached tracks, metadata, or the stored device ID.
 
 #### `download`
 
@@ -211,6 +240,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
@@ -235,6 +265,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
@@ -297,6 +328,7 @@ Options:
 - `-l, --list <file>`: JSON file with objects containing `clipId` and `thumbnail`.
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
 - `--metadata-file <path>`: combined metadata JSON file path for missing-image discovery. Default: `<output>/songs_metadata.json`.
@@ -322,6 +354,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-w, --workspace <id>`: only list this workspace ID.
 - `--json`: emit JSON output.
@@ -338,6 +371,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `--json`: emit JSON output.
 
@@ -357,6 +391,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 
 #### `fetch-metadata`
@@ -371,6 +406,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `--ids <ids>`: comma-separated list of track IDs to fetch.
 - `-w, --workspace <id>`: only process this workspace ID.
@@ -395,6 +431,7 @@ Options:
 
 - `-t, --token <token>`: authentication token.
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 
 ### DATE FILTER FORMAT
