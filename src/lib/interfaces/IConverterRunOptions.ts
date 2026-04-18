@@ -13,4 +13,5 @@ export interface IConverterRunOptions {
   reconvertBefore?: string;
   reconvertAfter?: string;
   reconvertMissing?: boolean;
+  processClipIds?: string[];
 }

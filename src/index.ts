@@ -79,6 +79,7 @@ program
   .option("--process-bitrate <kbps>", "Converter MP3 bitrate", "320")
   .option("--process-concurrency <n>", "Converter processing concurrency", "4")
   .option("--process-update-concurrency <n>", "Converter update concurrency", "8")
+  .option("--process-downloaded-only", "Only convert tracks downloaded during this sync run")
   .option("--no-images", "Skip embedding images during conversion")
   .option("--no-lyrics", "Skip embedding lyrics during conversion")
   .option("--exit-on-error", "Exit immediately on conversion errors")

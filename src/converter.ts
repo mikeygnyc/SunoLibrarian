@@ -24,6 +24,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
     updateConcurrency: options.processUpdateConcurrency
       ? parseInt(options.processUpdateConcurrency, 10)
       : undefined,
+    processClipIds: options.processClipIds,
   };
 
   if (config.reconvertMissing) {
@@ -42,6 +43,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   logger.log(`Embed Lyrics: ${config.embedLyrics}`);
   if (config.processConcurrency) logger.log(`Processing concurrency: ${config.processConcurrency}`);
   if (config.updateConcurrency) logger.log(`Update concurrency: ${config.updateConcurrency}`);
+  if (config.processClipIds?.length) logger.log(`Processing selected clips only: ${config.processClipIds.length}`);
   if (config.reconvertBefore) logger.log(`Reconvert before: ${config.reconvertBefore.toISOString()}`);
   if (config.reconvertAfter) logger.log(`Reconvert after: ${config.reconvertAfter.toISOString()}`);
   logger.log("");

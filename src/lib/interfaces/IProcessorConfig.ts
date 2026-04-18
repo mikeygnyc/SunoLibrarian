@@ -15,4 +15,5 @@ export interface IProcessorConfig {
   reconvertMissing?: boolean;
   processConcurrency?: number;
   updateConcurrency?: number;
+  processClipIds?: string[];
 }
