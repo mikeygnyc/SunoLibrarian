@@ -21,7 +21,9 @@
         "--browser",
         "http://localhost:9222",
         "--browser-profile",
-        "/path/to/user/Library/Application Support/Google/Chrome",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
         "-f",
         "wav"
       ],
@@ -50,7 +52,9 @@
         "--browser",
         "http://localhost:9222",
         "--browser-profile",
-        "/path/to/user/Library/Application Support/Google/Chrome",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
       ],
       "console": "internalConsole",
       "skipFiles": [
@@ -85,6 +89,39 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "Debug CLI - Sync",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sync",
+        "-o",
+        "/path/to/output/directory/",
+        "--metadata-file",
+        "/path/to/songs_metadata.json",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+     {
+      "type": "node",
+      "request": "launch",
       "name": "Debug CLI - Image List",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "runtimeArgs": [
@@ -102,7 +139,11 @@
         "--list",
         "${workspaceFolder}/image_list.json",
         "--browser",
-        "http://localhost:9222"
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2"
       ],
       "console": "internalConsole",
       "skipFiles": [

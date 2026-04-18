@@ -14,3 +14,8 @@ cli/.env
 image-list.json
 node_modules
 apps/server/.next/cache/*
+apps/api/dist
+apps/web/.svelte-kit/output
+apps/web/.svelte-kit/output/*
+apps/web/.svelte-kit/generated
+apps/web/.svelte-kit/generated/*

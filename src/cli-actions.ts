@@ -10,6 +10,7 @@ import { Storage } from "./storage";
 
 type CliOptions = Record<string, any>;
 const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
+const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 
 type DownloadFlowResult = {
   outputDir: string;
@@ -82,10 +83,20 @@ function parseTrackIdsOption(value: string | undefined): string[] {
   );
 }
 
-async function getImagesNeedingDownload(rootDir: string): Promise<Array<{ clipId: string; thumbnail: string | null }>> {
+function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
+  return typeof options.metadataFile === "string" && options.metadataFile.trim().length > 0
+    ? path.resolve(options.metadataFile.trim())
+    : path.join(rootDir, DEFAULT_METADATA_FILENAME);
+}
+
+async function getImagesNeedingDownload(
+  rootDir: string,
+  metadataFilePath?: string,
+): Promise<Array<{ clipId: string; thumbnail: string | null }>> {
   const processor = new Processor({
     inputRoot: rootDir,
     outputRoot: rootDir,
+    metadataFilePath,
     formats: ["flac", "mp3", "alac"] as AudioFormat[],
     mp3Bitrate: 320,
     embedImages: true,
@@ -116,9 +127,16 @@ function resolveBrowserUserDataDir(options: CliOptions): string | undefined {
   return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
 }
 
+function resolveBrowserProfileDirectory(options: CliOptions): string | undefined {
+  if (typeof options.profileDirectory !== "string") return undefined;
+  const trimmed = options.profileDirectory.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
   const browserEndpoint = resolveBrowserEndpoint(options);
   const browserUserDataDir = resolveBrowserUserDataDir(options);
+  const browserProfileDirectory = resolveBrowserProfileDirectory(options);
 
   if (!options.token && !browserEndpoint) {
     throw new Error("Authentication required: provide either --token or --browser");
@@ -127,10 +145,19 @@ async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> 
   let token = options.token;
   if (!token) {
     console.log("No token provided. Launching browser to extract token...");
-    token = await extractTokenFromBrowser(browserEndpoint, { userDataDir: browserUserDataDir });
+    token = await extractTokenFromBrowser(browserEndpoint, {
+      userDataDir: browserUserDataDir,
+      profileDirectory: browserProfileDirectory,
+    });
     console.log("Token extracted successfully!");
   }
-  return new SunoClient(token, undefined, browserEndpoint, browserUserDataDir);
+  return new SunoClient(
+    token,
+    undefined,
+    browserEndpoint,
+    browserUserDataDir,
+    browserProfileDirectory,
+  );
 }
 
 function filterWorkspaces(workspaces: IWorkspace[], workspaceId?: string): IWorkspace[] {
@@ -171,7 +198,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
     }
   });
 
-  const metadataFile = path.join(outputDir, "songs_metadata.json");
+  const metadataFile = resolveMetadataFilePath(outputDir, options);
   let songsMetadata: any[] = [];
   if (fs.existsSync(metadataFile)) {
     try {
@@ -188,6 +215,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   songsMetadata = songsMetadata.map((entry) => normalizeMetadata(entry));
   try {
     const tmp = `${metadataFile}.tmp`;
+    fs.mkdirSync(path.dirname(metadataFile), { recursive: true });
     fs.writeFileSync(tmp, JSON.stringify(songsMetadata, null, 2));
     fs.renameSync(tmp, metadataFile);
   } catch (err: any) {
@@ -339,7 +367,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 
   console.log(`\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`);
   if (shouldCopySongsMetadataToOutput(options)) {
-    console.log("songs_metadata.json is maintained at the download output root for this operation.");
+    console.log(`Metadata file maintained at: ${metadataFile}`);
   }
   return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
 }
@@ -348,6 +376,7 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
   await runConverter({
     input: options.input,
     output: options.output,
+    metadataFile: options.metadataFile,
     copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
     processFormats: options.processFormats,
     processBitrate: options.processBitrate,
@@ -376,6 +405,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
       await runProcessFlow({
         input: outputDir,
         output: conversionOutput,
+        metadataFile: options.metadataFile,
         copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
         processFormats: options.processFormats,
         processBitrate: options.processBitrate,
@@ -413,6 +443,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const outputDir = path.resolve(options.output);
+  const metadataFile = resolveMetadataFilePath(outputDir, options);
   const imagesDir = path.join(outputDir, "images");
   if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
 
@@ -439,7 +470,7 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
       throw new Error(`Failed to parse image list: ${err}`);
     }
   } else {
-    entries = await getImagesNeedingDownload(outputDir);
+    entries = await getImagesNeedingDownload(outputDir, metadataFile);
     console.log(`Found ${entries.length} image(s) needing download`);
 
     if (wantsFetchedList) {
@@ -486,11 +517,10 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
   }
 
   if (shouldCopySongsMetadataToOutput(options)) {
-    const metadataPath = path.join(outputDir, "songs_metadata.json");
-    if (fs.existsSync(metadataPath)) {
-      console.log(`songs_metadata.json already resides in output: ${metadataPath}`);
+    if (fs.existsSync(metadataFile)) {
+      console.log(`Metadata file available: ${metadataFile}`);
     } else {
-      console.warn(`songs_metadata.json not found at output root: ${metadataPath}`);
+      console.warn(`Metadata file not found: ${metadataFile}`);
     }
   }
 }

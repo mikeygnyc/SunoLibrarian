@@ -105,48 +105,80 @@ When using default output paths, required directories are created automatically 
 
 ### AUTHENTICATION REQUIREMENT
 
-For commands that include `--token` / `--browser` options, at least one must be provided.
-When `--browser` is provided without a value, it defaults to `http://localhost:9222`.
-Use `--browser-profile <dir>` to launch Chrome with a specific user data directory. If omitted, the CLI uses a temporary profile directory as before.
-When `--browser-profile` points at Chrome's default user data directory, the CLI copies it to a temporary debug profile before launching Chrome. Chrome 136+ ignores remote debugging for the default data directory itself, even if Chrome is fully closed.
+Commands that access Suno need one of these authentication methods:
 
-### BROWSER SESSION SETUP (`--browser`)
+- `--token <token>`: use an existing bearer token directly.
+- `--browser [url]`: read a bearer token from a Chrome session. If no URL is provided, the CLI uses `http://localhost:9222`.
 
-Use this when you want the CLI to read auth from a live Chrome session instead of passing `--token`.
+### BROWSER AUTH (`--browser`)
 
-1. Start Chrome in remote-debug mode with a dedicated temp profile directory.
-2. Open `https://suno.com` in that browser and complete login.
-3. Keep that Chrome instance running while you run `suno-export ... --browser [url]`.
+Use browser auth when you want the CLI to launch or connect to Chrome and capture the token from logged-in Suno requests.
 
-If a specified browser endpoint is unavailable, the CLI will automatically launch a local Chrome debug session (OS-appropriate defaults) and continue.
-When the CLI launches Chrome itself, `--browser-profile <dir>` controls the `--user-data-dir` used for that browser session.
-For your regular Chrome account, you can pass the default Chrome user data directory and let the CLI clone it, use a dedicated CLI profile directory and sign in once there, or launch Chrome manually with a non-default `--user-data-dir`, `--remote-debugging-port=9222`, and pass `--browser http://localhost:9222`.
+Recommended setup:
+
+1. Create a dedicated Chrome user data directory for this CLI.
+2. Launch Chrome with that directory and sign in to `https://suno.com` once.
+3. Reuse that directory with `--browser-profile <dir>`.
+
+Example:
+
+```bash
+suno-export list \
+  --browser http://localhost:9222 \
+  --browser-profile "$HOME/.suno-export/chrome-user-data"
+```
+
+If the Chrome profile inside that user data directory is named, pass it with `--profile-directory`:
+
+```bash
+suno-export list \
+  --browser http://localhost:9222 \
+  --browser-profile "$HOME/.suno-export/chrome-user-data" \
+  --profile-directory "Profile 2"
+```
+
+Profile rules:
+
+- `--browser-profile <dir>` should point at a Chrome user data directory.
+- `--profile-directory <name>` is optional and names a profile inside that user data directory, such as `Default` or `Profile 2`.
+- You may also pass a specific profile directory directly to `--browser-profile`; the CLI will use its parent as `--user-data-dir` and the folder name as `--profile-directory`.
+- Do not point `--browser-profile` at Chrome's default user data root, including through a symlink. Recent Chrome versions can open that profile while refusing remote debugging.
+
+### MANUAL BROWSER SETUP
+
+You can also launch Chrome yourself and connect the CLI to it.
 
 macOS example:
 
 ```bash
-TMP_PROFILE="$(mktemp -d /tmp/suno-export-chrome.XXXXXX)"
+PROFILE="$HOME/.suno-export/chrome-user-data"
+mkdir -p "$PROFILE"
+
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9222 \
-  --user-data-dir="$TMP_PROFILE"
+  --user-data-dir="$PROFILE"
 ```
 
 Linux example:
 
 ```bash
-TMP_PROFILE="$(mktemp -d /tmp/suno-export-chrome.XXXXXX)"
+PROFILE="$HOME/.suno-export/chrome-user-data"
+mkdir -p "$PROFILE"
+
 google-chrome \
   --remote-debugging-port=9222 \
-  --user-data-dir="$TMP_PROFILE"
+  --user-data-dir="$PROFILE"
 ```
 
 Windows PowerShell example:
 
 ```powershell
-$tmp = New-Item -ItemType Directory -Path ([System.IO.Path]::GetTempPath()) -Name ("suno-export-chrome-" + [guid]::NewGuid())
+$profile = "$env:USERPROFILE\.suno-export\chrome-user-data"
+New-Item -ItemType Directory -Force -Path $profile | Out-Null
+
 & "C:\Program Files\Google\Chrome\Application\chrome.exe" `
   --remote-debugging-port=9222 `
-  --user-data-dir="$($tmp.FullName)"
+  --user-data-dir="$profile"
 ```
 
 Use it in commands:
@@ -159,9 +191,9 @@ suno-export download --browser http://localhost:9222 --output ./downloads
 Verification and troubleshooting:
 
 - Confirm the debug endpoint is reachable: `http://localhost:9222/json/version`
-- If connection fails, make sure the debug Chrome process is still running.
-- If the endpoint is unavailable, the CLI automatically falls back to launching a local debug browser session.
-- If login state is wrong/stale, stop Chrome, delete the temp profile directory, and start again.
+- If connection fails, make sure the debug Chrome process is still running and no other process is using port `9222`.
+- If login state is wrong or stale, stop Chrome, delete the dedicated CLI profile directory, launch Chrome again, and sign in to Suno.
+- Never log or commit real bearer tokens.
 
 ### COMMANDS
 
@@ -181,6 +213,7 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output on completion.
 - `--no-metadata`: skip metadata sidecar file behavior.
 - `--created-after <date>`: include only tracks created on/after this date.
@@ -204,6 +237,7 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to conversion output on completion.
 - `--created-after <date>`: include only tracks created on/after this date.
 - `--created-before <date>`: include only tracks created on/before this date.
@@ -234,6 +268,7 @@ Options:
 
 - `-i, --input <path>`: input root directory. Required.
 - `-o, --output <path>`: output root directory. Required.
+- `--metadata-file <path>`: combined metadata JSON file path. Default: `<input>/songs_metadata.json`.
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output root on completion.
 - `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
@@ -261,6 +296,7 @@ Options:
 - `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--metadata-file <path>`: combined metadata JSON file path for missing-image discovery. Default: `<output>/songs_metadata.json`.
 - `--copy-songs-metadata-to-output`: on completion, verify/copy finalized `songs_metadata.json` to output root.
 - `--fetch-image-list <file>`: discover missing images and write JSON list to file.
 - `--fetch-missing`: discover missing images and download them directly.
@@ -269,7 +305,7 @@ Options:
 Notes:
 
 - You must pass at least one of: `--list`, `--fetch-image-list`, `--fetch-missing`.
-- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for `songs_metadata.json` and image folders.
+- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and `<output>/songs_metadata.json` unless `--metadata-file` is set.
 
 #### `list`
 
@@ -385,9 +421,10 @@ Process flow reads a download-style input root and writes converted output.
 
 ### SONGS METADATA FILE LOCATION
 
-- The authoritative `songs_metadata.json` is maintained on the input side.
-- Backups (`songs_metadata.json.<timestamp>.bak`) are created on the input side only.
-- If `--copy-songs-metadata-to-output` is set, a finalized copy is written to the output side only after completion.
+- The authoritative metadata file defaults to `songs_metadata.json` on the input side.
+- Use `--metadata-file <path>` with `download`, `sync`, `process`, or `download-images` to override the combined metadata JSON path.
+- Backups (`<metadata-file>.<timestamp>.bak`) are created next to the authoritative metadata file only.
+- If `--copy-songs-metadata-to-output` is set, a finalized copy is written to the output side only after completion, using the metadata file's basename.
 
 ### PROJECT STRUCTURE
 
