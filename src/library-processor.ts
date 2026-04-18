@@ -59,6 +59,12 @@ export class Processor {
     this.startRetryWorker();
   }
 
+  private getMetadataFilePath(): string {
+    return this.config.metadataFilePath
+      ? path.resolve(this.config.metadataFilePath)
+      : path.join(this.config.inputRoot, "songs_metadata.json");
+  }
+
   async process(): Promise<void> {
     const startTime = Date.now();
     // make sure output directories exist before doing anything else
@@ -564,7 +570,7 @@ export class Processor {
   private metadataFileExisted = false;
 
   private async loadMetadata(): Promise<ISongData[]> {
-    const metaFile = path.join(this.config.inputRoot, "songs_metadata.json");
+    const metaFile = this.getMetadataFilePath();
     this.metadataFileExisted = await this.fileExists(metaFile);
     if (!this.metadataFileExisted) {
       logger.error(`Metadata file not found: ${metaFile}`);
@@ -643,7 +649,7 @@ export class Processor {
     this.songs = this.songs.map(song => normalizeMetadata(song));
 
     const data = JSON.stringify(this.songs, null, 2);
-    const inFile = path.join(this.config.inputRoot, "songs_metadata.json");
+    const inFile = this.getMetadataFilePath();
 
     // backups always live on the input side; that's the authoritative source.
     if (await this.fileExists(inFile)) {
@@ -657,6 +663,7 @@ export class Processor {
 
     const writeAtomic = async (file: string, contents: string) => {
       const tmp = `${file}.tmp`;
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
       await fs.promises.writeFile(tmp, contents);
       await fs.promises.rename(tmp, file);
     };
@@ -672,8 +679,8 @@ export class Processor {
   private async copyFinalMetadataToOutput(): Promise<void> {
     if (this.config.copySongsMetadataToOutput !== true) return;
 
-    const inFile = path.join(this.config.inputRoot, "songs_metadata.json");
-    const outFile = path.join(this.config.outputRoot, "songs_metadata.json");
+    const inFile = this.getMetadataFilePath();
+    const outFile = path.join(this.config.outputRoot, path.basename(inFile));
     if (inFile === outFile) return;
 
     if (!(await this.fileExists(inFile))) {

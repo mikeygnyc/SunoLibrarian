@@ -12,14 +12,22 @@ export class SunoClient {
   private deviceId: string;
   private browserUrl?: string;
   private browserUserDataDir?: string;
+  private browserProfileDirectory?: string;
   private rateLimitConfig: IRateLimitConfig;
   private metadataCache: Map<string, ITrackMetadata>;
   private storage: Storage;
 
-  constructor(authToken: string, deviceId?: string, browserUrl?: string, browserUserDataDir?: string) {
+  constructor(
+    authToken: string,
+    deviceId?: string,
+    browserUrl?: string,
+    browserUserDataDir?: string,
+    browserProfileDirectory?: string,
+  ) {
     this.authToken = authToken;
     this.browserUrl = browserUrl;
     this.browserUserDataDir = browserUserDataDir;
+    this.browserProfileDirectory = browserProfileDirectory;
     this.storage = new Storage();
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
@@ -600,6 +608,7 @@ export class SunoClient {
     console.log(`[artwork] Opening song page for ${clipId}: ${songUrl}`);
     const { browser, isRemoteBrowser } = await connectOrLaunchBrowser(this.browserUrl, {
       userDataDir: this.browserUserDataDir,
+      profileDirectory: this.browserProfileDirectory,
     });
     let page: Page | null = null;
 

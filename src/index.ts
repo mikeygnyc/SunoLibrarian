@@ -42,9 +42,11 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
+  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--no-metadata", "Skip metadata sidecar files")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
@@ -62,9 +64,11 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Download/output directory for source files", DEFAULT_DOWNLOAD_ROOT)
+  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
@@ -85,6 +89,7 @@ program
   .description("Run audio conversion/metadata embedding (converter functionality)")
   .requiredOption("-i, --input <path>", "Input root directory")
   .requiredOption("-o, --output <path>", "Output root directory")
+  .option("--metadata-file <path>", "Metadata JSON file path (default: <input>/songs_metadata.json)")
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--process-formats <formats>", "Audio formats", "flac,mp3,alac")
   .option("--process-bitrate <kbps>", "MP3 bitrate", "320")
@@ -108,7 +113,9 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
+  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
   .option("--fetch-missing", "Find missing images and download them directly")
@@ -124,6 +131,7 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--json", "Output as JSON")
   .action(withCliError(runListFlow));
@@ -137,6 +145,7 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--json", "Output as JSON")
   .action(withCliError(runWorkspacesFlow));
 
@@ -149,6 +158,7 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .action(withCliError(runMetadataFlow));
 
 program
@@ -160,6 +170,7 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
@@ -175,6 +186,7 @@ program
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .action(withCliError(runRefreshFlow));
 
 program.parse();

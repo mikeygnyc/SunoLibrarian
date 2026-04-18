@@ -8,6 +8,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   const config: IProcessorConfig = {
     inputRoot: path.resolve(options.input),
     outputRoot: path.resolve(options.output),
+    metadataFilePath: options.metadataFile ? path.resolve(options.metadataFile) : undefined,
     copySongsMetadataToOutput: options.copySongsMetadataToOutput === true,
     formats: (options.processFormats || "flac,mp3,alac")
       .split(",")
@@ -34,6 +35,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   logger.log("===================");
   logger.log(`Input:  ${config.inputRoot}`);
   logger.log(`Output: ${config.outputRoot}`);
+  logger.log(`Metadata file: ${config.metadataFilePath || path.join(config.inputRoot, "songs_metadata.json")}`);
   logger.log(`Formats: ${config.formats.join(", ")}`);
   logger.log(`MP3 Bitrate: ${config.mp3Bitrate}kbps`);
   logger.log(`Embed Images: ${config.embedImages}`);
