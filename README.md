@@ -98,6 +98,8 @@ suno-export [--version] [--help] <command> [command options] [arguments]
 
 When using default output paths, required directories are created automatically if missing.
 
+For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flow.md).
+
 ### GLOBAL OPTIONS
 
 - `-V, --version`: print CLI version.
@@ -431,6 +433,7 @@ Process flow reads a download-style input root and writes converted output.
 
 - `src/index.ts`: CLI setup, arg parsing, and flow dispatch.
 - `src/cli-actions.ts`: CLI action implementations.
+- `docs/cli-program-flow.md`: CLI flow diagrams and module/method ownership notes.
 - `src/client.ts`: Suno API client + download helpers.
 - `src/auth.ts`: browser token extraction (Puppeteer).
 - `src/converter.ts`: converter entrypoint used by the CLI.
