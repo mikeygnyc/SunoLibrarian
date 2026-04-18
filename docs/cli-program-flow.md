@@ -23,6 +23,7 @@ flowchart TD
   B --> I["metadata <trackId>"]
   B --> J["fetch-metadata"]
   B --> K["refresh"]
+  B --> L["clear-auth-token"]
 
   C --> C1["runDownloadFlow<br/>src/cli-actions.ts"]
   D --> D1["runSyncFlow<br/>src/cli-actions.ts"]
@@ -33,6 +34,7 @@ flowchart TD
   I --> I1["runMetadataFlow<br/>src/cli-actions.ts"]
   J --> J1["runFetchMetadataFlow<br/>src/cli-actions.ts"]
   K --> K1["runRefreshFlow<br/>src/cli-actions.ts"]
+  L --> L1["runClearAuthTokenFlow<br/>src/cli-actions.ts"]
 ```
 
 ### Dispatch Notes
@@ -42,6 +44,8 @@ flowchart TD
   - `program.command("sync")`: command registration for download plus process.
   - `program.command("process")`: command registration for converter-only runs.
   - `program.command("download-images")`: command registration for artwork fetches.
+  - `program.command("clear-auth-token")`: command registration for auth-token
+    cache clearing.
   - `withCliError(...)`: shared error wrapper that prints the error and exits.
 - `src/cli-defaults.ts`
   - `DEFAULT_DOWNLOAD_ROOT`: default output root for commands with `--output`.
@@ -53,17 +57,30 @@ doing API work.
 
 ```mermaid
 flowchart LR
-  A["Command needs Suno API"] --> B{"Auth option"}
-  B -- "--token" --> C["Use token directly"]
-  B -- "--browser [url]" --> D["Extract token from Chrome requests"]
-  C --> E["new SunoClient"]
-  D --> E
+  A["Command needs Suno API"] --> B{"--ignore-cached-token?"}
+  B -- "no" --> C{"cached token?"}
+  C -- "yes" --> D["Try cached token"]
+  D -- "accepted" --> E["new SunoClient"]
+  D -- "401/403" --> F{"Fallback auth option"}
+  C -- "no" --> F
+  B -- "yes" --> F
+  F -- "--token" --> G["Use token directly and cache it"]
+  F -- "--browser [url]" --> H["Extract token from Chrome requests and cache it"]
+  G --> E
+  H --> E
 ```
 
 ### Authentication Notes
 
 - `src/cli-actions.ts`
   - `getAuthenticatedClient(options)`: central auth entrypoint for CLI flows.
+  - Cached tokens are read from `Storage` first unless `--ignore-cached-token`
+    is set. A cached token is accepted after a lightweight workspace-page
+    request succeeds.
+  - Tokens supplied by `--token` or extracted through `--browser` are written
+    back to the cache by default.
+  - `runClearAuthTokenFlow()`: deletes only the cached auth token, leaving other
+    cached track/metadata data intact.
   - `resolveBrowserEndpoint(options)`: handles `--browser` defaulting.
   - `resolveBrowserUserDataDir(options)`: resolves `--browser-profile`.
   - `resolveBrowserProfileDirectory(options)`: resolves `--profile-directory`.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import {
+  runClearAuthTokenFlow,
   runDownloadFlow,
   runDownloadImagesFlow,
   runFetchMetadataFlow,
@@ -34,6 +35,11 @@ function withCliError<TArgs extends unknown[], TResult>(
 }
 
 program
+  .command("clear-auth-token")
+  .description("Clear the cached Suno authentication token")
+  .action(withCliError(runClearAuthTokenFlow));
+
+program
   .command("download")
   .description("Download tracks from Suno")
   .option("-t, --token <token>", "Authentication token")
@@ -41,6 +47,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
@@ -63,6 +70,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
@@ -113,6 +121,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
@@ -131,6 +140,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
@@ -145,6 +155,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--json", "Output as JSON")
@@ -158,6 +169,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .action(withCliError(runMetadataFlow));
@@ -170,6 +182,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
@@ -186,6 +199,7 @@ program
     "-b, --browser [url]",
     "Connect to existing Chrome instance (default: http://localhost:9222)",
   )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .action(withCliError(runRefreshFlow));

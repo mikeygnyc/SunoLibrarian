@@ -3,9 +3,9 @@ import type { IModelBadges } from "./IModelBadges";
 import type { IBadge } from "./IBadge";
 
 export interface ISunoTrackMetadata {
-  tags?: string;
+  tags?: string; //actually the prompt
   negative_tags?: string;
-  prompt?: string;
+  prompt?: string; //actually lyrics
   gpt_description_prompt?: string;
   edited_clip_id?: string;
   artist_clip_id?: string;
@@ -50,4 +50,5 @@ export interface ISunoTrackMetadata {
   persona_id?: string;
   playlist_id?: string;
   mashup_clip_ids?: string[];
+  is_mumble?: boolean;
 }

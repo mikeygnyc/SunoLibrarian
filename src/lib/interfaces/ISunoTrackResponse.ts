@@ -3,7 +3,8 @@ import type { ITrackReaction } from "./ITrackReaction";
 import type { ITrackProject } from "./ITrackProject";
 import type { ITrackOwnership } from "./ITrackOwnership";
 import type { ITrackPersona } from "./ITrackPersona";
-
+import { IMediaUrl } from "./IMediaUrl";
+import { IActionConfig } from "./IAction";
 export interface ISunoTrackResponse {
   status: string;
   title: string;
@@ -14,6 +15,7 @@ export interface ISunoTrackResponse {
   entity_type: string;
   video_url: string;
   audio_url: string;
+  media_urls?: IMediaUrl[];
   image_url: string;
   image_large_url: string;
   major_model_version: string;
@@ -41,6 +43,5 @@ export interface ISunoTrackResponse {
   is_contest_clip: boolean;
   has_hook: boolean;
   batch_index: number;
+  action_config: IActionConfig;
 }
-
-export type RawApiResponse = ISunoTrackResponse;
