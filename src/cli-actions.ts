@@ -388,12 +388,15 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
     reconvertBefore: options.reconvertBefore,
     reconvertAfter: options.reconvertAfter,
     reconvertMissing: options.reconvertMissing,
+    processClipIds: options.processClipIds,
   });
 }
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
   const conversionOutput = options.library || outputDir;
+  const processDownloadedOnly = options.processDownloadedOnly === true;
+  const downloadedClipIds = new Set<string>();
   let conversionChain: Promise<void> = Promise.resolve();
   let queuedConversions = 0;
   let conversionFailed: Error | null = null;
@@ -414,6 +417,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
         images: options.images,
         lyrics: options.lyrics,
         exitOnError: options.exitOnError,
+        processClipIds: processDownloadedOnly ? Array.from(downloadedClipIds) : undefined,
       });
     }).catch((err: any) => {
       const wrapped = err instanceof Error ? err : new Error(String(err));
@@ -427,10 +431,13 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   const downloadResult = await runDownloadFlow({
     ...options,
     output: outputDir,
-    onTrackDownloaded: () => queueConversion(),
+    onTrackDownloaded: ({ clipId }: { clipId: string }) => {
+      downloadedClipIds.add(clipId);
+      queueConversion();
+    },
   });
 
-  if (queuedConversions === 0 && downloadResult.downloaded > 0) {
+  if (!processDownloadedOnly && queuedConversions === 0 && downloadResult.downloaded > 0) {
     queueConversion();
   }
 

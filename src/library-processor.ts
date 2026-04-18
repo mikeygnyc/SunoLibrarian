@@ -65,19 +65,37 @@ export class Processor {
       : path.join(this.config.inputRoot, "songs_metadata.json");
   }
 
+  private getProcessTargetClipIds(): Set<string> | null {
+    const clipIds = this.config.processClipIds
+      ?.map((clipId) => clipId.trim())
+      .filter((clipId) => clipId.length > 0);
+    return clipIds?.length ? new Set(clipIds) : null;
+  }
+
+  private getProcessSongs(songs: ISongData[]): ISongData[] {
+    const targetClipIds = this.getProcessTargetClipIds();
+    return targetClipIds ? songs.filter((song) => targetClipIds.has(song.clipId)) : songs;
+  }
+
   async process(): Promise<void> {
     const startTime = Date.now();
     // make sure output directories exist before doing anything else
     await this.ensureDirectories();
     // metadata loader is now async
     this.songs = await this.loadMetadata();
+    const processSongs = this.getProcessSongs(this.songs);
     // create a single run timestamp so incremental log writes use the same
     // filename for this run instead of creating a new file on every song.
     this.runTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    logger.log(`Found ${this.songs.length} songs to process\n`);
+    logger.log(`Found ${processSongs.length} songs to process`);
+    if (processSongs.length !== this.songs.length) {
+      logger.log(`Selected ${processSongs.length} of ${this.songs.length} metadata entries\n`);
+    } else {
+      logger.log("");
+    }
 
     const songsToProcess: ISongData[] = [];
-    for (const song of this.songs) {
+    for (const song of processSongs) {
       const { wavPath, source } = await this.resolveSourceWavPath(song);
       if (!wavPath) {
         logger.log(`  [${song.clipId}] skipping: source WAV missing in input and output`);
@@ -168,7 +186,7 @@ export class Processor {
     // wait for remaining in-flight songs
     await Promise.all(active);
 
-    await this.updateExistingFiles(this.songs);
+    await this.updateExistingFiles(processSongs);
     // Persist final state (async)
     await this.persistState();
     await this.copyFinalMetadataToOutput();

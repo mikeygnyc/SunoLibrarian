@@ -248,6 +248,7 @@ Options:
 - `--process-bitrate <kbps>`: MP3 bitrate for processor. Default: `320`.
 - `--process-concurrency <n>`: conversion concurrency. Default: `4`.
 - `--process-update-concurrency <n>`: metadata/update concurrency. Default: `8`.
+- `--process-downloaded-only`: only convert tracks downloaded during this sync run; existing metadata entries are not processed.
 - `--no-images`: skip image embedding during conversion.
 - `--no-lyrics`: skip lyric embedding during conversion.
 - `--exit-on-error`: stop on first conversion error.
