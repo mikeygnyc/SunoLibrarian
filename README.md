@@ -271,7 +271,7 @@ Options:
 
 - `-i, --input <path>`: input root directory. Required.
 - `-o, --output <path>`: output root directory. Required.
-- `--metadata-file <path>`: combined metadata JSON file path. Default: `<input>/songs_metadata.json`.
+- `--metadata-file <path>`: combined metadata JSON file path. Default: `<output>/songs_metadata.json`.
 - `--copy-songs-metadata-to-output`: copy finalized `songs_metadata.json` to output root on completion.
 - `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
@@ -424,7 +424,7 @@ Process flow reads a download-style input root and writes converted output.
 
 ### SONGS METADATA FILE LOCATION
 
-- The authoritative metadata file defaults to `songs_metadata.json` on the input side.
+- The authoritative metadata file defaults to `<output>/songs_metadata.json`.
 - Use `--metadata-file <path>` with `download`, `sync`, `process`, or `download-images` to override the combined metadata JSON path.
 - Backups (`<metadata-file>.<timestamp>.bak`) are created next to the authoritative metadata file only.
 - If `--copy-songs-metadata-to-output` is set, a finalized copy is written to the output side only after completion, using the metadata file's basename.

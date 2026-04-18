@@ -62,7 +62,7 @@ export class Processor {
   private getMetadataFilePath(): string {
     return this.config.metadataFilePath
       ? path.resolve(this.config.metadataFilePath)
-      : path.join(this.config.inputRoot, "songs_metadata.json");
+      : path.join(this.config.outputRoot, "songs_metadata.json");
   }
 
   private getProcessTargetClipIds(): Set<string> | null {
@@ -640,7 +640,7 @@ export class Processor {
     // later processing steps) has the normalized data to write.
     this.songs = normalizedSongs;
 
-    // immediately persist normalized metadata back to the input-side file so
+    // immediately persist normalized metadata back to the authoritative file so
     // subsequent runs always start from canonical metadata values.
     if (this.metadataFileExisted) {
       try {
@@ -669,7 +669,7 @@ export class Processor {
     const data = JSON.stringify(this.songs, null, 2);
     const inFile = this.getMetadataFilePath();
 
-    // backups always live on the input side; that's the authoritative source.
+    // backups always live next to the authoritative metadata file.
     if (await this.fileExists(inFile)) {
       const bak = `${inFile}.${Date.now()}.bak`;
       try {
@@ -686,11 +686,11 @@ export class Processor {
       await fs.promises.rename(tmp, file);
     };
 
-    // persist authoritative metadata to the input side.
+    // persist authoritative metadata.
     try {
       await writeAtomic(inFile, data);
     } catch (err: any) {
-      logger.warn(`Failed to update input metadata: ${err.message || err}`);
+      logger.warn(`Failed to update metadata file: ${err.message || err}`);
     }
   }
 
@@ -702,7 +702,7 @@ export class Processor {
     if (inFile === outFile) return;
 
     if (!(await this.fileExists(inFile))) {
-      logger.warn(`Cannot copy songs_metadata.json to output; input file not found: ${inFile}`);
+      logger.warn(`Cannot copy songs_metadata.json to output; metadata file not found: ${inFile}`);
       return;
     }
 

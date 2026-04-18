@@ -373,10 +373,11 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 }
 
 export async function runProcessFlow(options: CliOptions): Promise<void> {
+  const outputDir = path.resolve(options.output);
   await runConverter({
     input: options.input,
-    output: options.output,
-    metadataFile: options.metadataFile,
+    output: outputDir,
+    metadataFile: resolveMetadataFilePath(outputDir, options),
     copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
     processFormats: options.processFormats,
     processBitrate: options.processBitrate,
@@ -395,6 +396,7 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
 export async function runSyncFlow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
   const conversionOutput = options.library || outputDir;
+  const metadataFile = resolveMetadataFilePath(outputDir, options);
   const processDownloadedOnly = options.processDownloadedOnly === true;
   const downloadedClipIds = new Set<string>();
   let conversionChain: Promise<void> = Promise.resolve();
@@ -408,7 +410,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
       await runProcessFlow({
         input: outputDir,
         output: conversionOutput,
-        metadataFile: options.metadataFile,
+        metadataFile,
         copySongsMetadataToOutput: shouldCopySongsMetadataToOutput(options),
         processFormats: options.processFormats,
         processBitrate: options.processBitrate,
@@ -431,6 +433,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   const downloadResult = await runDownloadFlow({
     ...options,
     output: outputDir,
+    metadataFile,
     onTrackDownloaded: ({ clipId }: { clipId: string }) => {
       downloadedClipIds.add(clipId);
       queueConversion();
