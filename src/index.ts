@@ -90,7 +90,7 @@ program
   .description("Run audio conversion/metadata embedding (converter functionality)")
   .requiredOption("-i, --input <path>", "Input root directory")
   .requiredOption("-o, --output <path>", "Output root directory")
-  .option("--metadata-file <path>", "Metadata JSON file path (default: <input>/songs_metadata.json)")
+  .option("--metadata-file <path>", "Metadata JSON file path (default: <output>/songs_metadata.json)")
   .option("--copy-songs-metadata-to-output", "Copy finalized songs_metadata.json to output on completion")
   .option("--process-formats <formats>", "Audio formats", "flac,mp3,alac")
   .option("--process-bitrate <kbps>", "MP3 bitrate", "320")

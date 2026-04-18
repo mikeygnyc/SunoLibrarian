@@ -82,8 +82,7 @@ can override the path with `--metadata-file`.
 flowchart TD
   A{"--metadata-file set?"}
   A -- yes --> B["Use provided absolute/resolved path"]
-  A -- "no, download/sync/download-images" --> C["<output>/songs_metadata.json"]
-  A -- "no, process" --> D["<input>/songs_metadata.json"]
+  A -- no --> C["<output>/songs_metadata.json"]
 ```
 
 ### Metadata Path Notes
@@ -92,8 +91,8 @@ flowchart TD
   - Registers `--metadata-file <path>` on `download`, `sync`, `process`, and
     `download-images`.
 - `src/cli-actions.ts`
-  - `resolveMetadataFilePath(rootDir, options)`: resolves the download-side
-    metadata file path.
+  - `resolveMetadataFilePath(rootDir, options)`: resolves the authoritative
+    metadata file path from the command output root.
   - `runDownloadFlow(...)`: reads, initializes, normalizes, and writes the
     metadata file during download.
   - `runProcessFlow(...)`: passes `metadataFile` into the converter.
@@ -344,7 +343,6 @@ Process output root:
 
 Authoritative combined metadata:
 
-- Download uses `<output>/songs_metadata.json` by default.
-- Process uses `<input>/songs_metadata.json` by default.
+- Commands use `<output>/songs_metadata.json` by default.
 - `--metadata-file <path>` overrides the combined metadata JSON location.
 - Processor backups are created next to the authoritative metadata file.
