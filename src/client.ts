@@ -236,7 +236,7 @@ export class SunoClient {
 
       hasMore = data.has_more === true || (clips.length === 100 && data.next_cursor);
       cursor = data.next_cursor;
-
+      console.log(`Fetched ${clips.length} tracks for workspace ${workspaceId} (total so far: ${allTracks.length})`);
       if (hasMore) {
         await this.delay(this.rateLimitConfig.trackDelay);
       }

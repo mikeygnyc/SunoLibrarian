@@ -22,3 +22,5 @@ apps/web/.svelte-kit/output
 apps/web/.svelte-kit/output/*
 apps/web/.svelte-kit/generated
 apps/web/.svelte-kit/generated/*
+data
+data/*

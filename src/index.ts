@@ -109,7 +109,7 @@ program
   .option("--process-bitrate <kbps>", "Converter MP3 bitrate", "320")
   .option("--process-concurrency <n>", "Converter processing concurrency", "4")
   .option("--process-update-concurrency <n>", "Converter update concurrency", "8")
-  .option("--process-downloaded-only", "Only convert tracks downloaded during this sync run")
+  .option("--process-existing-metadata", "Re-process all existing metadata after the download phase")
   .option("--no-images", "Skip embedding images during conversion")
   .option("--no-lyrics", "Skip embedding lyrics during conversion")
   .option("--exit-on-error", "Exit immediately on conversion errors")
@@ -171,6 +171,7 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--json", "Output as JSON")
   .action(withCliError(runListFlow));
@@ -186,6 +187,7 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
   .option("--json", "Output as JSON")
   .action(withCliError(runWorkspacesFlow));
 
@@ -214,6 +216,7 @@ program
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
@@ -230,6 +233,7 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
   .action(withCliError(runRefreshFlow));
 
 program.parse();

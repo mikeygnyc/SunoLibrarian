@@ -197,6 +197,10 @@ Processing concurrency (default: 4).
 .B --process-update-concurrency <n>
 Update concurrency (default: 8).
 .TP
+.B --process-existing-metadata
+Re-process all existing metadata after the download phase. By default, sync only
+processes tracks downloaded during the current run.
+.TP
 .B --no-images
 Skip image embedding.
 .TP
@@ -207,7 +211,10 @@ Skip lyric embedding.
 Stop on first conversion error.
 .TP
 .B NOTE
-Conversion is queued immediately after each successful download (pipelined flow).
+By default, conversion is queued immediately after each successful download and
+limited to tracks downloaded during the current sync run. With
+\fB--process-existing-metadata\fR, sync waits for downloads to finish and then
+runs one full metadata processing pass.
 .SS process
 Convert/embed metadata using an existing input root.
 .TP
@@ -416,6 +423,9 @@ Date-only values (\fBYYYY-MM-DD\fR), interpreted as inclusive UTC day bounds.
 .SH SONGS METADATA
 Authoritative combined metadata lives in SQLite at \fBdata/suno-export.sqlite\fR by default.
 Use \fB--database <path>\fR to choose another SQLite database location.
+Loaded Suno projects/workspaces are upserted into the \fBworkspaces\fR table.
+Song-to-workspace membership is stored in \fBsong_workspaces\fR and is derived
+from \fBrawApiResponse.project\fR when full metadata is available.
 Use \fBimport-metadata-json\fR or \fB--import-metadata-json <path>\fR to migrate an existing current-format \fBsongs_metadata.json\fR file into SQLite.
 Use \fBexport-metadata-json\fR or \fB--export-metadata-json <path>\fR to write a compatibility JSON file matching the previous format.
 If \fB--copy-songs-metadata-to-output\fR is provided, a finalized JSON export is written

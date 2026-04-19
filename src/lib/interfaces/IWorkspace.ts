@@ -1,4 +1,3 @@
-export interface IWorkspace {
-  id: string;
-  name: string;
-}
+import type { ITrackProject } from "./ITrackProject";
+
+export interface IWorkspace extends ITrackProject {}

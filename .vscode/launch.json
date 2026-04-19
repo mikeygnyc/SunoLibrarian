@@ -119,6 +119,31 @@
         "<node_internals>/**"
       ]
     },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Import JSON",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "import-metadata-json",
+        "--input",
+        "/path/to/songs_metadata.json",
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
      {
       "type": "node",
       "request": "launch",

@@ -226,7 +226,7 @@ The authoritative combined song metadata now lives in a SQLite database. By defa
 data/suno-export.sqlite
 ```
 
-Use `--database <path>` on `download`, `sync`, `process`, and `download-images` to store metadata somewhere else. The database stores each song as the same normalized object used by the previous `songs_metadata.json` array, which keeps export compatibility and leaves room for a future Postgres-backed store.
+Use `--database <path>` on commands that read or write library metadata to store data somewhere else. The database uses a normalized schema: primary song fields live in `songs`, repeated values live in child tables such as `song_tags`, `song_negative_tags`, and `song_mashup_sources`, loaded Suno projects/workspaces are upserted into `workspaces`, and song-to-workspace membership lives in `song_workspaces`. Only the nested Suno API payload is kept as JSON in `raw_api_response_json`.
 
 Import an existing current-format JSON file into SQLite:
 
@@ -337,14 +337,15 @@ Options:
 - `--process-bitrate <kbps>`: MP3 bitrate for processor. Default: `320`.
 - `--process-concurrency <n>`: conversion concurrency. Default: `4`.
 - `--process-update-concurrency <n>`: metadata/update concurrency. Default: `8`.
-- `--process-downloaded-only`: only convert tracks downloaded during this sync run; existing metadata entries are not processed.
+- `--process-existing-metadata`: re-process all existing metadata after the download phase. By default, sync only processes tracks downloaded during the current run.
 - `--no-images`: skip image embedding during conversion.
 - `--no-lyrics`: skip lyric embedding during conversion.
 - `--exit-on-error`: stop on first conversion error.
 
-Sync behavior note:
+Sync behavior notes:
 
-- Conversion is queued immediately after each successful download (pipelined flow).
+- By default, conversion is queued after each successful download and is limited to tracks downloaded during the current sync run.
+- With `--process-existing-metadata`, sync waits for the download phase to finish and then runs one full metadata processing pass.
 
 #### `process`
 
