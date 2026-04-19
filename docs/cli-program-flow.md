@@ -137,6 +137,16 @@ flowchart TD
     metadata JSON to the output root.
 - `src/metadata-store.ts`
   - `SqliteMetadataStore`: SQLite-backed metadata store.
+  - Schema is normalized into `songs`, `song_tags`, `song_negative_tags`, and
+    `song_mashup_sources`; only the nested Suno API response remains JSON.
+  - Suno project/workspace loads are upserted into `workspaces` through
+    `SqliteMetadataStore.upsertWorkspaces(...)`; `IWorkspace` extends the
+    project-shaped `ITrackProject` data.
+  - Song/workspace membership is written to `song_workspaces`, derived from
+    `rawApiResponse.project` when saving metadata and from workspace discovery
+    when listing tracks.
+  - Existing first-pass SQLite databases with `metadata_entries.metadata_json`
+    are migrated into the normalized tables when opened.
   - `importMetadataJsonToDatabase(...)`: JSON-to-SQLite migration helper.
   - `exportMetadataDatabaseToJson(...)`: SQLite-to-JSON compatibility export.
 
@@ -238,8 +248,10 @@ flowchart TD
 
 ## Sync Command
 
-`sync` chains download and process. Conversion is queued after successful
-downloads.
+`sync` chains download and process. By default, conversion is queued after
+successful downloads and limited to clips downloaded during the current run.
+`--process-existing-metadata` runs one full metadata processing pass after the
+download phase.
 
 ```mermaid
 flowchart TD
@@ -247,22 +259,22 @@ flowchart TD
   B --> C["resolve output and library paths"]
   C --> D["create conversion promise chain"]
   D --> E["runDownloadFlow"]
-  E --> F{"successful download?"}
-  F -- yes --> G["record downloaded clipId"]
-  G --> H["queueConversion"]
-  H --> I{"--process-downloaded-only?"}
-  I -- yes --> J["processClipIds = downloaded clip IDs"]
-  I -- no --> K["processClipIds unset"]
-  J --> L["runProcessFlow"]
-  K --> L
-  F -- no --> M["skip conversion for that track"]
-  L --> N["await conversion chain"]
+  E --> F{"--process-existing-metadata?"}
+  F -- no --> G{"successful download?"}
+  G -- yes --> H["record downloaded clipId"]
+  H --> I["queueConversion<br/>processClipIds = downloaded clip IDs"]
+  G -- no --> J["skip conversion for that track"]
+  F -- yes --> K["download phase completes"]
+  K --> L["queue one full conversion<br/>processClipIds unset"]
+  I --> M["runProcessFlow"]
+  L --> M
+  M --> N["await conversion chain"]
 ```
 
 ### Sync Notes
 
 - `src/index.ts`
-  - Registers `--process-downloaded-only` on `sync`.
+  - Registers `--process-existing-metadata` on `sync`.
 - `src/cli-actions.ts`
   - `runSyncFlow(options)`: owns the chained workflow.
   - `downloadedClipIds`: local `Set<string>` tracking successful downloads in
@@ -275,27 +287,25 @@ flowchart TD
   - `Processor.getProcessSongs(...)`: restricts conversion/update work to those
     IDs while preserving the full metadata list when saving.
 
-### `--process-downloaded-only`
+### Sync Processing Scope
 
 ```mermaid
 flowchart TD
-  A["sync download succeeds for clipId"] --> B["add clipId to downloadedClipIds"]
-  B --> C["queue conversion"]
-  C --> D{"--process-downloaded-only?"}
-  D -- yes --> E["Processor filters conversion/update work to downloadedClipIds"]
-  D -- no --> F["Processor considers all songs in metadata"]
-  E --> G["full metadata database is still preserved when saved"]
-  F --> G
+  A["sync starts"] --> B{"--process-existing-metadata?"}
+  B -- no --> C["Processor filters conversion/update work to downloadedClipIds"]
+  B -- yes --> D["Processor considers all songs in metadata"]
+  C --> E["full metadata database is still preserved when saved"]
+  D --> E
 ```
 
 Important behavior:
 
 - Existing entries in the metadata database remain in memory and are written back
   when metadata is persisted.
-- With `--process-downloaded-only`, only tracks downloaded during that sync run
-  are considered for conversion and update work.
-- Without `--process-downloaded-only`, sync keeps the previous behavior and
-  allows the processor to consider all metadata entries.
+- By default, only tracks downloaded during that sync run are considered for
+  conversion and update work.
+- With `--process-existing-metadata`, sync re-processes all metadata entries
+  after the download phase completes.
 
 ## Download Images Command
 

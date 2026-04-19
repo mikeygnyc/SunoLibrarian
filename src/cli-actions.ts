@@ -146,6 +146,33 @@ async function exportMetadataJsonIfRequested(
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
 }
 
+async function saveWorkspacesToDatabase(options: CliOptions, workspaces: IWorkspace[]): Promise<void> {
+  const databasePath = resolveMetadataDatabasePath(options);
+  const store = new SqliteMetadataStore(databasePath);
+  try {
+    await store.upsertWorkspaces(workspaces);
+  } finally {
+    store.close();
+  }
+}
+
+async function saveTrackWorkspaceLinks(
+  options: CliOptions,
+  workspace: IWorkspace,
+  clipIds: string[],
+): Promise<void> {
+  const databasePath = resolveMetadataDatabasePath(options);
+  const store = new SqliteMetadataStore(databasePath);
+  try {
+    await store.upsertWorkspaces([workspace]);
+    for (const clipId of clipIds) {
+      await store.upsertSongWorkspace(clipId, workspace, "discovery");
+    }
+  } finally {
+    store.close();
+  }
+}
+
 async function getImagesNeedingDownload(
   rootDir: string,
   databasePath?: string,
@@ -323,6 +350,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   try {
   console.log("Fetching workspaces...");
   const workspaces = await client.getWorkspaces();
+  await metadataStore.upsertWorkspaces(workspaces);
   console.log(`Found ${workspaces.length} workspace(s)`);
 
   const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
@@ -344,6 +372,9 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   for (const workspace of targetWorkspaces) {
     console.log(`\nProcessing workspace: ${workspace.name}`);
     const tracks = await client.getTracks(workspace.id);
+    for (const track of tracks) {
+      await metadataStore.upsertSongWorkspace(track.id, workspace, "discovery");
+    }
     console.log(`Found ${tracks.length} track(s)`);
 
     for (let i = 0; i < tracks.length; i++) {
@@ -524,7 +555,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   const conversionOutput = options.library || outputDir;
   const databasePath = resolveMetadataDatabasePath(options);
   const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
-  const processDownloadedOnly = options.processDownloadedOnly === true;
+  const processExistingMetadata = options.processExistingMetadata === true;
   const downloadedClipIds = new Set<string>();
   let conversionChain: Promise<void> = Promise.resolve();
   let queuedConversions = 0;
@@ -546,7 +577,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
         images: options.images,
         lyrics: options.lyrics,
         exitOnError: options.exitOnError,
-        processClipIds: processDownloadedOnly ? Array.from(downloadedClipIds) : undefined,
+        processClipIds: processExistingMetadata ? undefined : Array.from(downloadedClipIds),
       });
     }).catch((err: any) => {
       const wrapped = err instanceof Error ? err : new Error(String(err));
@@ -557,7 +588,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
     });
   };
 
-  const downloadResult = await runDownloadFlow({
+  await runDownloadFlow({
     ...options,
     output: outputDir,
     database: databasePath,
@@ -565,11 +596,13 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
     copySongsMetadataToOutput: false,
     onTrackDownloaded: ({ clipId }: { clipId: string }) => {
       downloadedClipIds.add(clipId);
-      queueConversion();
+      if (!processExistingMetadata) {
+        queueConversion();
+      }
     },
   });
 
-  if (!processDownloadedOnly && queuedConversions === 0 && downloadResult.downloaded > 0) {
+  if (processExistingMetadata) {
     queueConversion();
   }
 
@@ -664,12 +697,18 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
 export async function runListFlow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const workspaces = await client.getWorkspaces();
+  await saveWorkspacesToDatabase(options, workspaces);
   const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
 
   if (options.json) {
     const result: Record<string, any> = {};
     for (const workspace of targetWorkspaces) {
       const tracks = await client.getTracks(workspace.id);
+      await saveTrackWorkspaceLinks(
+        options,
+        workspace,
+        tracks.map((track) => track.id),
+      );
       result[workspace.name] = tracks;
     }
     console.log(JSON.stringify(result, null, 2));
@@ -679,6 +718,11 @@ export async function runListFlow(options: CliOptions): Promise<void> {
   for (const workspace of targetWorkspaces) {
     console.log(`\n=== ${workspace.name} ===`);
     const tracks = await client.getTracks(workspace.id);
+    await saveTrackWorkspaceLinks(
+      options,
+      workspace,
+      tracks.map((track) => track.id),
+    );
     tracks.forEach((track) => {
       console.log(`  ${track.id} - ${track.title || "(Untitled)"} [${track.status}]`);
     });
@@ -688,6 +732,7 @@ export async function runListFlow(options: CliOptions): Promise<void> {
 export async function runWorkspacesFlow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const workspaces = await client.getWorkspaces();
+  await saveWorkspacesToDatabase(options, workspaces);
 
   if (options.json) {
     console.log(JSON.stringify(workspaces, null, 2));
@@ -731,11 +776,17 @@ export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
   }
 
   const workspaces = await client.getWorkspaces();
+  await saveWorkspacesToDatabase(options, workspaces);
   const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
 
   const allTrackIds: string[] = [];
   for (const workspace of targetWorkspaces) {
     const tracks = await client.getTracks(workspace.id);
+    await saveTrackWorkspaceLinks(
+      options,
+      workspace,
+      tracks.map((track) => track.id),
+    );
     const filteredTracks = tracks.filter((t) => isTrackInDateWindow(t, createdAfter, createdBefore));
     allTrackIds.push(...filteredTracks.map((t) => t.id));
   }
@@ -759,5 +810,6 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   console.log("Refreshing all workspaces...");
   const workspaces = await client.refreshAllWorkspaces();
+  await saveWorkspacesToDatabase(options, workspaces);
   console.log(`Refreshed ${workspaces.length} workspace(s)`);
 }
