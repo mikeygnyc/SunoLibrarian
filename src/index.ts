@@ -36,23 +36,28 @@ function withCliError<TArgs extends unknown[], TResult>(
   };
 }
 
+function addMetadataDatabaseOptions(command: Command): Command {
+  return command
+    .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+    .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+    .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres");
+}
+
 program
   .command("clear-auth-token")
   .description("Clear the cached Suno authentication token")
   .action(withCliError(runClearAuthTokenFlow));
 
-program
+addMetadataDatabaseOptions(program
   .command("import-metadata-json")
-  .description("Import existing songs_metadata.json data into the SQLite metadata database")
-  .requiredOption("-i, --input <path>", "Current-format metadata JSON file")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .description("Import existing songs_metadata.json data into the metadata database")
+  .requiredOption("-i, --input <path>", "Current-format metadata JSON file"))
   .action(withCliError(runImportMetadataJsonFlow));
 
-program
+addMetadataDatabaseOptions(program
   .command("export-metadata-json")
-  .description("Export SQLite metadata database data as current-format JSON")
-  .requiredOption("-o, --output <path>", "Output metadata JSON file")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .description("Export metadata database data as current-format JSON")
+  .requiredOption("-o, --output <path>", "Output metadata JSON file"))
   .action(withCliError(runExportMetadataJsonFlow));
 
 program
@@ -69,7 +74,9 @@ program
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
   .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
   .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
@@ -95,7 +102,9 @@ program
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("-f, --format <format>", "Download format: mp3 or wav", "wav")
   .option("-o, --output <dir>", "Download/output directory for source files", DEFAULT_DOWNLOAD_ROOT)
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
   .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
   .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
@@ -120,7 +129,9 @@ program
   .description("Run audio conversion/metadata embedding (converter functionality)")
   .requiredOption("-i, --input <path>", "Input root directory")
   .requiredOption("-o, --output <path>", "Output root directory")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
   .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
   .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
@@ -150,7 +161,9 @@ program
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("-o, --output <dir>", "Output directory", DEFAULT_DOWNLOAD_ROOT)
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("--import-metadata-json <path>", "Import current-format metadata JSON into the database before running")
   .option("--export-metadata-json <path>", "Export metadata database to current-format JSON after running")
   .option("--metadata-file <path>", "Legacy JSON export path used by --copy-songs-metadata-to-output")
@@ -171,7 +184,9 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--json", "Output as JSON")
   .action(withCliError(runListFlow));
@@ -187,7 +202,9 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("--json", "Output as JSON")
   .action(withCliError(runWorkspacesFlow));
 
@@ -216,7 +233,9 @@ program
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--ids <ids>", "Comma-separated list of track IDs to fetch")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
@@ -233,7 +252,9 @@ program
   .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
   .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-  .option("--database <path>", "SQLite metadata database path", DEFAULT_DATABASE_PATH)
+  .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
+  .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .action(withCliError(runRefreshFlow));
 
 program.parse();

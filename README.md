@@ -220,21 +220,29 @@ Verification and troubleshooting:
 
 ### METADATA STORAGE
 
-The authoritative combined song metadata now lives in a SQLite database. By default, the database is created at:
+The authoritative combined song metadata lives in a database. SQLite remains the default and is created at:
 
 ```text
 data/suno-export.sqlite
 ```
 
-Use `--database <path>` on commands that read or write library metadata to store data somewhere else. The database uses a normalized schema: primary song fields live in `songs`, repeated values live in child tables such as `song_tags`, `song_negative_tags`, and `song_mashup_sources`, loaded Suno projects/workspaces are upserted into `workspaces`, and song-to-workspace membership lives in `song_workspaces`. Only the nested Suno API payload is kept as JSON in `raw_api_response_json`.
+Use `--database <path>` on commands that read or write library metadata to store SQLite data somewhere else. To use Postgres instead, pass `--database-type postgres` with `--postgres-url <url>`, or set `SUNO_EXPORT_POSTGRES_URL`.
 
-Import an existing current-format JSON file into SQLite:
+```bash
+suno-export process -i ./downloads -o ./library \
+  --database-type postgres \
+  --postgres-url postgres://user:password@localhost:5432/suno_export
+```
+
+Both database backends use the same normalized schema: primary song fields live in `songs`, repeated values live in child tables such as `song_tags`, `song_negative_tags`, and `song_mashup_sources`, loaded Suno projects/workspaces are upserted into `workspaces`, and song-to-workspace membership lives in `song_workspaces`. Only the nested Suno API payload is kept as JSON in `raw_api_response_json`.
+
+Import an existing current-format JSON file into the selected database:
 
 ```bash
 suno-export import-metadata-json --input ./downloads/songs_metadata.json
 ```
 
-Export the SQLite database back to the current JSON format:
+Export the selected database back to the current JSON format:
 
 ```bash
 suno-export export-metadata-json --output ./downloads/songs_metadata.json
@@ -254,29 +262,33 @@ This command removes only the auth token from `~/.suno-export/cache.json`; it do
 
 #### `import-metadata-json`
 
-Import an existing current-format metadata JSON array into the SQLite metadata database.
+Import an existing current-format metadata JSON array into the metadata database.
 
 ```text
-suno-export import-metadata-json --input <path> [--database <path>]
+suno-export import-metadata-json --input <path> [--database-type sqlite|postgres] [--database <path>] [--postgres-url <url>]
 ```
 
 Options:
 
 - `-i, --input <path>`: current-format metadata JSON file. Required.
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 
 #### `export-metadata-json`
 
-Export the SQLite metadata database to the current `songs_metadata.json` array format.
+Export the metadata database to the current `songs_metadata.json` array format.
 
 ```text
-suno-export export-metadata-json --output <path> [--database <path>]
+suno-export export-metadata-json --output <path> [--database-type sqlite|postgres] [--database <path>] [--postgres-url <url>]
 ```
 
 Options:
 
 - `-o, --output <path>`: output metadata JSON file. Required.
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 
 #### `download`
 
@@ -295,7 +307,9 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 - `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
 - `--export-metadata-json <path>`: export the database to current-format JSON after running.
 - `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
@@ -323,7 +337,9 @@ Options:
 - `-w, --workspace <id>`: only process the given workspace ID.
 - `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
 - `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 - `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
 - `--export-metadata-json <path>`: export the database to current-format JSON after running.
 - `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
@@ -359,7 +375,9 @@ Options:
 
 - `-i, --input <path>`: input root directory. Required.
 - `-o, --output <path>`: output root directory. Required.
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 - `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
 - `--export-metadata-json <path>`: export the database to current-format JSON after running.
 - `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
@@ -391,7 +409,9 @@ Options:
 - `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
 - `--browser-profile <dir>`: Chrome user data directory for a launched browser.
 - `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
 - `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
 - `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
 - `--export-metadata-json <path>`: export the database to current-format JSON after running.
 - `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
@@ -403,7 +423,7 @@ Options:
 Notes:
 
 - You must pass at least one of: `--list`, `--fetch-image-list`, `--fetch-missing`.
-- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and the configured SQLite metadata database.
+- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and the configured metadata database.
 
 #### `list`
 
@@ -524,9 +544,10 @@ Process flow reads a download-style input root and writes converted output.
 
 ### SONGS METADATA DATABASE LOCATION
 
-- The authoritative metadata database defaults to `data/suno-export.sqlite`.
+- The authoritative metadata database defaults to SQLite at `data/suno-export.sqlite`.
 - Use `--database <path>` with `download`, `sync`, `process`, or `download-images` to override the SQLite database path.
-- Use `import-metadata-json` or `--import-metadata-json <path>` to migrate an existing `songs_metadata.json` file into SQLite.
+- Use `--database-type postgres --postgres-url <url>` with metadata-aware commands to use Postgres instead, or set `SUNO_EXPORT_POSTGRES_URL`.
+- Use `import-metadata-json` or `--import-metadata-json <path>` to migrate an existing `songs_metadata.json` file into the selected database.
 - Use `export-metadata-json` or `--export-metadata-json <path>` to write a compatibility JSON file matching the previous format.
 - If `--copy-songs-metadata-to-output` is set, a finalized JSON export is written to the output side only after completion, using `--metadata-file` when provided.
 
@@ -538,7 +559,7 @@ Process flow reads a download-style input root and writes converted output.
 - `src/client.ts`: Suno API client + download helpers.
 - `src/auth.ts`: browser token extraction (Puppeteer).
 - `src/converter.ts`: converter entrypoint used by the CLI.
-- `src/metadata-store.ts`: SQLite metadata store plus JSON import/export helpers.
+- `src/metadata-store.ts`: SQLite/Postgres metadata stores plus JSON import/export helpers.
 - `src/library-processor.ts`: processing pipeline coordinator.
 - `src/audio-converter.ts`: audio conversion (ffmpeg).
 - `src/metadata-processor.ts`: metadata/tag embedding + sidecar writes.

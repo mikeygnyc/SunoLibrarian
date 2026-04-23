@@ -5,7 +5,12 @@ import { AudioConverter } from "./audio-converter";
 import { MetadataProcessor } from "./metadata-processor";
 import { normalizeMetadata } from "./lib/metadata/normalize-metadata";
 import * as logger from "./converter-logger"; // dual console/file logger
-import { exportMetadataDatabaseToJson, resolveDatabasePath, SqliteMetadataStore } from "./metadata-store";
+import {
+  createMetadataStore,
+  exportMetadataDatabaseToJson,
+  MetadataStoreConfig,
+  resolveMetadataStoreConfig,
+} from "./metadata-store";
 
 
 export class Processor {
@@ -66,8 +71,12 @@ export class Processor {
       : path.join(this.config.outputRoot, "songs_metadata.json");
   }
 
-  private getMetadataDatabasePath(): string {
-    return resolveDatabasePath(this.config.metadataDatabasePath);
+  private getMetadataStoreConfig(): MetadataStoreConfig {
+    return resolveMetadataStoreConfig({
+      databaseType: this.config.metadataDatabaseType,
+      database: this.config.metadataDatabasePath,
+      postgresUrl: this.config.metadataPostgresUrl,
+    });
   }
 
   private getProcessTargetClipIds(): Set<string> | null {
@@ -593,21 +602,21 @@ export class Processor {
   private metadataDatabaseExisted = false;
 
   private async loadMetadata(): Promise<ISongData[]> {
-    const databasePath = this.getMetadataDatabasePath();
-    this.metadataDatabaseExisted = await this.fileExists(databasePath);
-    const store = new SqliteMetadataStore(databasePath);
+    const storeConfig = this.getMetadataStoreConfig();
+    const store = await createMetadataStore(storeConfig);
+    this.metadataDatabaseExisted = await store.exists();
     let songs: ISongData[];
     try {
       songs = await store.loadAll();
     } catch (err: any) {
       logger.error(`Failed to read metadata database: ${err.message || err}`);
-      store.close();
+      await store.close();
       throw err;
     }
-    store.close();
+    await store.close();
 
     if (!this.metadataDatabaseExisted) {
-      logger.warn(`Metadata database not found; created empty database: ${databasePath}`);
+      logger.warn(`Metadata database not found; created empty database: ${store.location}`);
       return [];
     }
 
@@ -650,24 +659,22 @@ export class Processor {
     // normalizes when loading, but persisting should also re-run just in case.
     this.songs = this.songs.map(song => normalizeMetadata(song));
 
-    const databasePath = this.getMetadataDatabasePath();
-    const store = new SqliteMetadataStore(databasePath);
+    const store = await createMetadataStore(this.getMetadataStoreConfig());
     try {
       await store.saveAll(this.songs);
     } catch (err: any) {
       logger.warn(`Failed to update metadata database: ${err.message || err}`);
     } finally {
-      store.close();
+      await store.close();
     }
   }
 
   private async copyFinalMetadataToOutput(): Promise<void> {
     if (this.config.copySongsMetadataToOutput !== true) return;
 
-    const databasePath = this.getMetadataDatabasePath();
     const outFile = this.getMetadataFilePath();
     try {
-      await exportMetadataDatabaseToJson(outFile, databasePath);
+      await exportMetadataDatabaseToJson(outFile, this.getMetadataStoreConfig());
       logger.log(`Exported finalized songs_metadata.json to output: ${outFile}`);
     } catch (err: any) {
       logger.warn(`Failed to export songs_metadata.json: ${err.message || err}`);

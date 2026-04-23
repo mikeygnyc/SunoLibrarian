@@ -3,13 +3,20 @@ import { IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import type { IConverterRunOptions } from "./lib/interfaces";
 import * as logger from "./converter-logger";
 import { Processor } from "./library-processor";
-import { resolveDatabasePath } from "./metadata-store";
+import { describeMetadataStoreConfig, resolveMetadataStoreConfig } from "./metadata-store";
 
 export async function runConverter(options: IConverterRunOptions): Promise<void> {
+  const metadataStoreConfig = resolveMetadataStoreConfig({
+    databaseType: options.metadataDatabaseType,
+    database: options.metadataDatabase,
+    postgresUrl: options.metadataPostgresUrl,
+  });
   const config: IProcessorConfig = {
     inputRoot: path.resolve(options.input),
     outputRoot: path.resolve(options.output),
-    metadataDatabasePath: resolveDatabasePath(options.metadataDatabase),
+    metadataDatabaseType: metadataStoreConfig.type,
+    metadataDatabasePath: metadataStoreConfig.sqlitePath,
+    metadataPostgresUrl: metadataStoreConfig.postgresUrl,
     metadataFilePath: options.metadataFile
       ? path.resolve(options.metadataFile)
       : path.join(path.resolve(options.output), "songs_metadata.json"),
@@ -40,14 +47,14 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   logger.log("===================");
   logger.log(`Input:  ${config.inputRoot}`);
   logger.log(`Output: ${config.outputRoot}`);
-  logger.log(`Metadata database: ${config.metadataDatabasePath}`);
+  logger.log(`Metadata database: ${describeMetadataStoreConfig(metadataStoreConfig)}`);
   logger.log(`Formats: ${config.formats.join(", ")}`);
   logger.log(`MP3 Bitrate: ${config.mp3Bitrate}kbps`);
   logger.log(`Embed Images: ${config.embedImages}`);
   logger.log(`Embed Lyrics: ${config.embedLyrics}`);
   if (config.processConcurrency) logger.log(`Processing concurrency: ${config.processConcurrency}`);
   if (config.updateConcurrency) logger.log(`Update concurrency: ${config.updateConcurrency}`);
-  if (config.processClipIds?.length) logger.log(`Processing selected clips only: ${config.processClipIds.length}`);
+  if (config.processClipIds?.length) logger.log(`Processing clips: ${config.processClipIds.length}`);
   if (config.reconvertBefore) logger.log(`Reconvert before: ${config.reconvertBefore.toISOString()}`);
   if (config.reconvertAfter) logger.log(`Reconvert after: ${config.reconvertAfter.toISOString()}`);
   logger.log("");
