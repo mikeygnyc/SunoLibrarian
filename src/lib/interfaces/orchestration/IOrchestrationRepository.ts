@@ -7,6 +7,12 @@ import type { IWorkerInstance } from "./IWorkerInstance";
 import type { IWorkerLease } from "./IWorkerLease";
 import type { OrchestrationJobStatus, OrchestrationStageStatus, WorkItemStatus } from "./IOrchestrationShared";
 
+export interface IClaimedWorkItem {
+  job: IOrchestrationJob;
+  stage: IOrchestrationStage;
+  workItem: IWorkItem;
+}
+
 export interface IOrchestrationRepository {
   initialize(): Promise<void>;
   close(): Promise<void>;
@@ -27,6 +33,7 @@ export interface IOrchestrationRepository {
   ): Promise<void>;
   createWorkItem(workItem: IWorkItem): Promise<IWorkItem>;
   listWorkItems(jobId: string): Promise<IWorkItem[]>;
+  claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<IClaimedWorkItem | null>;
   updateWorkItemStatus(
     workItemId: string,
     status: WorkItemStatus,
@@ -37,6 +44,17 @@ export interface IOrchestrationRepository {
   upsertLease(lease: IWorkerLease): Promise<void>;
   releaseLease(leaseId: string, releasedAt?: Date): Promise<void>;
   listActiveLeases(resourceKey?: string): Promise<IWorkerLease[]>;
+  acquireLease(params: {
+    resourceKey: string;
+    workerInstanceId: string;
+    workerRole: IWorkerLease["workerRole"];
+    jobId?: string;
+    stageId?: string;
+    workItemId?: string;
+    maxActive: number;
+    conflictResourceKeys?: string[];
+    leaseTtlMs?: number;
+  }): Promise<IWorkerLease | null>;
   appendStatusEvent(event: IStatusEvent): Promise<void>;
   listStatusEvents(jobId: string): Promise<IStatusEvent[]>;
 }
@@ -47,4 +65,3 @@ export interface ICentralLogRepository {
   write(entry: ILogEntry): Promise<void>;
   query(filter?: ILogQueryFilter): Promise<ILogQueryResult>;
 }
-

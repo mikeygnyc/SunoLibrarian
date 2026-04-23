@@ -15,7 +15,6 @@ import type {
 } from "../lib/interfaces";
 import { CentralLogger, DatabaseLogSink } from "../logging";
 import { LeaseManager } from "./lease-manager";
-import { LocalControlPlaneRepository } from "./local-control-plane";
 import { DEFAULT_RUNTIME_CONFIG } from "./runtime-defaults";
 
 type StagePlan = {
@@ -45,7 +44,7 @@ export class LocalJobOrchestrator {
   private readonly leaseManager: LeaseManager;
 
   constructor(
-    private readonly repository: LocalControlPlaneRepository = new LocalControlPlaneRepository(),
+    private readonly repository: IOrchestrationRepository & ICentralLogRepository,
     private readonly runtimeConfig: IRuntimeConfig = DEFAULT_RUNTIME_CONFIG,
   ) {
     this.logger = new CentralLogger({

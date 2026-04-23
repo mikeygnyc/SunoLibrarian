@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import type {
+  IClaimedWorkItem,
   ICentralLogRepository,
   ILogEntry,
   ILogQueryFilter,
@@ -40,12 +41,6 @@ const EMPTY_STATE: PersistedState = {
   workerInstances: [],
   workerLeases: [],
   statusEvents: [],
-};
-
-export type ClaimedWorkItem = {
-  job: IOrchestrationJob;
-  stage: IOrchestrationStage;
-  workItem: IWorkItem;
 };
 
 export class LocalControlPlaneRepository implements IOrchestrationRepository, ICentralLogRepository {
@@ -155,7 +150,7 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   }
 
-  async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<ClaimedWorkItem | null> {
+  async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<IClaimedWorkItem | null> {
     return this.withLockedState((state) => {
       const activeJobs = new Set(
         state.jobs

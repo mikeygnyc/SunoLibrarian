@@ -2,8 +2,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { SunoClient } from "./client";
-import type { IWorkspace } from "./lib/interfaces";
-import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalControlPlaneRepository, LocalJobOrchestrator, type ClaimedWorkItem, type LocalWorkflowContext } from "./orchestration";
+import type { ICentralLogRepository, IClaimedWorkItem, IOrchestrationRepository, IWorkspace } from "./lib/interfaces";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalControlPlaneRepository, LocalJobOrchestrator, PostgresControlPlaneRepository, type LocalWorkflowContext } from "./orchestration";
 import { CentralLogger, DatabaseLogSink } from "./logging";
 import {
   AssetAcquisitionService,
@@ -43,6 +43,8 @@ type DownloadedTrackHook = (params: {
   clipId: string;
   outputDir: string;
 }) => void;
+
+type ControlPlaneRepository = IOrchestrationRepository & ICentralLogRepository;
 
 function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
   return typeof options.metadataFile === "string" && options.metadataFile.trim().length > 0
@@ -509,39 +511,46 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
-  const orchestrator = createLocalJobOrchestrator();
-  const snapshot = await orchestrator.getJobSnapshot(jobId);
-  if (!snapshot.job) {
-    throw new Error(`Job not found: ${jobId}`);
-  }
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const snapshot = await getJobSnapshot(repository, jobId);
+    if (!snapshot.job) {
+      throw new Error(`Job not found: ${jobId}`);
+    }
 
-  if (options.json) {
-    console.log(JSON.stringify(snapshot, null, 2));
-    return;
-  }
+    if (options.json) {
+      console.log(JSON.stringify(snapshot, null, 2));
+      return;
+    }
 
-  console.log(`Job ${snapshot.job.id}`);
-  console.log(`  Workflow: ${snapshot.job.workflowType}`);
-  console.log(`  Status: ${snapshot.job.status}`);
-  if (snapshot.job.startedAt) {
-    console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
-  }
-  if (snapshot.job.completedAt) {
-    console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
-  }
-  if (snapshot.stages.length > 0) {
-    console.log("\nStages:");
-    snapshot.stages.forEach((stage) => {
-      console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
-    });
+    console.log(`Job ${snapshot.job.id}`);
+    console.log(`  Workflow: ${snapshot.job.workflowType}`);
+    console.log(`  Status: ${snapshot.job.status}`);
+    if (snapshot.job.startedAt) {
+      console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
+    }
+    if (snapshot.job.completedAt) {
+      console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
+    }
+    if (snapshot.stages.length > 0) {
+      console.log("\nStages:");
+      snapshot.stages.forEach((stage) => {
+        console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
+      });
+    }
+  } finally {
+    await repository.close();
   }
 }
 
 export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
   const intervalMs = parseInt(String(options.interval ?? DEFAULT_WATCH_INTERVAL_MS), 10);
   while (true) {
-    const orchestrator = createLocalJobOrchestrator();
-    const snapshot = await orchestrator.getJobSnapshot(jobId);
+    const repository = createControlPlaneRepository(options);
+    await repository.initialize();
+    const snapshot = await getJobSnapshot(repository, jobId);
+    await repository.close();
     if (!snapshot.job) {
       throw new Error(`Job not found: ${jobId}`);
     }
@@ -558,51 +567,57 @@ export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): 
 }
 
 export async function runLogsFlow(options: CliOptions = {}): Promise<void> {
-  const repository = new LocalControlPlaneRepository();
-  await repository.initialize();
-  const result = await repository.query({
-    jobId: typeof options.jobId === "string" ? options.jobId : undefined,
-    stageId: typeof options.stageId === "string" ? options.stageId : undefined,
-    workItemId: typeof options.workItemId === "string" ? options.workItemId : undefined,
-    workflowType: typeof options.workflowType === "string" ? options.workflowType as any : undefined,
-    workerInstanceId: typeof options.workerInstanceId === "string" ? options.workerInstanceId : undefined,
-    role: typeof options.role === "string" ? options.role as any : undefined,
-    clipId: typeof options.clipId === "string" ? options.clipId : undefined,
-    level: typeof options.level === "string" ? options.level as any : undefined,
-    startTime: parseOptionalDate(options.startTime, "--start-time"),
-    endTime: parseOptionalDate(options.endTime, "--end-time"),
-    limit: options.limit ? parseInt(String(options.limit), 10) : 100,
-  });
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const result = await repository.query({
+      jobId: typeof options.jobId === "string" ? options.jobId : undefined,
+      stageId: typeof options.stageId === "string" ? options.stageId : undefined,
+      workItemId: typeof options.workItemId === "string" ? options.workItemId : undefined,
+      workflowType: typeof options.workflowType === "string" ? options.workflowType as any : undefined,
+      workerInstanceId: typeof options.workerInstanceId === "string" ? options.workerInstanceId : undefined,
+      role: typeof options.role === "string" ? options.role as any : undefined,
+      clipId: typeof options.clipId === "string" ? options.clipId : undefined,
+      level: typeof options.level === "string" ? options.level as any : undefined,
+      startTime: parseOptionalDate(options.startTime, "--start-time"),
+      endTime: parseOptionalDate(options.endTime, "--end-time"),
+      limit: options.limit ? parseInt(String(options.limit), 10) : 100,
+    });
 
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (result.entries.length === 0) {
+      console.log("No logs matched the requested filters.");
+      return;
+    }
+
+    result.entries.forEach((entry) => {
+      const segments = [
+        entry.timestamp.toISOString(),
+        entry.level.toUpperCase(),
+        entry.context?.workflowType,
+        entry.context?.role,
+        entry.context?.jobId,
+        entry.context?.stageId,
+        entry.context?.workItemId,
+        entry.message,
+      ].filter((segment): segment is string => Boolean(segment));
+      console.log(segments.join(" | "));
+    });
+  } finally {
+    await repository.close();
   }
-
-  if (result.entries.length === 0) {
-    console.log("No logs matched the requested filters.");
-    return;
-  }
-
-  result.entries.forEach((entry) => {
-    const segments = [
-      entry.timestamp.toISOString(),
-      entry.level.toUpperCase(),
-      entry.context?.workflowType,
-      entry.context?.role,
-      entry.context?.jobId,
-      entry.context?.stageId,
-      entry.context?.workItemId,
-      entry.message,
-    ].filter((segment): segment is string => Boolean(segment));
-    console.log(segments.join(" | "));
-  });
 }
 
 export async function runOrchestratorFlow(options: CliOptions = {}): Promise<void> {
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
-  const logger = createRuntimeLogger();
+  const loggerRepository = createControlPlaneRepository(options);
+  await loggerRepository.initialize();
+  const logger = createRuntimeLogger(loggerRepository);
   const roles: Array<"orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion"> = [
     "orchestrator",
     "auth",
@@ -612,23 +627,27 @@ export async function runOrchestratorFlow(options: CliOptions = {}): Promise<voi
     "conversion",
   ];
 
-  do {
-    let processed = 0;
-    for (const role of roles) {
-      processed += await processWorkerRole(role, { ...options, once: true });
-    }
-
-    if (once || processed === 0) {
-      if (processed === 0) {
-        await logger.debug("orchestrator poll found no runnable work", {
-          role: "orchestrator",
-          properties: { pollIntervalMs },
-        });
+  try {
+    do {
+      let processed = 0;
+      for (const role of roles) {
+        processed += await processWorkerRole(role, { ...options, once: true });
       }
-      if (once) return;
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-  } while (true);
+
+      if (once || processed === 0) {
+        if (processed === 0) {
+          await logger.debug("orchestrator poll found no runnable work", {
+            role: "orchestrator",
+            properties: { pollIntervalMs },
+          });
+        }
+        if (once) return;
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    } while (true);
+  } finally {
+    await loggerRepository.close();
+  }
 }
 
 export async function runWorkerFlow(options: CliOptions = {}): Promise<void> {
@@ -639,23 +658,36 @@ export async function runWorkerFlow(options: CliOptions = {}): Promise<void> {
 
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
-  const logger = createRuntimeLogger();
+  const loggerRepository = createControlPlaneRepository(options);
+  await loggerRepository.initialize();
+  const logger = createRuntimeLogger(loggerRepository);
 
-  do {
-    const processed = await processWorkerRole(role, { ...options, once: true });
-    if (once) return;
-    if (processed === 0) {
-      await logger.debug("worker poll found no runnable work", {
-        role,
-        properties: { pollIntervalMs },
-      });
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-  } while (true);
+  try {
+    do {
+      const processed = await processWorkerRole(role, { ...options, once: true });
+      if (once) return;
+      if (processed === 0) {
+        await logger.debug("worker poll found no runnable work", {
+          role,
+          properties: { pollIntervalMs },
+        });
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    } while (true);
+  } finally {
+    await loggerRepository.close();
+  }
 }
 
-function createLocalJobOrchestrator(): LocalJobOrchestrator {
-  return new LocalJobOrchestrator(new LocalControlPlaneRepository());
+function createLocalJobOrchestrator(options: CliOptions = {}): LocalJobOrchestrator {
+  return new LocalJobOrchestrator(createControlPlaneRepository(options), {
+    ...DEFAULT_RUNTIME_CONFIG,
+    mode: options.runtimeMode === "distributed" ? "distributed" : "local",
+    controlPlane: {
+      ...DEFAULT_RUNTIME_CONFIG.controlPlane,
+      postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
+    },
+  });
 }
 
 async function runLocalWorkflowCommand<TResult>(
@@ -664,7 +696,7 @@ async function runLocalWorkflowCommand<TResult>(
   stagePlan: Array<{ type: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"; workerRole: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion" }>,
   runner: (context: LocalWorkflowContext) => Promise<TResult>,
 ): Promise<{ jobId: string; result: TResult }> {
-  const orchestrator = createLocalJobOrchestrator();
+  const orchestrator = createLocalJobOrchestrator(options);
   return orchestrator.runWorkflow(
     {
       workflowType,
@@ -741,115 +773,130 @@ async function submitWorkflowJob(
   options: CliOptions,
   stagePlan: ReturnType<typeof getStagePlan>,
 ): Promise<string> {
-  const repository = new LocalControlPlaneRepository();
-  await repository.initialize();
-  const logger = createRuntimeLogger(repository);
-  const now = new Date();
-  const jobId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  await repository.createJob({
-    id: jobId,
-    workflowType,
-    status: "queued",
-    runtimeMode: "distributed",
-    payload: serializeJobPayload(options),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  for (const [index, stagePlanItem] of stagePlan.entries()) {
-    const stageId = `${jobId}-stage-${index + 1}`;
-    const workItemId = `${jobId}-work-${index + 1}`;
-    await repository.createStage({
-      id: stageId,
-      jobId,
-      stageType: stagePlanItem.type,
-      status: "pending",
-      sequence: index + 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await repository.createWorkItem({
-      id: workItemId,
-      jobId,
-      stageId,
-      stageType: stagePlanItem.type,
-      status: "pending",
-      workerRole: stagePlanItem.workerRole,
-      attemptCount: 0,
-      payload: {
-        workflowType,
-        stageType: stagePlanItem.type,
-      },
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  await logger.info("workflow job submitted", {
-    jobId,
-    workflowType,
-    role: "orchestrator",
-    properties: {
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const logger = createRuntimeLogger(repository);
+    const now = new Date();
+    const jobId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    await repository.createJob({
+      id: jobId,
+      workflowType,
+      status: "queued",
       runtimeMode: "distributed",
-      stageCount: stagePlan.length,
-    },
-  });
+      payload: serializeJobPayload(options),
+      createdAt: now,
+      updatedAt: now,
+    });
 
-  return jobId;
+    for (const [index, stagePlanItem] of stagePlan.entries()) {
+      const stageId = `${jobId}-stage-${index + 1}`;
+      const workItemId = `${jobId}-work-${index + 1}`;
+      await repository.createStage({
+        id: stageId,
+        jobId,
+        stageType: stagePlanItem.type,
+        status: "pending",
+        sequence: index + 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await repository.createWorkItem({
+        id: workItemId,
+        jobId,
+        stageId,
+        stageType: stagePlanItem.type,
+        status: "pending",
+        workerRole: stagePlanItem.workerRole,
+        attemptCount: 0,
+        payload: {
+          workflowType,
+          stageType: stagePlanItem.type,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await logger.info("workflow job submitted", {
+      jobId,
+      workflowType,
+      role: "orchestrator",
+      properties: {
+        runtimeMode: "distributed",
+        stageCount: stagePlan.length,
+        controlPlaneBackend: resolveControlPlaneBackend(options),
+      },
+    });
+
+    return jobId;
+  } finally {
+    await repository.close();
+  }
 }
 
 async function processWorkerRole(
   role: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion",
   options: CliOptions = {},
 ): Promise<number> {
-  const repository = new LocalControlPlaneRepository();
-  await repository.initialize();
-  const logger = createRuntimeLogger(repository);
-  const workerInstanceId = `worker-${role}-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
-  await repository.upsertWorkerInstance({
-    id: workerInstanceId,
-    role,
-    runtimeMode: "distributed",
-    hostname: os.hostname(),
-    processId: process.pid,
-    startedAt: new Date(),
-    heartbeatAt: new Date(),
-    metadata: { kind: "worker-runtime" },
-  });
-  await logger.info("worker polling for work", {
-    workerInstanceId,
-    role,
-    properties: { runtimeMode: "distributed" },
-  });
-
-  const claimed = await repository.claimNextRunnableWorkItem(role, workerInstanceId);
-  if (!claimed) {
-    await logger.debug("no runnable work claimed", {
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const logger = createRuntimeLogger(repository);
+    const workerInstanceId = `worker-${role}-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+    await repository.upsertWorkerInstance({
+      id: workerInstanceId,
+      role,
+      runtimeMode: "distributed",
+      hostname: os.hostname(),
+      processId: process.pid,
+      startedAt: new Date(),
+      heartbeatAt: new Date(),
+      metadata: {
+        kind: "worker-runtime",
+        controlPlaneBackend: resolveControlPlaneBackend(options),
+      },
+    });
+    await logger.info("worker polling for work", {
       workerInstanceId,
       role,
+      properties: {
+        runtimeMode: "distributed",
+        controlPlaneBackend: resolveControlPlaneBackend(options),
+      },
     });
-    return 0;
+
+    const claimed = await repository.claimNextRunnableWorkItem(role, workerInstanceId);
+    if (!claimed) {
+      await logger.debug("no runnable work claimed", {
+        workerInstanceId,
+        role,
+      });
+      return 0;
+    }
+
+    await logger.info("work item claimed", {
+      workerInstanceId,
+      role,
+      jobId: claimed.job.id,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
+      workflowType: claimed.job.workflowType,
+      properties: {
+        stageType: claimed.stage.stageType,
+      },
+    });
+
+    await executeClaimedWorkItem(repository, claimed, workerInstanceId);
+    return 1;
+  } finally {
+    await repository.close();
   }
-
-  await logger.info("work item claimed", {
-    workerInstanceId,
-    role,
-    jobId: claimed.job.id,
-    stageId: claimed.stage.id,
-    workItemId: claimed.workItem.id,
-    workflowType: claimed.job.workflowType,
-    properties: {
-      stageType: claimed.stage.stageType,
-    },
-  });
-
-  await executeClaimedWorkItem(repository, claimed, workerInstanceId);
-  return 1;
 }
 
 async function executeClaimedWorkItem(
-  repository: LocalControlPlaneRepository,
-  claimed: ClaimedWorkItem,
+  repository: ControlPlaneRepository,
+  claimed: IClaimedWorkItem,
   workerInstanceId: string,
 ): Promise<void> {
   const leaseManager = new LeaseManager(repository, DEFAULT_RUNTIME_CONFIG);
@@ -1041,11 +1088,43 @@ async function executeStageHandler(
   }
 }
 
-function createRuntimeLogger(repository: LocalControlPlaneRepository = new LocalControlPlaneRepository()): CentralLogger {
+function createRuntimeLogger(repository: ControlPlaneRepository): CentralLogger {
   return new CentralLogger({
     minimumLevel: "debug",
     sinks: [new DatabaseLogSink(repository)],
   });
+}
+
+function createControlPlaneRepository(options: CliOptions = {}): ControlPlaneRepository {
+  if (resolveControlPlaneBackend(options) === "postgres") {
+    return new PostgresControlPlaneRepository({
+      postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
+    });
+  }
+  return new LocalControlPlaneRepository();
+}
+
+function resolveControlPlaneBackend(options: CliOptions = {}): "local" | "postgres" {
+  if (typeof options.controlPlane === "string" && options.controlPlane.trim() === "postgres") {
+    return "postgres";
+  }
+  if (process.env.SUNO_EXPORT_CONTROL_PLANE_BACKEND?.trim() === "postgres") {
+    return "postgres";
+  }
+  return "local";
+}
+
+async function getJobSnapshot(repository: IOrchestrationRepository, jobId: string): Promise<{
+  job?: Awaited<ReturnType<IOrchestrationRepository["getJob"]>>;
+  stages: Awaited<ReturnType<IOrchestrationRepository["listStages"]>>;
+  workItems: Awaited<ReturnType<IOrchestrationRepository["listWorkItems"]>>;
+  statusEvents: Awaited<ReturnType<IOrchestrationRepository["listStatusEvents"]>>;
+}> {
+  const job = await repository.getJob(jobId);
+  const stages = await repository.listStages(jobId);
+  const workItems = await repository.listWorkItems(jobId);
+  const statusEvents = await repository.listStatusEvents(jobId);
+  return { job, stages, workItems, statusEvents };
 }
 
 function parseOptionalDate(value: unknown, label: string): Date | undefined {

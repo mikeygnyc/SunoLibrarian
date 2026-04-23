@@ -51,6 +51,7 @@ function addMetadataDatabaseOptions(command: Command): Command {
 function addRuntimeModeOptions(command: Command): Command {
   return command
     .option("--runtime-mode <mode>", "Execution mode: local or distributed", "local")
+    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
     .option("--submit-only", "Submit the job without executing it in this process");
 }
 
@@ -271,6 +272,8 @@ addRuntimeModeOptions(program
 program
   .command("run-orchestrator")
   .description("Run the local control-plane orchestrator loop")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
   .option("--once", "Process at most one polling cycle and exit")
   .option("--poll-interval <ms>", "Polling interval in ms", "500")
   .action(withCliError(runOrchestratorFlow));
@@ -279,6 +282,8 @@ program
   .command("run-worker")
   .description("Run a worker loop for a specific role")
   .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
   .option("--once", "Process at most one work item and exit")
   .option("--poll-interval <ms>", "Polling interval in ms", "500")
   .action(withCliError(runWorkerFlow));
@@ -286,12 +291,16 @@ program
 program
   .command("job-status <jobId>")
   .description("Show local orchestrator job status")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
   .option("--json", "Output job status as JSON")
   .action(withCliError(runJobStatusFlow));
 
 program
   .command("watch-job <jobId>")
   .description("Watch local orchestrator job status until completion")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
   .option("--json", "Output job status as JSON on each refresh")
   .option("--interval <ms>", "Polling interval in ms", "1000")
   .action(withCliError(runWatchJobFlow));
@@ -299,6 +308,8 @@ program
 program
   .command("logs")
   .description("Query centralized orchestration logs")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
   .option("--job-id <jobId>", "Filter by job id")
   .option("--stage-id <stageId>", "Filter by stage id")
   .option("--work-item-id <workItemId>", "Filter by work item id")
