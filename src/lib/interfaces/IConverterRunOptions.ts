@@ -1,7 +1,9 @@
 export interface IConverterRunOptions {
   input: string;
   output: string;
+  metadataDatabaseType?: "sqlite" | "postgres";
   metadataDatabase?: string;
+  metadataPostgresUrl?: string;
   metadataFile?: string;
   copySongsMetadataToOutput?: boolean;
   processFormats?: string;
