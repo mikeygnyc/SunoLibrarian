@@ -21,6 +21,9 @@ import type {
 const DEFAULT_LOCAL_CONTROL_PLANE_DIR = path.join(os.homedir(), ".suno-export", "orchestration");
 const STATE_FILE = "state.json";
 const LOGS_FILE = "logs.json";
+const LOCK_DIR = ".lock";
+const LOCK_RETRY_MS = 50;
+const LOCK_TIMEOUT_MS = 5_000;
 
 type PersistedState = {
   jobs: IOrchestrationJob[];
@@ -56,9 +59,10 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
   async close(): Promise<void> {}
 
   async createJob(job: IOrchestrationJob): Promise<IOrchestrationJob> {
-    const state = this.readState();
-    state.jobs.push(job);
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      state.jobs.push(job);
+      return state;
+    });
     return job;
   }
 
@@ -78,26 +82,28 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     status: OrchestrationJobStatus,
     details: Partial<Pick<IOrchestrationJob, "startedAt" | "completedAt" | "errorCode" | "errorMessage">> = {},
   ): Promise<void> {
-    const state = this.readState();
-    state.jobs = state.jobs.map((job) => {
-      if (job.id !== jobId) return job;
-      return {
-        ...job,
-        status,
-        startedAt: details.startedAt ?? job.startedAt,
-        completedAt: details.completedAt ?? job.completedAt,
-        errorCode: details.errorCode ?? job.errorCode,
-        errorMessage: details.errorMessage ?? job.errorMessage,
-        updatedAt: new Date(),
-      };
+    await this.withLockedState((state) => {
+      state.jobs = state.jobs.map((job) => {
+        if (job.id !== jobId) return job;
+        return {
+          ...job,
+          status,
+          startedAt: details.startedAt ?? job.startedAt,
+          completedAt: details.completedAt ?? job.completedAt,
+          errorCode: details.errorCode ?? job.errorCode,
+          errorMessage: details.errorMessage ?? job.errorMessage,
+          updatedAt: new Date(),
+        };
+      });
+      return state;
     });
-    this.writeState(state);
   }
 
   async createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage> {
-    const state = this.readState();
-    state.stages.push(stage);
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      state.stages.push(stage);
+      return state;
+    });
     return stage;
   }
 
@@ -112,27 +118,29 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     status: OrchestrationStageStatus,
     details: Partial<Pick<IOrchestrationStage, "startedAt" | "completedAt" | "blockedByStageId" | "errorCode" | "errorMessage">> = {},
   ): Promise<void> {
-    const state = this.readState();
-    state.stages = state.stages.map((stage) => {
-      if (stage.id !== stageId) return stage;
-      return {
-        ...stage,
-        status,
-        startedAt: details.startedAt ?? stage.startedAt,
-        completedAt: details.completedAt ?? stage.completedAt,
-        blockedByStageId: details.blockedByStageId ?? stage.blockedByStageId,
-        errorCode: details.errorCode ?? stage.errorCode,
-        errorMessage: details.errorMessage ?? stage.errorMessage,
-        updatedAt: new Date(),
-      };
+    await this.withLockedState((state) => {
+      state.stages = state.stages.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        return {
+          ...stage,
+          status,
+          startedAt: details.startedAt ?? stage.startedAt,
+          completedAt: details.completedAt ?? stage.completedAt,
+          blockedByStageId: details.blockedByStageId ?? stage.blockedByStageId,
+          errorCode: details.errorCode ?? stage.errorCode,
+          errorMessage: details.errorMessage ?? stage.errorMessage,
+          updatedAt: new Date(),
+        };
+      });
+      return state;
     });
-    this.writeState(state);
   }
 
   async createWorkItem(workItem: IWorkItem): Promise<IWorkItem> {
-    const state = this.readState();
-    state.workItems.push(workItem);
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      state.workItems.push(workItem);
+      return state;
+    });
     return workItem;
   }
 
@@ -147,69 +155,74 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     status: WorkItemStatus,
     details: Partial<Pick<IWorkItem, "startedAt" | "completedAt" | "leaseOwnerId" | "errorCode" | "errorMessage">> = {},
   ): Promise<void> {
-    const state = this.readState();
-    state.workItems = state.workItems.map((workItem) => {
-      if (workItem.id !== workItemId) return workItem;
-      return {
-        ...workItem,
-        status,
-        startedAt: details.startedAt ?? workItem.startedAt,
-        completedAt: details.completedAt ?? workItem.completedAt,
-        leaseOwnerId: details.leaseOwnerId ?? workItem.leaseOwnerId,
-        errorCode: details.errorCode ?? workItem.errorCode,
-        errorMessage: details.errorMessage ?? workItem.errorMessage,
-        updatedAt: new Date(),
-      };
+    await this.withLockedState((state) => {
+      state.workItems = state.workItems.map((workItem) => {
+        if (workItem.id !== workItemId) return workItem;
+        return {
+          ...workItem,
+          status,
+          startedAt: details.startedAt ?? workItem.startedAt,
+          completedAt: details.completedAt ?? workItem.completedAt,
+          leaseOwnerId: details.leaseOwnerId ?? workItem.leaseOwnerId,
+          errorCode: details.errorCode ?? workItem.errorCode,
+          errorMessage: details.errorMessage ?? workItem.errorMessage,
+          updatedAt: new Date(),
+        };
+      });
+      return state;
     });
-    this.writeState(state);
   }
 
   async upsertWorkerInstance(worker: IWorkerInstance): Promise<void> {
-    const state = this.readState();
-    const existingIndex = state.workerInstances.findIndex((candidate) => candidate.id === worker.id);
-    if (existingIndex >= 0) {
-      state.workerInstances[existingIndex] = worker;
-    } else {
-      state.workerInstances.push(worker);
-    }
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      const existingIndex = state.workerInstances.findIndex((candidate) => candidate.id === worker.id);
+      if (existingIndex >= 0) {
+        state.workerInstances[existingIndex] = worker;
+      } else {
+        state.workerInstances.push(worker);
+      }
+      return state;
+    });
   }
 
   async heartbeatWorkerInstance(workerInstanceId: string, heartbeatAt: Date = new Date()): Promise<void> {
-    const state = this.readState();
-    state.workerInstances = state.workerInstances.map((worker) => {
-      if (worker.id !== workerInstanceId) return worker;
-      return {
-        ...worker,
-        heartbeatAt,
-      };
+    await this.withLockedState((state) => {
+      state.workerInstances = state.workerInstances.map((worker) => {
+        if (worker.id !== workerInstanceId) return worker;
+        return {
+          ...worker,
+          heartbeatAt,
+        };
+      });
+      return state;
     });
-    this.writeState(state);
   }
 
   async upsertLease(lease: IWorkerLease): Promise<void> {
-    const state = this.readState();
-    const existingIndex = state.workerLeases.findIndex((candidate) => candidate.id === lease.id);
-    if (existingIndex >= 0) {
-      state.workerLeases[existingIndex] = lease;
-    } else {
-      state.workerLeases.push(lease);
-    }
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      const existingIndex = state.workerLeases.findIndex((candidate) => candidate.id === lease.id);
+      if (existingIndex >= 0) {
+        state.workerLeases[existingIndex] = lease;
+      } else {
+        state.workerLeases.push(lease);
+      }
+      return state;
+    });
   }
 
   async releaseLease(leaseId: string, releasedAt: Date = new Date()): Promise<void> {
-    const state = this.readState();
-    state.workerLeases = state.workerLeases.map((lease) => {
-      if (lease.id !== leaseId) return lease;
-      return {
-        ...lease,
-        status: "released",
-        releasedAt,
-        updatedAt: new Date(),
-      };
+    await this.withLockedState((state) => {
+      state.workerLeases = state.workerLeases.map((lease) => {
+        if (lease.id !== leaseId) return lease;
+        return {
+          ...lease,
+          status: "released",
+          releasedAt,
+          updatedAt: new Date(),
+        };
+      });
+      return state;
     });
-    this.writeState(state);
   }
 
   async listActiveLeases(resourceKey?: string): Promise<IWorkerLease[]> {
@@ -220,9 +233,10 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
   }
 
   async appendStatusEvent(event: IStatusEvent): Promise<void> {
-    const state = this.readState();
-    state.statusEvents.push(event);
-    this.writeState(state);
+    await this.withLockedState((state) => {
+      state.statusEvents.push(event);
+      return state;
+    });
   }
 
   async listStatusEvents(jobId: string): Promise<IStatusEvent[]> {
@@ -232,9 +246,62 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
   }
 
   async write(entry: ILogEntry): Promise<void> {
-    const logs = this.readLogs();
-    logs.push(entry);
-    this.writeJsonAtomic(this.getLogsPath(), logs);
+    await this.withLogsLock((logs) => {
+      logs.push(entry);
+      return logs;
+    });
+  }
+
+  async acquireLease(params: {
+    resourceKey: string;
+    workerInstanceId: string;
+    workerRole: IWorkerLease["workerRole"];
+    jobId?: string;
+    stageId?: string;
+    workItemId?: string;
+    maxActive: number;
+    conflictResourceKeys?: string[];
+    leaseTtlMs?: number;
+  }): Promise<IWorkerLease | null> {
+    return this.withLockedState((state) => {
+      const now = new Date();
+      state.workerLeases = state.workerLeases.map((lease) => {
+        if (lease.status === "active" && lease.leaseExpiresAt <= now) {
+          return {
+            ...lease,
+            status: "expired",
+            updatedAt: now,
+          };
+        }
+        return lease;
+      });
+
+      const conflictKeys = new Set([params.resourceKey, ...(params.conflictResourceKeys ?? [])]);
+      const activeConflicts = state.workerLeases.filter((lease) => {
+        return lease.status === "active" && conflictKeys.has(lease.resourceKey);
+      });
+
+      if (activeConflicts.length >= params.maxActive) {
+        return null;
+      }
+
+      const lease: IWorkerLease = {
+        id: randomLeaseId(),
+        resourceKey: params.resourceKey,
+        status: "active",
+        workerInstanceId: params.workerInstanceId,
+        workerRole: params.workerRole,
+        jobId: params.jobId,
+        stageId: params.stageId,
+        workItemId: params.workItemId,
+        leaseExpiresAt: new Date(now.getTime() + (params.leaseTtlMs ?? 30_000)),
+        heartbeatAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      state.workerLeases.push(lease);
+      return lease;
+    });
   }
 
   async query(filter: ILogQueryFilter = {}): Promise<ILogQueryResult> {
@@ -311,6 +378,54 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
       this.writeJsonAtomic(this.getLogsPath(), []);
     }
   }
+
+  private async withLockedState<TResult>(
+    updater: (state: PersistedState) => TResult,
+  ): Promise<TResult> {
+    return this.withFileLock(this.getLockPath(), () => {
+      const state = this.readState();
+      const result = updater(state);
+      this.writeState(state);
+      return result;
+    });
+  }
+
+  private async withLogsLock<TResult>(updater: (logs: ILogEntry[]) => TResult): Promise<TResult> {
+    return this.withFileLock(`${this.getLockPath()}-logs`, () => {
+      const logs = this.readLogs();
+      const result = updater(logs);
+      this.writeJsonAtomic(this.getLogsPath(), logs);
+      return result;
+    });
+  }
+
+  private async withFileLock<TResult>(lockPath: string, work: () => TResult): Promise<TResult> {
+    const startedAt = Date.now();
+    while (true) {
+      try {
+        fs.mkdirSync(lockPath);
+        break;
+      } catch (error: any) {
+        if (error?.code !== "EEXIST") {
+          throw error;
+        }
+        if (Date.now() - startedAt > LOCK_TIMEOUT_MS) {
+          throw new Error(`Timed out waiting for local control-plane lock: ${lockPath}`);
+        }
+        await sleep(LOCK_RETRY_MS);
+      }
+    }
+
+    try {
+      return work();
+    } finally {
+      fs.rmdirSync(lockPath);
+    }
+  }
+
+  private getLockPath(): string {
+    return path.join(this.baseDir, LOCK_DIR);
+  }
 }
 
 function dateReviver(_key: string, value: unknown): unknown {
@@ -318,4 +433,12 @@ function dateReviver(_key: string, value: unknown): unknown {
     return new Date(value);
   }
   return value;
+}
+
+function randomLeaseId(): string {
+  return `lease-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
