@@ -9,9 +9,11 @@ import {
   runImportMetadataJsonFlow,
   runListFlow,
   runMetadataFlow,
+  runJobStatusFlow,
   runProcessFlow,
   runRefreshFlow,
   runSyncFlow,
+  runWatchJobFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
@@ -256,5 +258,18 @@ program
   .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
   .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .action(withCliError(runRefreshFlow));
+
+program
+  .command("job-status <jobId>")
+  .description("Show local orchestrator job status")
+  .option("--json", "Output job status as JSON")
+  .action(withCliError(runJobStatusFlow));
+
+program
+  .command("watch-job <jobId>")
+  .description("Watch local orchestrator job status until completion")
+  .option("--json", "Output job status as JSON on each refresh")
+  .option("--interval <ms>", "Polling interval in ms", "1000")
+  .action(withCliError(runWatchJobFlow));
 
 program.parse();
