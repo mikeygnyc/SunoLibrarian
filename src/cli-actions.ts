@@ -6,6 +6,7 @@ import { runConverter } from "./converter";
 import { Processor } from "./library-processor";
 import { normalizeMetadata } from "./lib/metadata/normalize-metadata";
 import { AudioFormat, ISongData, ISunoTrackResponse, IWorkspace } from "./lib/interfaces";
+import { LocalControlPlaneRepository, LocalJobOrchestrator, type LocalWorkflowContext } from "./orchestration";
 import { Storage } from "./storage";
 import {
   createMetadataStore,
@@ -19,6 +20,7 @@ import {
 type CliOptions = Record<string, any>;
 const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
+const DEFAULT_WATCH_INTERVAL_MS = 1000;
 
 export type AuthStorage = Pick<Storage, "getAuthToken" | "setAuthToken">;
 
@@ -308,6 +310,10 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
 }
 
 async function getAuthenticatedClient(options: CliOptions): Promise<SunoClient> {
+  if (options.__authenticatedClient) {
+    return options.__authenticatedClient as SunoClient;
+  }
+
   return getAuthenticatedClientWithDeps(options, {
     storage: new Storage(),
     createClient,
@@ -330,7 +336,7 @@ function getPreferredImageUrl(metadata: any, fallback?: string | null): string |
   );
 }
 
-export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlowResult> {
+async function runDownloadWorkflow(options: CliOptions): Promise<DownloadFlowResult> {
   const client = await getAuthenticatedClient(options);
   const { createdAfter, createdBefore } = getCreatedAtFilters(options);
 
@@ -516,7 +522,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   }
 }
 
-export async function runProcessFlow(options: CliOptions): Promise<void> {
+async function runProcessWorkflow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
   const storeConfig = resolveMetadataStoreOptions(options);
   await importMetadataJsonIfRequested(options, storeConfig);
@@ -573,7 +579,7 @@ export async function runExportMetadataJsonFlow(options: CliOptions): Promise<vo
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
 }
 
-export async function runSyncFlow(options: CliOptions): Promise<void> {
+async function runSyncWorkflow(options: CliOptions): Promise<void> {
   const outputDir = path.resolve(options.output);
   const conversionOutput = options.library || outputDir;
   const storeConfig = resolveMetadataStoreOptions(options);
@@ -588,7 +594,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
     queuedConversions++;
     conversionChain = conversionChain.then(async () => {
       if (conversionFailed) return;
-      await runProcessFlow({
+      await runProcessWorkflow({
         input: outputDir,
         output: conversionOutput,
         databaseType: storeConfig.type,
@@ -613,7 +619,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
     });
   };
 
-  await runDownloadFlow({
+  await runDownloadWorkflow({
     ...options,
     output: outputDir,
     databaseType: storeConfig.type,
@@ -640,7 +646,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
 }
 
-export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
+async function runDownloadImagesWorkflow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const outputDir = path.resolve(options.output);
   const storeConfig = resolveMetadataStoreOptions(options);
@@ -778,7 +784,7 @@ export async function runMetadataFlow(trackId: string, options: CliOptions): Pro
   console.log(JSON.stringify(metadata, null, 2));
 }
 
-export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
+async function runFetchMetadataWorkflow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   const explicitIds = parseTrackIdsOption(options.ids);
   const { createdAfter, createdBefore } = getCreatedAtFilters(options);
@@ -833,10 +839,245 @@ export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
   console.log("\nMetadata fetch complete!");
 }
 
-export async function runRefreshFlow(options: CliOptions): Promise<void> {
+async function runRefreshWorkflow(options: CliOptions): Promise<void> {
   const client = await getAuthenticatedClient(options);
   console.log("Refreshing all workspaces...");
   const workspaces = await client.refreshAllWorkspaces();
   await saveWorkspacesToDatabase(options, workspaces);
   console.log(`Refreshed ${workspaces.length} workspace(s)`);
+}
+
+export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlowResult> {
+  const { result } = await runLocalWorkflowCommand("download", options, [
+    { type: "authorization", workerRole: "auth" },
+    { type: "asset-acquisition", workerRole: "asset" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    const client = await runStage("authorization", async () => getAuthenticatedClient(options));
+    const downloadResult = await runStage("asset-acquisition", async () => {
+      return runDownloadWorkflow({ ...options, __authenticatedClient: client });
+    });
+    await runStage("finalization", async () => undefined);
+    return downloadResult;
+  });
+
+  return result;
+}
+
+export async function runProcessFlow(options: CliOptions): Promise<void> {
+  await runLocalWorkflowCommand("process", options, [
+    { type: "processing", workerRole: "processing" },
+    { type: "conversion", workerRole: "conversion" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    await runStage("processing", async () => undefined);
+    await runStage("conversion", async () => runProcessWorkflow(options));
+    await runStage("finalization", async () => undefined);
+  });
+}
+
+export async function runSyncFlow(options: CliOptions): Promise<void> {
+  await runLocalWorkflowCommand("sync", options, [
+    { type: "authorization", workerRole: "auth" },
+    { type: "asset-acquisition", workerRole: "asset" },
+    { type: "processing", workerRole: "processing" },
+    { type: "conversion", workerRole: "conversion" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    const client = await runStage("authorization", async () => getAuthenticatedClient(options));
+    const outputDir = path.resolve(options.output);
+    const conversionOutput = options.library || outputDir;
+    const storeConfig = resolveMetadataStoreOptions(options);
+    const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
+    const processExistingMetadata = options.processExistingMetadata === true;
+    const downloadedClipIds = new Set<string>();
+    let conversionChain: Promise<void> = Promise.resolve();
+    let conversionFailed: Error | null = null;
+
+    const queueConversion = (): void => {
+      conversionChain = conversionChain.then(async () => {
+        if (conversionFailed) return;
+        await runProcessWorkflow({
+          input: outputDir,
+          output: conversionOutput,
+          databaseType: storeConfig.type,
+          database: storeConfig.sqlitePath,
+          postgresUrl: storeConfig.postgresUrl,
+          copySongsMetadataToOutput: false,
+          processFormats: options.processFormats,
+          processBitrate: options.processBitrate,
+          processConcurrency: options.processConcurrency,
+          processUpdateConcurrency: options.processUpdateConcurrency,
+          images: options.images,
+          lyrics: options.lyrics,
+          exitOnError: options.exitOnError,
+          processClipIds: processExistingMetadata ? undefined : Array.from(downloadedClipIds),
+        });
+      }).catch((err: any) => {
+        const wrapped = err instanceof Error ? err : new Error(String(err));
+        conversionFailed = wrapped;
+        if (!options.exitOnError) {
+          console.error(`Conversion run failed during sync: ${wrapped.message}`);
+        }
+      });
+    };
+
+    await runStage("asset-acquisition", async () => {
+      await runDownloadWorkflow({
+        ...options,
+        __authenticatedClient: client,
+        output: outputDir,
+        databaseType: storeConfig.type,
+        database: storeConfig.sqlitePath,
+        postgresUrl: storeConfig.postgresUrl,
+        exportMetadataJson: undefined,
+        copySongsMetadataToOutput: false,
+        onTrackDownloaded: ({ clipId }: { clipId: string }) => {
+          downloadedClipIds.add(clipId);
+          if (!processExistingMetadata) {
+            queueConversion();
+          }
+        },
+      });
+    });
+
+    await runStage("processing", async () => {
+      if (processExistingMetadata) {
+        queueConversion();
+      }
+    });
+
+    await runStage("conversion", async () => {
+      await conversionChain;
+      if (conversionFailed) {
+        throw conversionFailed;
+      }
+    });
+
+    await runStage("finalization", async () => {
+      await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
+    });
+  });
+}
+
+export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
+  await runLocalWorkflowCommand("download-images", options, [
+    { type: "authorization", workerRole: "auth" },
+    { type: "asset-acquisition", workerRole: "asset" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    const client = await runStage("authorization", async () => getAuthenticatedClient(options));
+    await runStage("asset-acquisition", async () => runDownloadImagesWorkflow({ ...options, __authenticatedClient: client }));
+    await runStage("finalization", async () => undefined);
+  });
+}
+
+export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
+  await runLocalWorkflowCommand("fetch-metadata", options, [
+    { type: "authorization", workerRole: "auth" },
+    { type: "metadata-acquisition", workerRole: "metadata" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    const client = await runStage("authorization", async () => getAuthenticatedClient(options));
+    await runStage("metadata-acquisition", async () => runFetchMetadataWorkflow({ ...options, __authenticatedClient: client }));
+    await runStage("finalization", async () => undefined);
+  });
+}
+
+export async function runRefreshFlow(options: CliOptions): Promise<void> {
+  await runLocalWorkflowCommand("refresh", options, [
+    { type: "authorization", workerRole: "auth" },
+    { type: "metadata-acquisition", workerRole: "metadata" },
+    { type: "finalization", workerRole: "orchestrator" },
+  ], async ({ runStage }) => {
+    const client = await runStage("authorization", async () => getAuthenticatedClient(options));
+    await runStage("metadata-acquisition", async () => runRefreshWorkflow({ ...options, __authenticatedClient: client }));
+    await runStage("finalization", async () => undefined);
+  });
+}
+
+export async function runJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  const orchestrator = createLocalJobOrchestrator();
+  const snapshot = await orchestrator.getJobSnapshot(jobId);
+  if (!snapshot.job) {
+    throw new Error(`Job not found: ${jobId}`);
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
+
+  console.log(`Job ${snapshot.job.id}`);
+  console.log(`  Workflow: ${snapshot.job.workflowType}`);
+  console.log(`  Status: ${snapshot.job.status}`);
+  if (snapshot.job.startedAt) {
+    console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
+  }
+  if (snapshot.job.completedAt) {
+    console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
+  }
+  if (snapshot.stages.length > 0) {
+    console.log("\nStages:");
+    snapshot.stages.forEach((stage) => {
+      console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
+    });
+  }
+}
+
+export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  const intervalMs = parseInt(String(options.interval ?? DEFAULT_WATCH_INTERVAL_MS), 10);
+  while (true) {
+    const orchestrator = createLocalJobOrchestrator();
+    const snapshot = await orchestrator.getJobSnapshot(jobId);
+    if (!snapshot.job) {
+      throw new Error(`Job not found: ${jobId}`);
+    }
+
+    console.clear();
+    await runJobStatusFlow(jobId, options);
+
+    if (["completed", "failed", "cancelled"].includes(snapshot.job.status)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+function createLocalJobOrchestrator(): LocalJobOrchestrator {
+  return new LocalJobOrchestrator(new LocalControlPlaneRepository());
+}
+
+async function runLocalWorkflowCommand<TResult>(
+  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
+  options: CliOptions,
+  stagePlan: Array<{ type: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"; workerRole: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion" }>,
+  runner: (context: LocalWorkflowContext) => Promise<TResult>,
+): Promise<{ jobId: string; result: TResult }> {
+  const orchestrator = createLocalJobOrchestrator();
+  return orchestrator.runWorkflow(
+    {
+      workflowType,
+      payload: serializeJobPayload(options),
+      stagePlan,
+      onJobCreated: (jobId) => {
+        console.log(`Job submitted: ${jobId}`);
+      },
+    },
+    async (context) => {
+      const result = await runner(context);
+      console.log(`Job completed: ${context.job.id}`);
+      return result;
+    },
+  );
+}
+
+function serializeJobPayload(options: CliOptions): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(options, (_key, value) => {
+    if (typeof value === "function") return undefined;
+    if (value instanceof Date) return value.toISOString();
+    if (value instanceof SunoClient) return undefined;
+    return value;
+  })) as Record<string, unknown>;
 }
