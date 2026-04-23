@@ -7,3 +7,4 @@ export * from "./IWorkerInstance";
 export * from "./IStatusEvent";
 export * from "./IStorageLocation";
 export * from "./IRuntimeConfig";
+export * from "./IOrchestrationRepository";
