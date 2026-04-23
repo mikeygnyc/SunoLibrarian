@@ -27,16 +27,18 @@ Workflow commands such as `download`, `sync`, `process`, `download-images`,
 The command-line switches are:
 
 - `--runtime-mode local|distributed`
+- `--control-plane local|postgres`
 - `--submit-only`
 
 `--submit-only` is useful even in local development when you want to queue work
 in one terminal and inspect or execute it from another.
 
-## Current Local Control Plane
+## Control Plane Backends
 
-Today, the distributed-style runtime is backed by a local file-based control
-plane. It persists job state, work items, leases, status events, and structured
-logs under:
+The runtime can use either a local file-based control plane or Postgres.
+
+The local backend persists job state, work items, leases, status events, and
+structured logs under:
 
 ```text
 ~/.suno-export/orchestration
@@ -55,6 +57,20 @@ This makes it possible to run:
 - one or more terminals that run worker loops
 
 without changing workflow code.
+
+For a Postgres-backed control plane, use:
+
+```text
+--control-plane postgres
+```
+
+and provide a connection string through either:
+
+```text
+--postgres-url
+SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL
+SUNO_EXPORT_POSTGRES_URL
+```
 
 ## Command Submission Flow
 

@@ -1,6 +1,4 @@
-import type { IWorkerLease, OrchestrationStageType } from "../lib/interfaces";
-import type { LocalControlPlaneRepository } from "./local-control-plane";
-import type { IRuntimeConfig, WorkerRole } from "../lib/interfaces";
+import type { IOrchestrationRepository, IRuntimeConfig, IWorkerLease, OrchestrationStageType, WorkerRole } from "../lib/interfaces";
 
 type StageLeasePlan = {
   resourceKey: string;
@@ -12,7 +10,7 @@ const DEFAULT_POLL_INTERVAL_MS = 250;
 
 export class LeaseManager {
   constructor(
-    private readonly repository: LocalControlPlaneRepository,
+    private readonly repository: IOrchestrationRepository,
     private readonly runtimeConfig: IRuntimeConfig,
   ) {}
 

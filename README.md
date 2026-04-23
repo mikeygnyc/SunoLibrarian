@@ -229,6 +229,7 @@ queued for a separate orchestrator or worker process.
 Runtime options on workflow commands:
 
 - `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--control-plane <backend>`: `local` or `postgres`. Default: `local`.
 - `--submit-only`: submit the job and exit without executing it in the current
   process.
 
@@ -254,6 +255,9 @@ suno-export run-orchestrator
 
 The current shared local control plane lives under `~/.suno-export/orchestration`
 and can be overridden with `SUNO_EXPORT_CONTROL_PLANE_DIR`.
+
+For a Postgres-backed control plane, pass `--control-plane postgres` and provide
+`--postgres-url <url>`, or set `SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL`.
 
 ### METADATA STORAGE
 

@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
 import { Pool, type PoolClient } from "pg";
 import type {
+  IClaimedWorkItem,
   ICentralLogRepository,
   ILogEntry,
   ILogQueryFilter,
@@ -370,6 +372,110 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     return result.rows.map(mapWorkItemRow);
   }
 
+  async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<IClaimedWorkItem | null> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const candidateResult = await client.query(
+        `
+        SELECT
+          w.*,
+          s.id AS stage_record_id,
+          s.job_id AS stage_job_id,
+          s.stage_type AS stage_record_type,
+          s.status AS stage_record_status,
+          s.sequence AS stage_record_sequence,
+          s.payload_json AS stage_payload_json,
+          s.depends_on_stage_ids AS stage_depends_on_stage_ids,
+          s.resource_key AS stage_resource_key,
+          s.blocked_by_stage_id AS stage_blocked_by_stage_id,
+          s.last_known_job_status AS stage_last_known_job_status,
+          s.created_at AS stage_created_at,
+          s.updated_at AS stage_updated_at,
+          s.started_at AS stage_started_at,
+          s.completed_at AS stage_completed_at,
+          s.error_code AS stage_error_code,
+          s.error_message AS stage_error_message,
+          j.id AS job_record_id,
+          j.workflow_type AS job_workflow_type,
+          j.status AS job_record_status,
+          j.runtime_mode AS job_runtime_mode,
+          j.queue_name AS job_queue_name,
+          j.priority AS job_priority,
+          j.payload_json AS job_payload_json,
+          j.created_at AS job_created_at,
+          j.updated_at AS job_updated_at,
+          j.started_at AS job_started_at,
+          j.completed_at AS job_completed_at,
+          j.error_code AS job_error_code,
+          j.error_message AS job_error_message
+        FROM work_items w
+        INNER JOIN orchestration_stages s ON s.id = w.stage_id
+        INNER JOIN orchestration_jobs j ON j.id = w.job_id
+        WHERE j.status IN ('queued', 'running')
+          AND w.worker_role = $1
+          AND w.status IN ('pending', 'blocked')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM orchestration_stages prior
+            WHERE prior.job_id = s.job_id
+              AND prior.sequence < s.sequence
+              AND prior.status <> 'succeeded'
+          )
+        ORDER BY w.created_at ASC
+        FOR UPDATE OF w SKIP LOCKED
+        LIMIT 1
+        `,
+        [workerRole],
+      );
+
+      if (candidateResult.rows.length === 0) {
+        await client.query("COMMIT");
+        return null;
+      }
+
+      const row = candidateResult.rows[0];
+      const claimedAt = new Date();
+      await client.query(
+        `
+        UPDATE work_items
+        SET status = 'leased',
+            lease_owner_id = $2,
+            updated_at = $3
+        WHERE id = $1
+        `,
+        [row.id, workerInstanceId, claimedAt],
+      );
+      await client.query(
+        `
+        UPDATE orchestration_stages
+        SET status = 'queued',
+            updated_at = $2
+        WHERE id = $1
+        `,
+        [row.stage_record_id, claimedAt],
+      );
+      await client.query("COMMIT");
+
+      return {
+        job: mapClaimedJobRow(row),
+        stage: mapClaimedStageRow(row),
+        workItem: {
+          ...mapWorkItemRow(row),
+          status: "leased",
+          leaseOwnerId: workerInstanceId,
+          updatedAt: claimedAt,
+        },
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async updateWorkItemStatus(
     workItemId: string,
     status: WorkItemStatus,
@@ -499,6 +605,98 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
         `SELECT * FROM worker_leases WHERE status = 'active' ORDER BY created_at ASC`,
       );
     return result.rows.map(mapLeaseRow);
+  }
+
+  async acquireLease(params: {
+    resourceKey: string;
+    workerInstanceId: string;
+    workerRole: IWorkerLease["workerRole"];
+    jobId?: string;
+    stageId?: string;
+    workItemId?: string;
+    maxActive: number;
+    conflictResourceKeys?: string[];
+    leaseTtlMs?: number;
+  }): Promise<IWorkerLease | null> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const now = new Date();
+      const conflictKeys = [params.resourceKey, ...(params.conflictResourceKeys ?? [])];
+      await client.query(
+        `
+        UPDATE worker_leases
+        SET status = 'expired',
+            updated_at = $2
+        WHERE status = 'active'
+          AND resource_key = ANY($1::text[])
+          AND lease_expires_at <= $2
+        `,
+        [conflictKeys, now],
+      );
+
+      const activeConflictResult = await client.query(
+        `
+        SELECT id
+        FROM worker_leases
+        WHERE status = 'active'
+          AND resource_key = ANY($1::text[])
+        FOR UPDATE
+        `,
+        [conflictKeys],
+      );
+      if ((activeConflictResult.rowCount ?? 0) >= params.maxActive) {
+        await client.query("COMMIT");
+        return null;
+      }
+
+      const lease: IWorkerLease = {
+        id: randomLeaseId(),
+        resourceKey: params.resourceKey,
+        status: "active",
+        workerInstanceId: params.workerInstanceId,
+        workerRole: params.workerRole,
+        jobId: params.jobId,
+        stageId: params.stageId,
+        workItemId: params.workItemId,
+        leaseExpiresAt: new Date(now.getTime() + (params.leaseTtlMs ?? 30_000)),
+        heartbeatAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await client.query(
+        `
+        INSERT INTO worker_leases (
+          id, resource_key, status, worker_instance_id, worker_role, job_id, stage_id,
+          work_item_id, lease_expires_at, heartbeat_at, created_at, updated_at, released_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `,
+        [
+          lease.id,
+          lease.resourceKey,
+          lease.status,
+          lease.workerInstanceId,
+          lease.workerRole,
+          lease.jobId ?? null,
+          lease.stageId ?? null,
+          lease.workItemId ?? null,
+          toDate(lease.leaseExpiresAt),
+          toDate(lease.heartbeatAt),
+          toDate(lease.createdAt),
+          toDate(lease.updatedAt),
+          toDate(lease.releasedAt),
+        ],
+      );
+      await client.query("COMMIT");
+      return lease;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async appendStatusEvent(event: IStatusEvent): Promise<void> {
@@ -751,7 +949,49 @@ function mapLogRow(row: any): ILogEntry {
   };
 }
 
+function mapClaimedJobRow(row: any): IOrchestrationJob {
+  return {
+    id: row.job_record_id,
+    workflowType: row.job_workflow_type,
+    status: row.job_record_status,
+    runtimeMode: row.job_runtime_mode,
+    queueName: row.job_queue_name ?? undefined,
+    priority: row.job_priority ?? undefined,
+    payload: row.job_payload_json ?? {},
+    createdAt: fromDate(row.job_created_at) ?? new Date(),
+    updatedAt: fromDate(row.job_updated_at) ?? new Date(),
+    startedAt: fromDate(row.job_started_at),
+    completedAt: fromDate(row.job_completed_at),
+    errorCode: row.job_error_code ?? undefined,
+    errorMessage: row.job_error_message ?? undefined,
+  };
+}
+
+function mapClaimedStageRow(row: any): IOrchestrationStage {
+  return {
+    id: row.stage_record_id,
+    jobId: row.stage_job_id,
+    stageType: row.stage_record_type,
+    status: row.stage_record_status,
+    sequence: row.stage_record_sequence,
+    payload: row.stage_payload_json ?? undefined,
+    dependsOnStageIds: row.stage_depends_on_stage_ids ?? undefined,
+    resourceKey: row.stage_resource_key ?? undefined,
+    blockedByStageId: row.stage_blocked_by_stage_id ?? undefined,
+    lastKnownJobStatus: row.stage_last_known_job_status ?? undefined,
+    createdAt: fromDate(row.stage_created_at) ?? new Date(),
+    updatedAt: fromDate(row.stage_updated_at) ?? new Date(),
+    startedAt: fromDate(row.stage_started_at),
+    completedAt: fromDate(row.stage_completed_at),
+    errorCode: row.stage_error_code ?? undefined,
+    errorMessage: row.stage_error_message ?? undefined,
+  };
+}
+
+function randomLeaseId(): string {
+  return `lease-${randomUUID()}`;
+}
+
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, "\"\"")}"`;
 }
-
