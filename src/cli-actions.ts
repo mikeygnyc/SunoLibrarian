@@ -129,11 +129,19 @@ function resolveMetadataStoreOptions(options: CliOptions): MetadataStoreConfig {
   });
 }
 
+function logMetadataImportStatus(message: string): void {
+  console.log(`[metadata-import] ${message}`);
+}
+
 async function importMetadataJsonIfRequested(options: CliOptions, storeConfig: MetadataStoreConfig): Promise<void> {
   if (typeof options.importMetadataJson !== "string" || options.importMetadataJson.trim().length === 0) {
     return;
   }
-  const result = await importMetadataJsonToDatabase(options.importMetadataJson, storeConfig);
+  logMetadataImportStatus(`Starting import from ${path.resolve(options.importMetadataJson)}`);
+  logMetadataImportStatus(`Target database: ${describeMetadataStoreConfig(storeConfig)}`);
+  const result = await importMetadataJsonToDatabase(options.importMetadataJson, storeConfig, {
+    log: logMetadataImportStatus,
+  });
   console.log(`Imported ${result.imported} metadata entr${result.imported === 1 ? "y" : "ies"} to ${result.databasePath}`);
 }
 
@@ -148,7 +156,9 @@ async function exportMetadataJsonIfRequested(
   const jsonPath = shouldExport
     ? path.resolve(options.exportMetadataJson.trim())
     : fallbackJsonPath;
-  const result = await exportMetadataDatabaseToJson(jsonPath, storeConfig);
+  const result = await exportMetadataDatabaseToJson(jsonPath, storeConfig, {
+    log: logMetadataImportStatus,
+  });
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
 }
 
@@ -348,32 +358,30 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
   await importMetadataJsonIfRequested(options, storeConfig);
   const metadataStore = await createMetadataStore(storeConfig);
-  let songsMetadata = await metadataStore.loadAll();
-  songsMetadata = songsMetadata.map((entry) => normalizeMetadata(entry));
-  await metadataStore.saveAll(songsMetadata);
   console.log(`Metadata database: ${describeMetadataStoreConfig(storeConfig)}`);
+  console.log("Using targeted metadata lookups from the database");
 
   try {
-  console.log("Fetching workspaces...");
-  const workspaces = await client.getWorkspaces();
-  await metadataStore.upsertWorkspaces(workspaces);
-  console.log(`Found ${workspaces.length} workspace(s)`);
+    console.log("Fetching workspaces...");
+    const workspaces = await client.getWorkspaces();
+    await metadataStore.upsertWorkspaces(workspaces);
+    console.log(`Found ${workspaces.length} workspace(s)`);
 
-  const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
-  if (targetWorkspaces.length === 0) {
-    throw new Error("No matching workspaces found");
-  }
+    const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
+    if (targetWorkspaces.length === 0) {
+      throw new Error("No matching workspaces found");
+    }
 
-  if (createdAfter || createdBefore) {
-    const afterText = createdAfter ? createdAfter.toISOString() : "none";
-    const beforeText = createdBefore ? createdBefore.toISOString() : "none";
-    console.log(`Applying track creation-date filter: after=${afterText}, before=${beforeText}`);
-  }
+    if (createdAfter || createdBefore) {
+      const afterText = createdAfter ? createdAfter.toISOString() : "none";
+      const beforeText = createdBefore ? createdBefore.toISOString() : "none";
+      console.log(`Applying track creation-date filter: after=${afterText}, before=${beforeText}`);
+    }
 
-  let totalDownloaded = 0;
-  let totalSkipped = 0;
-  const onTrackDownloaded: DownloadedTrackHook | undefined =
-    typeof options.onTrackDownloaded === "function" ? options.onTrackDownloaded : undefined;
+    let totalDownloaded = 0;
+    let totalSkipped = 0;
+    const onTrackDownloaded: DownloadedTrackHook | undefined =
+      typeof options.onTrackDownloaded === "function" ? options.onTrackDownloaded : undefined;
 
   for (const workspace of targetWorkspaces) {
     console.log(`\nProcessing workspace: ${workspace.name}`);
@@ -398,7 +406,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
         continue;
       }
 
-      const existingEntry = songsMetadata.find((m) => m.clipId === track.id);
+      const existingEntry = await metadataStore.getByClipId(track.id);
       if (existingEntry) {
         if (!existingEntry.rawApiResponse) {
           console.log(`Updating metadata for: ${track.title || track.id}`);
@@ -471,7 +479,6 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
         };
 
         const normalizedEntry = normalizeMetadata(songEntry);
-        songsMetadata.push(normalizedEntry);
         await metadataStore.upsert(normalizedEntry);
         fs.writeFileSync(
           path.join(metadataDir, `${track.id}.json`),
@@ -547,12 +554,22 @@ export async function runClearAuthTokenFlow(): Promise<void> {
 }
 
 export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
-  const result = await importMetadataJsonToDatabase(options.input, resolveMetadataStoreOptions(options));
+  const storeConfig = resolveMetadataStoreOptions(options);
+  logMetadataImportStatus(`Starting import from ${path.resolve(options.input)}`);
+  logMetadataImportStatus(`Target database: ${describeMetadataStoreConfig(storeConfig)}`);
+  const result = await importMetadataJsonToDatabase(options.input, storeConfig, {
+    log: logMetadataImportStatus,
+  });
   console.log(`Imported ${result.imported} metadata entr${result.imported === 1 ? "y" : "ies"} to ${result.databasePath}`);
 }
 
 export async function runExportMetadataJsonFlow(options: CliOptions): Promise<void> {
-  const result = await exportMetadataDatabaseToJson(options.output, resolveMetadataStoreOptions(options));
+  const storeConfig = resolveMetadataStoreOptions(options);
+  logMetadataImportStatus(`Starting export to ${path.resolve(options.output)}`);
+  logMetadataImportStatus(`Source database: ${describeMetadataStoreConfig(storeConfig)}`);
+  const result = await exportMetadataDatabaseToJson(options.output, storeConfig, {
+    log: logMetadataImportStatus,
+  });
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
 }
 

@@ -19,6 +19,7 @@ export class Processor {
   private skipped: string[] = [];
   private processed: string[] = [];
   private songs: ISongData[] = [];
+  private dirtyClipIds: Set<string> = new Set();
   private imageLog: string[] = [];
 
   // queue for files that were busy on deletion; we will retry them slowly in
@@ -325,6 +326,7 @@ export class Processor {
     // is queued and will complete sequentially.  final run terminates will
     // await the chain in process().
     if (didCopyWav || completedAnyFormat) {
+      this.dirtyClipIds.add(song.clipId);
       this.persistState().catch(() => {});
     }
   }
@@ -590,6 +592,7 @@ export class Processor {
     if (hasAudioUpdates) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.log(`  [${index}/${total}] Updated in ${elapsed}s (${remaining - 1} remaining)`);
+      this.dirtyClipIds.add(song.clipId);
     }
 
     // Only persist when this update pass actually modified outputs/metadata.
@@ -605,9 +608,15 @@ export class Processor {
     const storeConfig = this.getMetadataStoreConfig();
     const store = await createMetadataStore(storeConfig);
     this.metadataDatabaseExisted = await store.exists();
+    const targetClipIds = this.getProcessTargetClipIds();
     let songs: ISongData[];
     try {
-      songs = await store.loadAll();
+      if (targetClipIds) {
+        logger.log(`Loading ${targetClipIds.size} targeted metadata entr${targetClipIds.size === 1 ? "y" : "ies"} from database`);
+        songs = await store.loadByClipIds(Array.from(targetClipIds));
+      } else {
+        songs = await store.loadAll();
+      }
     } catch (err: any) {
       logger.error(`Failed to read metadata database: ${err.message || err}`);
       await store.close();
@@ -620,48 +629,36 @@ export class Processor {
       return [];
     }
 
-    // apply normalization rules to every song immediately.  this handles
-    // things like "Untitled" titles which can be derived from lyrics or
-    // prompts; previously we only normalized when the metadata was saved as
-    // part of processing individual files, which meant a user could repeatedly
-    // re-run the converter without ever touching audio and never see the
-    // updated titles written back to disk.  performing the normalization here
-    // ensures the metadata database is always kept up-to-date.
     const normalizedSongs: ISongData[] = songs.map(song => normalizeMetadata(song));
 
-    // keep a copy on the instance so that saveMetadata (called below or by
-    // later processing steps) has the normalized data to write.
     this.songs = normalizedSongs;
-
-    // immediately persist normalized metadata back to the authoritative file so
-    // subsequent runs always start from canonical metadata values.
-    if (this.metadataDatabaseExisted) {
-      try {
-        await this.saveMetadata();
-      } catch (err) {
-        logger.warn(`failed to save normalized metadata: ${err}`);
-      }
-    }
 
     return normalizedSongs;
   }
+
   private async saveMetadata(): Promise<void> {
-    // if the database existed originally and we have no songs, don't truncate it
-    if (this.metadataDatabaseExisted && this.songs.length === 0) {
-      logger.warn("Skipping metadata write: original database existed but loaded as empty")
+    if (this.dirtyClipIds.size === 0) {
+      logger.log("Skipping metadata database write: no changed songs");
       return;
     }
 
-    // make sure our in-memory list is normalized before writing.  calling
-    // normalizeMetadata here handles the case where external code or a
-    // runtime modification updated a track and we want the canonical rules to
-    // re-run (for example titles derived from lyrics).  the converter already
-    // normalizes when loading, but persisting should also re-run just in case.
-    this.songs = this.songs.map(song => normalizeMetadata(song));
+    const dirtyClipIds = new Set(this.dirtyClipIds);
+    const dirtySongs = this.songs
+      .filter((song) => dirtyClipIds.has(song.clipId))
+      .map((song) => normalizeMetadata(song));
+    if (dirtySongs.length === 0) {
+      logger.warn("Skipping metadata database write: changed songs were not loaded");
+      dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
+      return;
+    }
 
     const store = await createMetadataStore(this.getMetadataStoreConfig());
     try {
-      await store.saveAll(this.songs);
+      logger.log(`Writing ${dirtySongs.length} changed metadata entr${dirtySongs.length === 1 ? "y" : "ies"} to database`);
+      for (const song of dirtySongs) {
+        await store.upsert(song);
+      }
+      dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
     } catch (err: any) {
       logger.warn(`Failed to update metadata database: ${err.message || err}`);
     } finally {

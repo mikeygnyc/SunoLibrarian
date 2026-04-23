@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS songs (
   liked INTEGER NOT NULL DEFAULT 0,
   artist_name TEXT,
   lyrics TEXT,
-  creation_date TEXT,
+  creation_date TIMESTAMP,
   weirdness REAL,
   style_strength REAL,
   audio_strength REAL,
@@ -38,13 +38,13 @@ CREATE TABLE IF NOT EXISTS songs (
   alac_status TEXT,
   flac_status TEXT,
   image_status TEXT,
-  mp3_timestamp TEXT,
-  wav_timestamp TEXT,
-  alac_timestamp TEXT,
-  flac_timestamp TEXT,
+  mp3_timestamp TIMESTAMP,
+  wav_timestamp TIMESTAMP,
+  alac_timestamp TIMESTAMP,
+  flac_timestamp TIMESTAMP,
   raw_api_response_json TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_songs_sort_index ON songs(sort_index);
@@ -53,25 +53,31 @@ CREATE INDEX IF NOT EXISTS idx_songs_creation_date ON songs(creation_date);
 CREATE INDEX IF NOT EXISTS idx_songs_artist_name ON songs(artist_name);
 CREATE INDEX IF NOT EXISTS idx_songs_project_name ON songs(project_name);
 
-CREATE TABLE IF NOT EXISTS song_tags (
-  clip_id TEXT NOT NULL,
-  sort_index INTEGER NOT NULL,
-  tag TEXT NOT NULL,
-  PRIMARY KEY (clip_id, sort_index),
-  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL UNIQUE
 );
 
-CREATE INDEX IF NOT EXISTS idx_song_tags_tag ON song_tags(tag);
+CREATE TABLE IF NOT EXISTS song_tags (
+  clip_id TEXT NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (clip_id, tag_id),
+  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_song_tags_tag_id ON song_tags(tag_id);
 
 CREATE TABLE IF NOT EXISTS song_negative_tags (
   clip_id TEXT NOT NULL,
-  sort_index INTEGER NOT NULL,
-  tag TEXT NOT NULL,
-  PRIMARY KEY (clip_id, sort_index),
-  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY (clip_id, tag_id),
+  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_song_negative_tags_tag ON song_negative_tags(tag);
+CREATE INDEX IF NOT EXISTS idx_song_negative_tags_tag_id ON song_negative_tags(tag_id);
 
 CREATE TABLE IF NOT EXISTS song_mashup_sources (
   clip_id TEXT NOT NULL,
@@ -87,9 +93,9 @@ CREATE TABLE IF NOT EXISTS workspaces (
   description TEXT,
   is_trashed INTEGER NOT NULL DEFAULT 0,
   is_public INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_workspaces_name ON workspaces(name);
@@ -98,8 +104,8 @@ CREATE TABLE IF NOT EXISTS song_workspaces (
   clip_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'metadata',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (clip_id, workspace_id),
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
@@ -121,7 +127,7 @@ CREATE TABLE IF NOT EXISTS songs (
   liked BOOLEAN NOT NULL DEFAULT false,
   artist_name TEXT,
   lyrics TEXT,
-  creation_date TEXT,
+  creation_date TIMESTAMPTZ,
   weirdness DOUBLE PRECISION,
   style_strength DOUBLE PRECISION,
   audio_strength DOUBLE PRECISION,
@@ -140,10 +146,10 @@ CREATE TABLE IF NOT EXISTS songs (
   alac_status TEXT,
   flac_status TEXT,
   image_status TEXT,
-  mp3_timestamp TEXT,
-  wav_timestamp TEXT,
-  alac_timestamp TEXT,
-  flac_timestamp TEXT,
+  mp3_timestamp TIMESTAMPTZ,
+  wav_timestamp TIMESTAMPTZ,
+  alac_timestamp TIMESTAMPTZ,
+  flac_timestamp TIMESTAMPTZ,
   raw_api_response_json TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -155,25 +161,33 @@ CREATE INDEX IF NOT EXISTS idx_songs_creation_date ON songs(creation_date);
 CREATE INDEX IF NOT EXISTS idx_songs_artist_name ON songs(artist_name);
 CREATE INDEX IF NOT EXISTS idx_songs_project_name ON songs(project_name);
 
-CREATE TABLE IF NOT EXISTS song_tags (
-  clip_id TEXT NOT NULL,
-  sort_index INTEGER NOT NULL,
-  tag TEXT NOT NULL,
-  PRIMARY KEY (clip_id, sort_index),
-  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS tags (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_song_tags_tag ON song_tags(tag);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_normalized_name ON tags(normalized_name);
+
+CREATE TABLE IF NOT EXISTS song_tags (
+  clip_id TEXT NOT NULL,
+  tag_id BIGINT NOT NULL,
+  PRIMARY KEY (clip_id, tag_id),
+  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_song_tags_tag_id ON song_tags(tag_id);
 
 CREATE TABLE IF NOT EXISTS song_negative_tags (
   clip_id TEXT NOT NULL,
-  sort_index INTEGER NOT NULL,
-  tag TEXT NOT NULL,
-  PRIMARY KEY (clip_id, sort_index),
-  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE
+  tag_id BIGINT NOT NULL,
+  PRIMARY KEY (clip_id, tag_id),
+  FOREIGN KEY (clip_id) REFERENCES songs(clip_id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_song_negative_tags_tag ON song_negative_tags(tag);
+CREATE INDEX IF NOT EXISTS idx_song_negative_tags_tag_id ON song_negative_tags(tag_id);
 
 CREATE TABLE IF NOT EXISTS song_mashup_sources (
   clip_id TEXT NOT NULL,
@@ -224,9 +238,21 @@ export interface MetadataStoreConfigInput {
   postgresUrl?: string;
 }
 
+export type MetadataStoreLogger = (message: string) => void;
+
+export interface MetadataStoreOptions {
+  log?: MetadataStoreLogger;
+}
+
+function logMetadataDatabaseStatus(message: string): void {
+  console.log(`[metadata-db] ${message}`);
+}
+
 export interface MetadataStore {
   readonly location: string;
   loadAll(): Promise<ISongData[]>;
+  loadByClipIds(clipIds: string[]): Promise<ISongData[]>;
+  getByClipId(clipId: string): Promise<ISongData | undefined>;
   saveAll(songs: ISongData[]): Promise<void>;
   upsert(song: ISongData): Promise<void>;
   upsertWorkspaces(workspaces: IWorkspace[]): Promise<void>;
@@ -249,8 +275,9 @@ function dateToDb(value: Date | string | null | undefined): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function dateFromDb(value: string | null | undefined): Date | null {
+function dateFromDb(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -269,6 +296,55 @@ function boolFromDb(value: number | boolean | null | undefined, defaultValue?: b
 function optionalJsonParse<T>(value: string | null | undefined): T | undefined {
   if (!value) return undefined;
   return JSON.parse(value, dateReviver) as T;
+}
+
+function describePostgresConnection(postgresUrl: string): string {
+  try {
+    const url = new URL(postgresUrl);
+    const auth = url.username ? `${url.username}@` : "";
+    const database = url.pathname && url.pathname !== "/" ? url.pathname : "";
+    return `${url.protocol}//${auth}${url.host}${database}`;
+  } catch {
+    return "postgres";
+  }
+}
+
+function normalizeTagForIdentity(tag: string): string {
+  return tag.trim().toLowerCase().replace(/[\s-]+/g, "");
+}
+
+function getTagDisplayPriority(tag: string): number {
+  const trimmed = tag.trim();
+  if (!trimmed) return Number.MAX_SAFE_INTEGER;
+  if (!/[\s-]/.test(trimmed)) return 0;
+  if (trimmed.includes("-")) return 1;
+  if (/\s/.test(trimmed)) return 2;
+  return 3;
+}
+
+function preferTagDisplayName(current: string, candidate: string): string {
+  const currentPriority = getTagDisplayPriority(current);
+  const candidatePriority = getTagDisplayPriority(candidate);
+  if (candidatePriority < currentPriority) return candidate;
+  return current;
+}
+
+function uniqueTagsByIdentity(tags: string[]): Array<{ name: string; normalizedName: string }> {
+  const unique = new Map<string, string>();
+  tags.forEach((tag) => {
+    const trimmed = tag.trim();
+    const key = normalizeTagForIdentity(trimmed);
+    if (!key) return;
+
+    const existing = unique.get(key);
+    if (!existing) {
+      unique.set(key, trimmed);
+      return;
+    }
+
+    unique.set(key, preferTagDisplayName(existing, trimmed));
+  });
+  return Array.from(unique.entries()).map(([normalizedName, name]) => ({ name, normalizedName }));
 }
 
 function readJsonArray(filePath: string): ISongData[] {
@@ -314,35 +390,49 @@ export function resolveMetadataStoreConfig(input?: MetadataStoreConfigInput | st
 
 export function describeMetadataStoreConfig(config: MetadataStoreConfig): string {
   return config.type === "postgres"
-    ? "postgres"
+    ? describePostgresConnection(config.postgresUrl ?? "")
     : resolveDatabasePath(config.sqlitePath);
 }
 
-export async function createMetadataStore(config?: MetadataStoreConfig | string): Promise<MetadataStore> {
+export async function createMetadataStore(
+  config?: MetadataStoreConfig | string,
+  options: MetadataStoreOptions = {},
+): Promise<MetadataStore> {
+  const storeOptions: MetadataStoreOptions = {
+    ...options,
+    log: options.log ?? logMetadataDatabaseStatus,
+  };
   const resolvedConfig = typeof config === "string"
     ? resolveMetadataStoreConfig(config)
     : config ?? resolveMetadataStoreConfig();
 
   if (resolvedConfig.type === "postgres") {
-    const store = new PostgresMetadataStore(resolvedConfig.postgresUrl);
+    const store = new PostgresMetadataStore(resolvedConfig.postgresUrl, storeOptions);
     await store.initialize();
     return store;
   }
 
-  return new SqliteMetadataStore(resolveDatabasePath(resolvedConfig.sqlitePath));
+  return new SqliteMetadataStore(resolveDatabasePath(resolvedConfig.sqlitePath), storeOptions);
 }
 
 export async function importMetadataJsonToDatabase(
   jsonFilePath: string,
   databasePathOrConfig?: string | MetadataStoreConfig,
+  options: MetadataStoreOptions = {},
 ): Promise<{ imported: number; databasePath: string }> {
+  const log = options.log ?? logMetadataDatabaseStatus;
   const resolvedJsonPath = path.resolve(jsonFilePath);
+  log(`Reading metadata JSON: ${resolvedJsonPath}`);
   const songs = readJsonArray(resolvedJsonPath);
-  const store = await createMetadataStore(databasePathOrConfig);
+  log(`Parsed ${songs.length} metadata entr${songs.length === 1 ? "y" : "ies"} from JSON`);
+  const store = await createMetadataStore(databasePathOrConfig, options);
   try {
+    log(`Writing metadata to database: ${store.location}`);
     await store.saveAll(songs);
+    log(`Database write complete: imported ${songs.length} entr${songs.length === 1 ? "y" : "ies"}`);
   } finally {
     await store.close();
+    log(`Closed metadata database connection: ${store.location}`);
   }
   return { imported: songs.length, databasePath: store.location };
 }
@@ -350,12 +440,18 @@ export async function importMetadataJsonToDatabase(
 export async function exportMetadataDatabaseToJson(
   jsonFilePath: string,
   databasePathOrConfig?: string | MetadataStoreConfig,
+  options: MetadataStoreOptions = {},
 ): Promise<{ exported: number; databasePath: string; jsonFilePath: string }> {
+  const log = options.log ?? logMetadataDatabaseStatus;
   const resolvedJsonPath = path.resolve(jsonFilePath);
-  const store = await createMetadataStore(databasePathOrConfig);
+  log(`Exporting metadata database to JSON: ${resolvedJsonPath}`);
+  const store = await createMetadataStore(databasePathOrConfig, options);
   try {
+    log(`Reading metadata from database: ${store.location}`);
     const songs = await store.loadAll();
+    log(`Writing ${songs.length} metadata entr${songs.length === 1 ? "y" : "ies"} to JSON`);
     writeMetadataJsonFile(resolvedJsonPath, songs);
+    log(`Metadata JSON export complete: ${resolvedJsonPath}`);
     return {
       exported: songs.length,
       databasePath: store.location,
@@ -363,30 +459,38 @@ export async function exportMetadataDatabaseToJson(
     };
   } finally {
     await store.close();
+    log(`Closed metadata database connection: ${store.location}`);
   }
 }
 
 export class SqliteMetadataStore implements MetadataStore {
   readonly location: string;
+  private log?: MetadataStoreLogger;
   private existedBeforeOpen: boolean;
   private db: Database.Database;
   private insertSongStatement: Database.Statement;
-  private insertTagStatement: Database.Statement;
-  private insertNegativeTagStatement: Database.Statement;
+  private upsertTagStatement: Database.Statement;
+  private selectTagIdStatement: Database.Statement;
+  private insertSongTagStatement: Database.Statement;
+  private insertSongNegativeTagStatement: Database.Statement;
   private insertMashupSourceStatement: Database.Statement;
   private upsertWorkspaceStatement: Database.Statement;
   private upsertSongWorkspaceStatement: Database.Statement;
 
-  constructor(databasePath: string = DEFAULT_DATABASE_PATH) {
+  constructor(databasePath: string = DEFAULT_DATABASE_PATH, options: MetadataStoreOptions = {}) {
     this.location = path.resolve(databasePath);
+    this.log = options.log ?? logMetadataDatabaseStatus;
     this.existedBeforeOpen = fs.existsSync(this.location);
+    this.log?.(`Opening SQLite metadata database: ${this.location}`);
+    this.log?.(`SQLite database file ${this.existedBeforeOpen ? "exists" : "will be created"}`);
     fs.mkdirSync(path.dirname(this.location), { recursive: true });
 
     this.db = new Database(this.location);
+    this.log?.("SQLite connection opened");
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(SQLITE_SCHEMA);
-    this.ensureWorkspaceColumns();
+    this.log?.("SQLite schema ready");
     this.insertSongStatement = this.db.prepare(`
       INSERT INTO songs (
         clip_id, sort_index, title, song_url, style, thumbnail, model, duration,
@@ -443,11 +547,17 @@ export class SqliteMetadataStore implements MetadataStore {
         raw_api_response_json = excluded.raw_api_response_json,
         updated_at = CURRENT_TIMESTAMP
     `);
-    this.insertTagStatement = this.db.prepare(
-      "INSERT INTO song_tags (clip_id, sort_index, tag) VALUES (?, ?, ?)",
+    this.upsertTagStatement = this.db.prepare(
+      "INSERT OR IGNORE INTO tags (name, normalized_name) VALUES (?, ?)",
     );
-    this.insertNegativeTagStatement = this.db.prepare(
-      "INSERT INTO song_negative_tags (clip_id, sort_index, tag) VALUES (?, ?, ?)",
+    this.selectTagIdStatement = this.db.prepare(
+      "SELECT id FROM tags WHERE normalized_name = ?",
+    );
+    this.insertSongTagStatement = this.db.prepare(
+      "INSERT OR IGNORE INTO song_tags (clip_id, tag_id) VALUES (?, ?)",
+    );
+    this.insertSongNegativeTagStatement = this.db.prepare(
+      "INSERT OR IGNORE INTO song_negative_tags (clip_id, tag_id) VALUES (?, ?)",
     );
     this.insertMashupSourceStatement = this.db.prepare(
       "INSERT INTO song_mashup_sources (clip_id, sort_index, source) VALUES (?, ?, ?)",
@@ -472,7 +582,6 @@ export class SqliteMetadataStore implements MetadataStore {
         source = excluded.source,
         updated_at = CURRENT_TIMESTAMP
     `);
-    this.migrateLegacyMetadataEntries();
   }
 
   async exists(): Promise<boolean> {
@@ -480,30 +589,73 @@ export class SqliteMetadataStore implements MetadataStore {
   }
 
   async loadAll(): Promise<ISongData[]> {
+    const startedAt = Date.now();
+    this.log?.("SQLite loading songs from metadata database");
     const rows = this.db
       .prepare("SELECT * FROM songs ORDER BY sort_index ASC, clip_id ASC")
       .all() as any[];
+    this.log?.(`SQLite retrieved ${rows.length} song row${rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
+    const songs = rows.map((row) => normalizeMetadata(this.rowToSong(row)));
+    this.log?.(`SQLite hydrated ${songs.length} song${songs.length === 1 ? "" : "s"} from metadata database`);
+    return songs;
+  }
+
+  async loadByClipIds(clipIds: string[]): Promise<ISongData[]> {
+    const uniqueClipIds = Array.from(new Set(clipIds.map((clipId) => clipId.trim()).filter(Boolean)));
+    if (uniqueClipIds.length === 0) {
+      this.log?.("SQLite targeted metadata load skipped: no clip ids");
+      return [];
+    }
+
+    const startedAt = Date.now();
+    this.log?.(`SQLite loading targeted metadata: ${uniqueClipIds.length} clip id${uniqueClipIds.length === 1 ? "" : "s"}`);
+    const placeholders = uniqueClipIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`SELECT * FROM songs WHERE clip_id IN (${placeholders}) ORDER BY sort_index ASC, clip_id ASC`)
+      .all(...uniqueClipIds) as any[];
+    this.log?.(`SQLite retrieved ${rows.length}/${uniqueClipIds.length} targeted song row${rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
     return rows.map((row) => normalizeMetadata(this.rowToSong(row)));
+  }
+
+  async getByClipId(clipId: string): Promise<ISongData | undefined> {
+    const normalizedClipId = clipId.trim();
+    if (!normalizedClipId) return undefined;
+
+    this.log?.(`SQLite retrieving metadata for clip: ${normalizedClipId}`);
+    const row = this.db
+      .prepare("SELECT * FROM songs WHERE clip_id = ?")
+      .get(normalizedClipId) as any | undefined;
+    if (!row) {
+      this.log?.(`SQLite metadata not found for clip: ${normalizedClipId}`);
+      return undefined;
+    }
+    this.log?.(`SQLite metadata found for clip: ${normalizedClipId}`);
+    return normalizeMetadata(this.rowToSong(row));
   }
 
   async saveAll(songs: ISongData[]): Promise<void> {
     const normalizedSongs = songs.map((song) => normalizeMetadata(song));
 
+    this.log?.(`SQLite saveAll starting: ${normalizedSongs.length} song${normalizedSongs.length === 1 ? "" : "s"}`);
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.prepare("DELETE FROM songs").run();
+      const deleteResult = this.db.prepare("DELETE FROM songs").run();
+      this.log?.(`SQLite cleared existing songs: ${deleteResult.changes} row${deleteResult.changes === 1 ? "" : "s"}`);
       normalizedSongs.forEach((song, index) => {
         this.writeSong(song, index);
       });
       this.db.exec("COMMIT");
+      this.log?.(`SQLite transaction committed: ${normalizedSongs.length} song${normalizedSongs.length === 1 ? "" : "s"} saved`);
     } catch (error) {
       this.db.exec("ROLLBACK");
+      this.log?.("SQLite transaction rolled back");
       throw error;
     }
   }
 
   async upsert(song: ISongData): Promise<void> {
     const normalizedSong = normalizeMetadata(song);
+    this.log?.(`SQLite upsert starting: ${normalizedSong.clipId}`);
     const currentMax = this.db
       .prepare("SELECT COALESCE(MAX(sort_index), -1) AS max_index FROM songs")
       .get() as { max_index: number };
@@ -516,19 +668,23 @@ export class SqliteMetadataStore implements MetadataStore {
     try {
       this.writeSong(normalizedSong, sortIndex);
       this.db.exec("COMMIT");
+      this.log?.(`SQLite upsert committed: ${normalizedSong.clipId}`);
     } catch (error) {
       this.db.exec("ROLLBACK");
+      this.log?.(`SQLite upsert rolled back: ${normalizedSong.clipId}`);
       throw error;
     }
   }
 
   async upsertWorkspaces(workspaces: IWorkspace[]): Promise<void> {
+    this.log?.(`SQLite workspace upsert starting: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
     const save = this.db.transaction((workspaceRows: IWorkspace[]) => {
       workspaceRows.forEach((workspace) => {
         this.writeWorkspace(workspace);
       });
     });
     save(workspaces);
+    this.log?.(`SQLite workspace upsert complete: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
   }
 
   async upsertSongWorkspace(
@@ -536,50 +692,18 @@ export class SqliteMetadataStore implements MetadataStore {
     workspace: IWorkspace,
     source: string = "discovery",
   ): Promise<void> {
+    this.log?.(`SQLite song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
     const save = this.db.transaction(() => {
       this.writeWorkspace(workspace);
       this.upsertSongWorkspaceStatement.run(clipId, workspace.id, source);
     });
     save();
+    this.log?.(`SQLite song-workspace link upsert complete: clip=${clipId}, workspace=${workspace.id}`);
   }
 
   close(): void {
     this.db.close();
-  }
-
-  private migrateLegacyMetadataEntries(): void {
-    const legacyTable = this.db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'metadata_entries'")
-      .get();
-    if (!legacyTable) return;
-
-    const songCount = this.db.prepare("SELECT COUNT(*) AS count FROM songs").get() as { count: number };
-    if (songCount.count > 0) return;
-
-    const legacyRows = this.db
-      .prepare("SELECT sort_index, metadata_json FROM metadata_entries ORDER BY sort_index ASC, clip_id ASC")
-      .all() as Array<{ sort_index: number; metadata_json: string }>;
-    if (legacyRows.length === 0) return;
-
-    const migrate = this.db.transaction((rows: Array<{ sort_index: number; metadata_json: string }>) => {
-      rows.forEach((row, index) => {
-        const song = normalizeMetadata(JSON.parse(row.metadata_json, dateReviver));
-        this.writeSong(song, row.sort_index ?? index);
-      });
-    });
-    migrate(legacyRows);
-  }
-
-  private ensureWorkspaceColumns(): void {
-    const columns = this.db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>;
-    const columnNames = new Set(columns.map((column) => column.name));
-    const addColumn = (definition: string) => {
-      this.db.exec(`ALTER TABLE workspaces ADD COLUMN ${definition}`);
-    };
-
-    if (!columnNames.has("description")) addColumn("description TEXT");
-    if (!columnNames.has("is_trashed")) addColumn("is_trashed INTEGER NOT NULL DEFAULT 0");
-    if (!columnNames.has("is_public")) addColumn("is_public INTEGER NOT NULL DEFAULT 0");
+    this.log?.("SQLite connection closed");
   }
 
   private writeSong(song: ISongData, sortIndex: number): void {
@@ -588,11 +712,11 @@ export class SqliteMetadataStore implements MetadataStore {
     this.db.prepare("DELETE FROM song_negative_tags WHERE clip_id = ?").run(song.clipId);
     this.db.prepare("DELETE FROM song_mashup_sources WHERE clip_id = ?").run(song.clipId);
 
-    (song.tags || []).forEach((tag, index) => {
-      this.insertTagStatement.run(song.clipId, index, tag);
+    uniqueTagsByIdentity(song.tags || []).forEach((tag) => {
+      this.writeTagLink(song.clipId, tag.name, this.insertSongTagStatement);
     });
-    (song.negativeTags || []).forEach((tag, index) => {
-      this.insertNegativeTagStatement.run(song.clipId, index, tag);
+    uniqueTagsByIdentity(song.negativeTags || []).forEach((tag) => {
+      this.writeTagLink(song.clipId, tag.name, this.insertSongNegativeTagStatement);
     });
     (song.mashupSource || []).forEach((source, index) => {
       this.insertMashupSourceStatement.run(song.clipId, index, source);
@@ -603,6 +727,21 @@ export class SqliteMetadataStore implements MetadataStore {
       this.writeWorkspace(project);
       this.upsertSongWorkspaceStatement.run(song.clipId, project.id, "metadata");
     }
+  }
+
+  private writeTagLink(
+    clipId: string,
+    tag: string,
+    insertLinkStatement: Database.Statement,
+  ): void {
+    const normalizedTag = tag.trim();
+    if (!normalizedTag) return;
+    const normalizedName = normalizeTagForIdentity(normalizedTag);
+    if (!normalizedName) return;
+    this.upsertTagStatement.run(normalizedTag, normalizedName);
+    const tagRow = this.selectTagIdStatement.get(normalizedName) as { id: number } | undefined;
+    if (!tagRow) return;
+    insertLinkStatement.run(clipId, tagRow.id);
   }
 
   private writeWorkspace(workspace: ITrackProject): void {
@@ -656,8 +795,8 @@ export class SqliteMetadataStore implements MetadataStore {
   }
 
   private rowToSong(row: any): ISongData {
-    const tags = this.getStringChildren("song_tags", "tag", row.clip_id);
-    const negativeTags = this.getStringChildren("song_negative_tags", "tag", row.clip_id);
+    const tags = this.getTagChildren("song_tags", row.clip_id);
+    const negativeTags = this.getTagChildren("song_negative_tags", row.clip_id);
     const mashupSource = this.getStringChildren("song_mashup_sources", "source", row.clip_id);
 
     const song: ISongData = {
@@ -703,6 +842,19 @@ export class SqliteMetadataStore implements MetadataStore {
     return song;
   }
 
+  private getTagChildren(joinTableName: string, clipId: string): string[] {
+    const rows = this.db
+      .prepare(`
+        SELECT tags.name AS value
+        FROM ${joinTableName}
+        JOIN tags ON tags.id = ${joinTableName}.tag_id
+        WHERE ${joinTableName}.clip_id = ?
+        ORDER BY tags.name COLLATE NOCASE ASC
+      `)
+      .all(clipId) as Array<{ value: string }>;
+    return rows.map((row) => row.value);
+  }
+
   private getStringChildren(tableName: string, valueColumn: string, clipId: string): string[] {
     const rows = this.db
       .prepare(`SELECT ${valueColumn} AS value FROM ${tableName} WHERE clip_id = ? ORDER BY sort_index ASC`)
@@ -713,24 +865,34 @@ export class SqliteMetadataStore implements MetadataStore {
 
 export class PostgresMetadataStore implements MetadataStore {
   readonly location: string;
+  private static readonly SONG_BATCH_SIZE = 500;
+  private static readonly CHILD_BATCH_SIZE = 5000;
+  private log?: MetadataStoreLogger;
   private pool: Pool;
   private existedBeforeInitialize = false;
   private initialized = false;
 
-  constructor(postgresUrl?: string) {
+  constructor(postgresUrl?: string, options: MetadataStoreOptions = {}) {
     const connectionString = postgresUrl?.trim() || process.env.SUNO_EXPORT_POSTGRES_URL;
     if (!connectionString) {
       throw new Error("Postgres metadata database selected; provide --postgres-url or SUNO_EXPORT_POSTGRES_URL");
     }
-    this.location = "postgres";
+    this.log = options.log ?? logMetadataDatabaseStatus;
+    this.location = describePostgresConnection(connectionString);
+    this.log?.(`Creating Postgres metadata pool: ${this.location}`);
     this.pool = new Pool({ connectionString });
   }
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    this.log?.(`Opening Postgres connection: ${this.location}`);
+    const connectedAt = Date.now();
     const existing = await this.pool.query("SELECT to_regclass('public.songs') AS table_name");
+    this.log?.(`Postgres connection ready in ${Date.now() - connectedAt}ms`);
     this.existedBeforeInitialize = existing.rows[0]?.table_name === "songs";
+    this.log?.(`Postgres songs table ${this.existedBeforeInitialize ? "exists" : "will be created"}`);
     await this.pool.query(POSTGRES_SCHEMA);
+    this.log?.("Postgres schema ready");
     this.initialized = true;
   }
 
@@ -740,37 +902,386 @@ export class PostgresMetadataStore implements MetadataStore {
 
   async loadAll(): Promise<ISongData[]> {
     await this.initialize();
+    const startedAt = Date.now();
+    this.log?.("Postgres loading songs from metadata database");
     const result = await this.pool.query("SELECT * FROM songs ORDER BY sort_index ASC, clip_id ASC");
+    this.log?.(`Postgres retrieved ${result.rows.length} song row${result.rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
     const songs: ISongData[] = [];
-    for (const row of result.rows) {
+    const progressInterval = 100;
+    for (let index = 0; index < result.rows.length; index++) {
+      const row = result.rows[index];
       songs.push(normalizeMetadata(await this.rowToSong(row)));
+      const hydrated = index + 1;
+      if (hydrated % progressInterval === 0 || hydrated === result.rows.length) {
+        this.log?.(`Postgres hydrated ${hydrated}/${result.rows.length} song${result.rows.length === 1 ? "" : "s"}`);
+      }
     }
+    this.log?.(`Postgres metadata load complete in ${Date.now() - startedAt}ms`);
     return songs;
+  }
+
+  async loadByClipIds(clipIds: string[]): Promise<ISongData[]> {
+    await this.initialize();
+    const uniqueClipIds = Array.from(new Set(clipIds.map((clipId) => clipId.trim()).filter(Boolean)));
+    if (uniqueClipIds.length === 0) {
+      this.log?.("Postgres targeted metadata load skipped: no clip ids");
+      return [];
+    }
+
+    const startedAt = Date.now();
+    this.log?.(`Postgres loading targeted metadata: ${uniqueClipIds.length} clip id${uniqueClipIds.length === 1 ? "" : "s"}`);
+    const result = await this.pool.query(
+      "SELECT * FROM songs WHERE clip_id = ANY($1::text[]) ORDER BY sort_index ASC, clip_id ASC",
+      [uniqueClipIds],
+    );
+    this.log?.(`Postgres retrieved ${result.rows.length}/${uniqueClipIds.length} targeted song row${result.rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
+
+    const songs: ISongData[] = [];
+    const progressInterval = 100;
+    for (let index = 0; index < result.rows.length; index++) {
+      songs.push(normalizeMetadata(await this.rowToSong(result.rows[index])));
+      const hydrated = index + 1;
+      if (hydrated % progressInterval === 0 || hydrated === result.rows.length) {
+        this.log?.(`Postgres hydrated targeted metadata ${hydrated}/${result.rows.length} song${result.rows.length === 1 ? "" : "s"}`);
+      }
+    }
+    this.log?.(`Postgres targeted metadata load complete in ${Date.now() - startedAt}ms`);
+    return songs;
+  }
+
+  async getByClipId(clipId: string): Promise<ISongData | undefined> {
+    await this.initialize();
+    const normalizedClipId = clipId.trim();
+    if (!normalizedClipId) return undefined;
+
+    const startedAt = Date.now();
+    this.log?.(`Postgres retrieving metadata for clip: ${normalizedClipId}`);
+    const result = await this.pool.query("SELECT * FROM songs WHERE clip_id = $1", [normalizedClipId]);
+    if (result.rows.length === 0) {
+      this.log?.(`Postgres metadata not found for clip: ${normalizedClipId} (${Date.now() - startedAt}ms)`);
+      return undefined;
+    }
+    this.log?.(`Postgres metadata found for clip: ${normalizedClipId} (${Date.now() - startedAt}ms)`);
+    return normalizeMetadata(await this.rowToSong(result.rows[0]));
   }
 
   async saveAll(songs: ISongData[]): Promise<void> {
     await this.initialize();
     const normalizedSongs = songs.map((song) => normalizeMetadata(song));
+    const effectiveSongs = this.dedupeSongsForFullReplace(normalizedSongs);
     const client = await this.pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query("DELETE FROM songs");
-      for (let index = 0; index < normalizedSongs.length; index++) {
-        await this.writeSong(client, normalizedSongs[index], index);
+      this.log?.(`Postgres saveAll starting: ${normalizedSongs.length} song${normalizedSongs.length === 1 ? "" : "s"}`);
+      if (effectiveSongs.length !== normalizedSongs.length) {
+        this.log?.(`Postgres deduplicated songs by clip_id: ${normalizedSongs.length} input rows -> ${effectiveSongs.length} database rows`);
       }
+      await client.query("BEGIN");
+      const deleteResult = await client.query("DELETE FROM songs");
+      this.log?.(`Postgres cleared existing songs: ${deleteResult.rowCount ?? 0} row${deleteResult.rowCount === 1 ? "" : "s"}`);
+      await this.writeSongsBatch(client, effectiveSongs);
+      await this.writeSongChildrenBatch(client, effectiveSongs);
+      await this.writeSongProjectsBatch(client, effectiveSongs);
       await client.query("COMMIT");
+      this.log?.(`Postgres transaction committed: ${effectiveSongs.length} song${effectiveSongs.length === 1 ? "" : "s"} saved`);
     } catch (error) {
       await client.query("ROLLBACK");
+      this.log?.("Postgres transaction rolled back");
       throw error;
     } finally {
       client.release();
+      this.log?.("Postgres client released");
     }
+  }
+
+  private dedupeSongsForFullReplace(songs: ISongData[]): ISongData[] {
+    const byClipId = new Map<string, { song: ISongData; sortIndex: number }>();
+    songs.forEach((song, sortIndex) => {
+      byClipId.set(song.clipId, { song, sortIndex });
+    });
+    return Array.from(byClipId.values())
+      .sort((a, b) => a.sortIndex - b.sortIndex)
+      .map((entry) => entry.song);
+  }
+
+  private async writeSongsBatch(client: PoolClient, songs: ISongData[]): Promise<void> {
+    const columns = [
+      "clip_id",
+      "sort_index",
+      "title",
+      "song_url",
+      "style",
+      "thumbnail",
+      "model",
+      "duration",
+      "liked",
+      "artist_name",
+      "lyrics",
+      "creation_date",
+      "weirdness",
+      "style_strength",
+      "audio_strength",
+      "remix_parent",
+      "comment",
+      "upload",
+      "is_hidden",
+      "gpt_description_prompt",
+      "persona_id",
+      "persona_name",
+      "project_name",
+      "explicit",
+      "flagged_reason",
+      "mp3_status",
+      "wav_status",
+      "alac_status",
+      "flac_status",
+      "image_status",
+      "mp3_timestamp",
+      "wav_timestamp",
+      "alac_timestamp",
+      "flac_timestamp",
+      "raw_api_response_json",
+    ];
+    const updateColumns = columns.filter((column) => column !== "clip_id");
+    let totalRows = 0;
+
+    for (let offset = 0; offset < songs.length; offset += PostgresMetadataStore.SONG_BATCH_SIZE) {
+      const chunk = songs.slice(offset, offset + PostgresMetadataStore.SONG_BATCH_SIZE);
+      const rows = chunk.map((song, chunkIndex) => {
+        const row = this.songToRow(song, offset + chunkIndex);
+        return [
+          row.clipId,
+          row.sortIndex,
+          row.title,
+          row.songUrl,
+          row.style,
+          row.thumbnail,
+          row.model,
+          row.duration,
+          row.liked,
+          row.artistName,
+          row.lyrics,
+          row.creationDate,
+          row.weirdness,
+          row.styleStrength,
+          row.audioStrength,
+          row.remixParent,
+          row.comment,
+          row.upload,
+          row.isHidden,
+          row.gptDescriptionPrompt,
+          row.personaId,
+          row.personaName,
+          row.projectName,
+          row.explicit,
+          row.flaggedReason,
+          row.mp3Status,
+          row.wavStatus,
+          row.alacStatus,
+          row.flacStatus,
+          row.imageStatus,
+          row.mp3Timestamp,
+          row.wavTimestamp,
+          row.alacTimestamp,
+          row.flacTimestamp,
+          row.rawApiResponseJson,
+        ];
+      });
+      await this.insertRows(
+        client,
+        "songs",
+        columns,
+        rows,
+        `ON CONFLICT (clip_id) DO UPDATE SET ${updateColumns
+          .map((column) => `${column} = EXCLUDED.${column}`)
+          .join(", ")}, updated_at = CURRENT_TIMESTAMP`,
+      );
+      totalRows += rows.length;
+      this.log?.(`Postgres saved song batch: ${totalRows}/${songs.length}`);
+    }
+  }
+
+  private async writeSongChildrenBatch(client: PoolClient, songs: ISongData[]): Promise<void> {
+    const tags = new Map<string, string>();
+    const tagLinkRows: unknown[][] = [];
+    const negativeTagLinkRows: unknown[][] = [];
+    const mashupSourceRows: unknown[][] = [];
+
+    songs.forEach((song) => {
+      (song.tags || []).forEach((tag) => {
+        const normalizedTag = tag.trim();
+        const key = normalizeTagForIdentity(normalizedTag);
+        if (!key) return;
+        tags.set(key, tags.has(key) ? preferTagDisplayName(tags.get(key)!, normalizedTag) : normalizedTag);
+        tagLinkRows.push([song.clipId, key]);
+      });
+      (song.negativeTags || []).forEach((tag) => {
+        const normalizedTag = tag.trim();
+        const key = normalizeTagForIdentity(normalizedTag);
+        if (!key) return;
+        tags.set(key, tags.has(key) ? preferTagDisplayName(tags.get(key)!, normalizedTag) : normalizedTag);
+        negativeTagLinkRows.push([song.clipId, key]);
+      });
+      (song.mashupSource || []).forEach((source, index) => {
+        mashupSourceRows.push([song.clipId, index, source]);
+      });
+    });
+
+    await this.insertRowsInChunks(
+      client,
+      "tags",
+      ["name", "normalized_name"],
+      Array.from(tags.entries()).map(([normalizedName, name]) => [name, normalizedName]),
+      "ON CONFLICT DO NOTHING",
+    );
+    await this.insertTagLinksInChunks(client, "song_tags", tagLinkRows);
+    await this.insertTagLinksInChunks(client, "song_negative_tags", negativeTagLinkRows);
+    await this.insertRowsInChunks(
+      client,
+      "song_mashup_sources",
+      ["clip_id", "sort_index", "source"],
+      mashupSourceRows,
+    );
+    this.log?.(`Postgres saved child metadata rows: uniqueTags=${tags.size}, tagLinks=${tagLinkRows.length}, negativeTagLinks=${negativeTagLinkRows.length}, mashupSources=${mashupSourceRows.length}`);
+  }
+
+  private async insertTagLinksInChunks(
+    client: PoolClient,
+    joinTableName: string,
+    rows: unknown[][],
+  ): Promise<void> {
+    for (let offset = 0; offset < rows.length; offset += PostgresMetadataStore.CHILD_BATCH_SIZE) {
+      await this.insertTagLinks(
+        client,
+        joinTableName,
+        rows.slice(offset, offset + PostgresMetadataStore.CHILD_BATCH_SIZE),
+      );
+    }
+  }
+
+  private async insertTagLinks(
+    client: PoolClient,
+    joinTableName: string,
+    rows: unknown[][],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+
+    const values: unknown[] = [];
+    const placeholders = rows.map((row) => {
+      const rowPlaceholders = row.map((value) => {
+        values.push(value);
+        return `$${values.length}`;
+      });
+      return `(${rowPlaceholders.join(", ")})`;
+    });
+
+    await client.query(
+      `
+      INSERT INTO ${joinTableName} (clip_id, tag_id)
+      SELECT input.clip_id, tags.id
+      FROM (VALUES ${placeholders.join(", ")}) AS input(clip_id, normalized_name)
+      JOIN tags ON tags.normalized_name = input.normalized_name
+      ON CONFLICT DO NOTHING
+      `,
+      values,
+    );
+  }
+
+  private async writeSongProjectsBatch(client: PoolClient, songs: ISongData[]): Promise<void> {
+    const workspaces = new Map<string, ITrackProject>();
+    const songWorkspaceRows = new Map<string, unknown[]>();
+
+    songs.forEach((song) => {
+      const project = song.rawApiResponse?.project;
+      if (!project) return;
+      workspaces.set(project.id, project);
+      songWorkspaceRows.set(`${song.clipId}\0${project.id}`, [song.clipId, project.id, "metadata"]);
+    });
+
+    const workspaceRows = Array.from(workspaces.values()).map((workspace) => [
+      workspace.id,
+      workspace.name,
+      workspace.description ?? null,
+      workspace.is_trashed === true,
+      workspace.is_public === true,
+    ]);
+    await this.insertRowsInChunks(
+      client,
+      "workspaces",
+      ["id", "name", "description", "is_trashed", "is_public"],
+      workspaceRows,
+      `ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        is_trashed = EXCLUDED.is_trashed,
+        is_public = EXCLUDED.is_public,
+        updated_at = CURRENT_TIMESTAMP,
+        last_seen_at = CURRENT_TIMESTAMP`,
+    );
+
+    await this.insertRowsInChunks(
+      client,
+      "song_workspaces",
+      ["clip_id", "workspace_id", "source"],
+      Array.from(songWorkspaceRows.values()),
+      `ON CONFLICT (clip_id, workspace_id) DO UPDATE SET
+        source = EXCLUDED.source,
+        updated_at = CURRENT_TIMESTAMP`,
+    );
+    this.log?.(`Postgres saved project metadata rows: workspaces=${workspaceRows.length}, songWorkspaces=${songWorkspaceRows.size}`);
+  }
+
+  private async insertRowsInChunks(
+    client: PoolClient,
+    tableName: string,
+    columns: string[],
+    rows: unknown[][],
+    conflictClause?: string,
+  ): Promise<void> {
+    for (let offset = 0; offset < rows.length; offset += PostgresMetadataStore.CHILD_BATCH_SIZE) {
+      await this.insertRows(
+        client,
+        tableName,
+        columns,
+        rows.slice(offset, offset + PostgresMetadataStore.CHILD_BATCH_SIZE),
+        conflictClause,
+      );
+    }
+  }
+
+  private async insertRows(
+    client: PoolClient,
+    tableName: string,
+    columns: string[],
+    rows: unknown[][],
+    conflictClause?: string,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+
+    const values: unknown[] = [];
+    const placeholders = rows.map((row) => {
+      const rowPlaceholders = row.map((value) => {
+        values.push(value);
+        return `$${values.length}`;
+      });
+      return `(${rowPlaceholders.join(", ")})`;
+    });
+
+    await client.query(
+      `
+      INSERT INTO ${tableName} (${columns.join(", ")})
+      VALUES ${placeholders.join(", ")}
+      ${conflictClause ?? ""}
+      `,
+      values,
+    );
   }
 
   async upsert(song: ISongData): Promise<void> {
     await this.initialize();
     const normalizedSong = normalizeMetadata(song);
+    this.log?.(`Postgres upsert starting: ${normalizedSong.clipId}`);
     const client = await this.pool.connect();
+    this.log?.(`Postgres client acquired for song upsert: ${normalizedSong.clipId}`);
     try {
       await client.query("BEGIN");
       const currentMax = await client.query("SELECT COALESCE(MAX(sort_index), -1) AS max_index FROM songs");
@@ -779,28 +1290,36 @@ export class PostgresMetadataStore implements MetadataStore {
 
       await this.writeSong(client, normalizedSong, sortIndex);
       await client.query("COMMIT");
+      this.log?.(`Postgres upsert committed: ${normalizedSong.clipId}`);
     } catch (error) {
       await client.query("ROLLBACK");
+      this.log?.(`Postgres upsert rolled back: ${normalizedSong.clipId}`);
       throw error;
     } finally {
       client.release();
+      this.log?.(`Postgres client released after song upsert: ${normalizedSong.clipId}`);
     }
   }
 
   async upsertWorkspaces(workspaces: IWorkspace[]): Promise<void> {
     await this.initialize();
+    this.log?.(`Postgres workspace upsert starting: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
     const client = await this.pool.connect();
+    this.log?.("Postgres client acquired for workspace upsert");
     try {
       await client.query("BEGIN");
       for (const workspace of workspaces) {
         await this.writeWorkspace(client, workspace);
       }
       await client.query("COMMIT");
+      this.log?.(`Postgres workspace upsert committed: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
     } catch (error) {
       await client.query("ROLLBACK");
+      this.log?.("Postgres workspace upsert rolled back");
       throw error;
     } finally {
       client.release();
+      this.log?.("Postgres client released after workspace upsert");
     }
   }
 
@@ -810,7 +1329,9 @@ export class PostgresMetadataStore implements MetadataStore {
     source: string = "discovery",
   ): Promise<void> {
     await this.initialize();
+    this.log?.(`Postgres song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
     const client = await this.pool.connect();
+    this.log?.(`Postgres client acquired for song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
     try {
       await client.query("BEGIN");
       await this.writeWorkspace(client, workspace);
@@ -825,16 +1346,22 @@ export class PostgresMetadataStore implements MetadataStore {
         [clipId, workspace.id, source],
       );
       await client.query("COMMIT");
+      this.log?.(`Postgres song-workspace link upsert committed: clip=${clipId}, workspace=${workspace.id}`);
     } catch (error) {
       await client.query("ROLLBACK");
+      this.log?.(`Postgres song-workspace link upsert rolled back: clip=${clipId}, workspace=${workspace.id}`);
       throw error;
     } finally {
       client.release();
+      this.log?.(`Postgres client released after song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
     }
   }
 
   close(): Promise<void> {
-    return this.pool.end();
+    this.log?.(`Closing Postgres pool: ${this.location}`);
+    return this.pool.end().then(() => {
+      this.log?.("Postgres pool closed");
+    });
   }
 
   private async writeSong(client: PoolClient, song: ISongData, sortIndex: number): Promise<void> {
@@ -939,18 +1466,8 @@ export class PostgresMetadataStore implements MetadataStore {
     await client.query("DELETE FROM song_negative_tags WHERE clip_id = $1", [song.clipId]);
     await client.query("DELETE FROM song_mashup_sources WHERE clip_id = $1", [song.clipId]);
 
-    for (let index = 0; index < (song.tags || []).length; index++) {
-      await client.query(
-        "INSERT INTO song_tags (clip_id, sort_index, tag) VALUES ($1, $2, $3)",
-        [song.clipId, index, song.tags![index]],
-      );
-    }
-    for (let index = 0; index < (song.negativeTags || []).length; index++) {
-      await client.query(
-        "INSERT INTO song_negative_tags (clip_id, sort_index, tag) VALUES ($1, $2, $3)",
-        [song.clipId, index, song.negativeTags![index]],
-      );
-    }
+    await this.writeTagLinks(client, "song_tags", song.clipId, song.tags || []);
+    await this.writeTagLinks(client, "song_negative_tags", song.clipId, song.negativeTags || []);
     for (let index = 0; index < (song.mashupSource || []).length; index++) {
       await client.query(
         "INSERT INTO song_mashup_sources (clip_id, sort_index, source) VALUES ($1, $2, $3)",
@@ -972,6 +1489,29 @@ export class PostgresMetadataStore implements MetadataStore {
         [song.clipId, project.id, "metadata"],
       );
     }
+  }
+
+  private async writeTagLinks(
+    client: PoolClient,
+    joinTableName: string,
+    clipId: string,
+    tags: string[],
+  ): Promise<void> {
+    const uniqueTags = uniqueTagsByIdentity(tags);
+    if (uniqueTags.length === 0) return;
+
+    await this.insertRowsInChunks(
+      client,
+      "tags",
+      ["name", "normalized_name"],
+      uniqueTags.map((tag) => [tag.name, tag.normalizedName]),
+      "ON CONFLICT DO NOTHING",
+    );
+    await this.insertTagLinks(
+      client,
+      joinTableName,
+      uniqueTags.map((tag) => [clipId, tag.normalizedName]),
+    );
   }
 
   private async writeWorkspace(client: PoolClient, workspace: ITrackProject): Promise<void> {
@@ -1040,8 +1580,8 @@ export class PostgresMetadataStore implements MetadataStore {
   }
 
   private async rowToSong(row: any): Promise<ISongData> {
-    const tags = await this.getStringChildren("song_tags", "tag", row.clip_id);
-    const negativeTags = await this.getStringChildren("song_negative_tags", "tag", row.clip_id);
+    const tags = await this.getTagChildren("song_tags", row.clip_id);
+    const negativeTags = await this.getTagChildren("song_negative_tags", row.clip_id);
     const mashupSource = await this.getStringChildren("song_mashup_sources", "source", row.clip_id);
 
     return {
@@ -1083,6 +1623,20 @@ export class PostgresMetadataStore implements MetadataStore {
       tags,
       rawApiResponse: optionalJsonParse(row.raw_api_response_json),
     };
+  }
+
+  private async getTagChildren(joinTableName: string, clipId: string): Promise<string[]> {
+    const result = await this.pool.query(
+      `
+      SELECT tags.name AS value
+      FROM ${joinTableName}
+      JOIN tags ON tags.id = ${joinTableName}.tag_id
+      WHERE ${joinTableName}.clip_id = $1
+      ORDER BY lower(tags.name) ASC
+      `,
+      [clipId],
+    );
+    return result.rows.map((row) => row.value);
   }
 
   private async getStringChildren(tableName: string, valueColumn: string, clipId: string): Promise<string[]> {
