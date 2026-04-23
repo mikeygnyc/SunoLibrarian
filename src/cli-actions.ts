@@ -1,8 +1,9 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { SunoClient } from "./client";
 import type { IWorkspace } from "./lib/interfaces";
-import { LocalControlPlaneRepository, LocalJobOrchestrator, type LocalWorkflowContext } from "./orchestration";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalControlPlaneRepository, LocalJobOrchestrator, type ClaimedWorkItem, type LocalWorkflowContext } from "./orchestration";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -32,6 +33,7 @@ import {
 
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 const DEFAULT_WATCH_INTERVAL_MS = 1000;
+const DEFAULT_WORKER_POLL_INTERVAL_MS = 500;
 
 export { getAuthenticatedClientWithDeps };
 export type { AuthClient, AuthDeps, AuthStorage };
@@ -113,6 +115,10 @@ async function exportMetadataJsonIfRequested(
 
 function shouldCopySongsMetadataToOutput(options: CliOptions): boolean {
   return options.copySongsMetadataToOutput === true;
+}
+
+function shouldSubmitOnly(options: CliOptions): boolean {
+  return options.runtimeMode === "distributed" || options.submitOnly === true;
 }
 
 async function runDownloadWorkflow(options: CliOptions): Promise<DownloadFlowResult> {
@@ -313,6 +319,16 @@ async function runRefreshWorkflow(options: CliOptions): Promise<void> {
 }
 
 export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlowResult> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("download", options, getStagePlan("download"));
+    console.log(`Job submitted: ${jobId}`);
+    return {
+      outputDir: path.resolve(options.output),
+      downloaded: 0,
+      skipped: 0,
+    };
+  }
+
   const { result } = await runLocalWorkflowCommand("download", options, [
     { type: "authorization", workerRole: "auth" },
     { type: "asset-acquisition", workerRole: "asset" },
@@ -330,6 +346,12 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 }
 
 export async function runProcessFlow(options: CliOptions): Promise<void> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("process", options, getStagePlan("process"));
+    console.log(`Job submitted: ${jobId}`);
+    return;
+  }
+
   await runLocalWorkflowCommand("process", options, [
     { type: "processing", workerRole: "processing" },
     { type: "conversion", workerRole: "conversion" },
@@ -342,6 +364,12 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("sync", options, getStagePlan("sync"));
+    console.log(`Job submitted: ${jobId}`);
+    return;
+  }
+
   await runLocalWorkflowCommand("sync", options, [
     { type: "authorization", workerRole: "auth" },
     { type: "asset-acquisition", workerRole: "asset" },
@@ -426,6 +454,12 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("download-images", options, getStagePlan("download-images"));
+    console.log(`Job submitted: ${jobId}`);
+    return;
+  }
+
   await runLocalWorkflowCommand("download-images", options, [
     { type: "authorization", workerRole: "auth" },
     { type: "asset-acquisition", workerRole: "asset" },
@@ -438,6 +472,12 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
 }
 
 export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("fetch-metadata", options, getStagePlan("fetch-metadata"));
+    console.log(`Job submitted: ${jobId}`);
+    return;
+  }
+
   await runLocalWorkflowCommand("fetch-metadata", options, [
     { type: "authorization", workerRole: "auth" },
     { type: "metadata-acquisition", workerRole: "metadata" },
@@ -450,6 +490,12 @@ export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runRefreshFlow(options: CliOptions): Promise<void> {
+  if (shouldSubmitOnly(options)) {
+    const jobId = await submitWorkflowJob("refresh", options, getStagePlan("refresh"));
+    console.log(`Job submitted: ${jobId}`);
+    return;
+  }
+
   await runLocalWorkflowCommand("refresh", options, [
     { type: "authorization", workerRole: "auth" },
     { type: "metadata-acquisition", workerRole: "metadata" },
@@ -510,6 +556,49 @@ export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): 
   }
 }
 
+export async function runOrchestratorFlow(options: CliOptions = {}): Promise<void> {
+  const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
+  const once = options.once === true;
+  const roles: Array<"orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion"> = [
+    "orchestrator",
+    "auth",
+    "metadata",
+    "asset",
+    "processing",
+    "conversion",
+  ];
+
+  do {
+    let processed = 0;
+    for (const role of roles) {
+      processed += await processWorkerRole(role, { ...options, once: true });
+    }
+
+    if (once || processed === 0) {
+      if (once) return;
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  } while (true);
+}
+
+export async function runWorkerFlow(options: CliOptions = {}): Promise<void> {
+  const role = String(options.role ?? "").trim() as "auth" | "metadata" | "asset" | "processing" | "conversion";
+  if (!role) {
+    throw new Error("run-worker requires --role");
+  }
+
+  const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
+  const once = options.once === true;
+
+  do {
+    const processed = await processWorkerRole(role, { ...options, once: true });
+    if (once) return;
+    if (processed === 0) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  } while (true);
+}
+
 function createLocalJobOrchestrator(): LocalJobOrchestrator {
   return new LocalJobOrchestrator(new LocalControlPlaneRepository());
 }
@@ -545,4 +634,253 @@ function serializeJobPayload(options: CliOptions): Record<string, unknown> {
     if (value instanceof SunoClient) return undefined;
     return value;
   })) as Record<string, unknown>;
+}
+
+function getStagePlan(
+  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
+): Array<{ type: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"; workerRole: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion" }> {
+  switch (workflowType) {
+    case "download":
+      return [
+        { type: "authorization", workerRole: "auth" },
+        { type: "asset-acquisition", workerRole: "asset" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+    case "process":
+      return [
+        { type: "processing", workerRole: "processing" },
+        { type: "conversion", workerRole: "conversion" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+    case "sync":
+      return [
+        { type: "authorization", workerRole: "auth" },
+        { type: "asset-acquisition", workerRole: "asset" },
+        { type: "processing", workerRole: "processing" },
+        { type: "conversion", workerRole: "conversion" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+    case "download-images":
+      return [
+        { type: "authorization", workerRole: "auth" },
+        { type: "asset-acquisition", workerRole: "asset" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+    case "fetch-metadata":
+      return [
+        { type: "authorization", workerRole: "auth" },
+        { type: "metadata-acquisition", workerRole: "metadata" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+    case "refresh":
+      return [
+        { type: "authorization", workerRole: "auth" },
+        { type: "metadata-acquisition", workerRole: "metadata" },
+        { type: "finalization", workerRole: "orchestrator" },
+      ];
+  }
+}
+
+async function submitWorkflowJob(
+  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
+  options: CliOptions,
+  stagePlan: ReturnType<typeof getStagePlan>,
+): Promise<string> {
+  const repository = new LocalControlPlaneRepository();
+  await repository.initialize();
+  const now = new Date();
+  const jobId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  await repository.createJob({
+    id: jobId,
+    workflowType,
+    status: "queued",
+    runtimeMode: "distributed",
+    payload: serializeJobPayload(options),
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  for (const [index, stagePlanItem] of stagePlan.entries()) {
+    const stageId = `${jobId}-stage-${index + 1}`;
+    const workItemId = `${jobId}-work-${index + 1}`;
+    await repository.createStage({
+      id: stageId,
+      jobId,
+      stageType: stagePlanItem.type,
+      status: "pending",
+      sequence: index + 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await repository.createWorkItem({
+      id: workItemId,
+      jobId,
+      stageId,
+      stageType: stagePlanItem.type,
+      status: "pending",
+      workerRole: stagePlanItem.workerRole,
+      attemptCount: 0,
+      payload: {
+        workflowType,
+        stageType: stagePlanItem.type,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return jobId;
+}
+
+async function processWorkerRole(
+  role: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion",
+  options: CliOptions = {},
+): Promise<number> {
+  const repository = new LocalControlPlaneRepository();
+  await repository.initialize();
+  const workerInstanceId = `worker-${role}-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+  await repository.upsertWorkerInstance({
+    id: workerInstanceId,
+    role,
+    runtimeMode: "distributed",
+    hostname: os.hostname(),
+    processId: process.pid,
+    startedAt: new Date(),
+    heartbeatAt: new Date(),
+    metadata: { kind: "worker-runtime" },
+  });
+
+  const claimed = await repository.claimNextRunnableWorkItem(role, workerInstanceId);
+  if (!claimed) {
+    return 0;
+  }
+
+  await executeClaimedWorkItem(repository, claimed, workerInstanceId);
+  return 1;
+}
+
+async function executeClaimedWorkItem(
+  repository: LocalControlPlaneRepository,
+  claimed: ClaimedWorkItem,
+  workerInstanceId: string,
+): Promise<void> {
+  const leaseManager = new LeaseManager(repository, DEFAULT_RUNTIME_CONFIG);
+  const hasCapacity = await leaseManager.hasAvailableCapacity(claimed.stage.stageType);
+  if (!hasCapacity) {
+    await repository.updateStageStatus(claimed.stage.id, "blocked");
+    await repository.updateWorkItemStatus(claimed.workItem.id, "blocked", {
+      leaseOwnerId: undefined,
+    });
+    return;
+  }
+
+  const lease = await leaseManager.acquireStageLease({
+    stageType: claimed.stage.stageType,
+    workerInstanceId,
+    workerRole: claimed.workItem.workerRole,
+    jobId: claimed.job.id,
+    stageId: claimed.stage.id,
+    workItemId: claimed.workItem.id,
+  });
+
+  await repository.updateJobStatus(claimed.job.id, "running", { startedAt: claimed.job.startedAt ?? new Date() });
+  await repository.updateStageStatus(claimed.stage.id, "running", { startedAt: new Date() });
+  await repository.updateWorkItemStatus(claimed.workItem.id, "running", { startedAt: new Date() });
+
+  try {
+    const workflowOptions = claimed.job.payload as CliOptions;
+    await executeStageHandler(claimed.job.workflowType, claimed.stage.stageType, workflowOptions);
+    await repository.updateStageStatus(claimed.stage.id, "succeeded", { completedAt: new Date() });
+    await repository.updateWorkItemStatus(claimed.workItem.id, "succeeded", { completedAt: new Date() });
+    await leaseManager.releaseStageLease(lease);
+
+    const stages = await repository.listStages(claimed.job.id);
+    if (stages.every((stage) => stage.status === "succeeded")) {
+      await repository.updateJobStatus(claimed.job.id, "completed", { completedAt: new Date() });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await repository.updateStageStatus(claimed.stage.id, "failed", { completedAt: new Date(), errorMessage: message });
+    await repository.updateWorkItemStatus(claimed.workItem.id, "failed", { completedAt: new Date(), errorMessage: message });
+    await repository.updateJobStatus(claimed.job.id, "failed", { completedAt: new Date(), errorMessage: message });
+    await leaseManager.releaseStageLease(lease);
+    throw error;
+  }
+}
+
+async function executeStageHandler(
+  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
+  stageType: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization",
+  options: CliOptions,
+): Promise<void> {
+  switch (workflowType) {
+    case "download":
+      if (stageType === "authorization") {
+        await authService.getAuthenticatedClient(options);
+      } else if (stageType === "asset-acquisition") {
+        await runDownloadWorkflow(options);
+      }
+      return;
+    case "process":
+      if (stageType === "conversion") {
+        await runProcessWorkflow(options);
+      }
+      return;
+    case "download-images":
+      if (stageType === "authorization") {
+        await authService.getAuthenticatedClient(options);
+      } else if (stageType === "asset-acquisition") {
+        await runDownloadImagesWorkflow(options);
+      }
+      return;
+    case "fetch-metadata":
+      if (stageType === "authorization") {
+        await authService.getAuthenticatedClient(options);
+      } else if (stageType === "metadata-acquisition") {
+        await runFetchMetadataWorkflow(options);
+      }
+      return;
+    case "refresh":
+      if (stageType === "authorization") {
+        await authService.getAuthenticatedClient(options);
+      } else if (stageType === "metadata-acquisition") {
+        await runRefreshWorkflow(options);
+      }
+      return;
+    case "sync":
+      if (stageType === "authorization") {
+        await authService.getAuthenticatedClient(options);
+      } else if (stageType === "asset-acquisition") {
+        await runDownloadWorkflow({
+          ...options,
+          exportMetadataJson: undefined,
+          copySongsMetadataToOutput: false,
+        });
+      } else if (stageType === "conversion") {
+        const outputDir = path.resolve(options.output);
+        const conversionOutput = options.library || outputDir;
+        const storeConfig = resolveMetadataStoreOptions(options);
+        await runProcessWorkflow({
+          input: outputDir,
+          output: conversionOutput,
+          databaseType: storeConfig.type,
+          database: storeConfig.sqlitePath,
+          postgresUrl: storeConfig.postgresUrl,
+          copySongsMetadataToOutput: false,
+          processFormats: options.processFormats,
+          processBitrate: options.processBitrate,
+          processConcurrency: options.processConcurrency,
+          processUpdateConcurrency: options.processUpdateConcurrency,
+          images: options.images,
+          lyrics: options.lyrics,
+          exitOnError: options.exitOnError,
+          processClipIds: undefined,
+        });
+      } else if (stageType === "finalization") {
+        const outputDir = path.resolve(options.output);
+        const storeConfig = resolveMetadataStoreOptions(options);
+        await exportMetadataJsonIfRequested(options, storeConfig, resolveMetadataJsonExportPath(outputDir, options));
+      }
+      return;
+  }
 }

@@ -18,7 +18,6 @@ import type {
   WorkItemStatus,
 } from "../lib/interfaces";
 
-const DEFAULT_LOCAL_CONTROL_PLANE_DIR = path.join(os.homedir(), ".suno-export", "orchestration");
 const STATE_FILE = "state.json";
 const LOGS_FILE = "logs.json";
 const LOCK_DIR = ".lock";
@@ -43,8 +42,14 @@ const EMPTY_STATE: PersistedState = {
   statusEvents: [],
 };
 
+export type ClaimedWorkItem = {
+  job: IOrchestrationJob;
+  stage: IOrchestrationStage;
+  workItem: IWorkItem;
+};
+
 export class LocalControlPlaneRepository implements IOrchestrationRepository, ICentralLogRepository {
-  constructor(private readonly baseDir: string = DEFAULT_LOCAL_CONTROL_PLANE_DIR) {}
+  constructor(private readonly baseDir: string = resolveDefaultControlPlaneDir()) {}
 
   async initialize(): Promise<void> {
     fs.mkdirSync(this.baseDir, { recursive: true });
@@ -148,6 +153,63 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     return this.readState().workItems
       .filter((workItem) => workItem.jobId === jobId)
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+  }
+
+  async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<ClaimedWorkItem | null> {
+    return this.withLockedState((state) => {
+      const activeJobs = new Set(
+        state.jobs
+          .filter((job) => job.status === "queued" || job.status === "running")
+          .map((job) => job.id),
+      );
+
+      const sortedCandidates = state.workItems
+        .filter((workItem) => {
+          return activeJobs.has(workItem.jobId)
+            && workItem.workerRole === workerRole
+            && (workItem.status === "pending" || workItem.status === "blocked");
+        })
+        .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+
+      for (const candidate of sortedCandidates) {
+        const stage = state.stages.find((item) => item.id === candidate.stageId);
+        const job = state.jobs.find((item) => item.id === candidate.jobId);
+        if (!stage || !job) continue;
+        if (!this.areStageDependenciesSatisfied(state, stage)) continue;
+
+        const claimedAt = new Date();
+        state.workItems = state.workItems.map((workItem) => {
+          if (workItem.id !== candidate.id) return workItem;
+          return {
+            ...workItem,
+            status: "leased",
+            leaseOwnerId: workerInstanceId,
+            updatedAt: claimedAt,
+          };
+        });
+        state.stages = state.stages.map((stageItem) => {
+          if (stageItem.id !== stage.id) return stageItem;
+          return {
+            ...stageItem,
+            status: "queued",
+            updatedAt: claimedAt,
+          };
+        });
+
+        return {
+          job,
+          stage,
+          workItem: {
+            ...candidate,
+            status: "leased",
+            leaseOwnerId: workerInstanceId,
+            updatedAt: claimedAt,
+          },
+        };
+      }
+
+      return null;
+    });
   }
 
   async updateWorkItemStatus(
@@ -357,6 +419,12 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     this.writeJsonAtomic(this.getStatePath(), state);
   }
 
+  private areStageDependenciesSatisfied(state: PersistedState, stage: IOrchestrationStage): boolean {
+    const priorStages = state.stages
+      .filter((candidate) => candidate.jobId === stage.jobId && candidate.sequence < stage.sequence);
+    return priorStages.every((candidate) => candidate.status === "succeeded");
+  }
+
   private readLogs(): ILogEntry[] {
     this.ensureInitializedSync();
     const raw = fs.readFileSync(this.getLogsPath(), "utf8");
@@ -433,6 +501,11 @@ function dateReviver(_key: string, value: unknown): unknown {
     return new Date(value);
   }
   return value;
+}
+
+function resolveDefaultControlPlaneDir(): string {
+  return process.env.SUNO_EXPORT_CONTROL_PLANE_DIR?.trim()
+    || path.join(os.homedir(), ".suno-export", "orchestration");
 }
 
 function randomLeaseId(): string {

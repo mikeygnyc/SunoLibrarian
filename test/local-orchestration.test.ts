@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
+import { runOrchestratorFlow, runProcessFlow } from "../src/cli-actions";
 import { LocalControlPlaneRepository, LocalJobOrchestrator } from "../src/orchestration";
 import { DEFAULT_RUNTIME_CONFIG } from "../src/orchestration/runtime-defaults";
 
@@ -212,4 +213,40 @@ test("conversion stage capacity respects configured max active leases", async ()
   const secondResult = await secondRun;
   const finalSnapshot = await orchestrator2.getJobSnapshot(secondResult.jobId);
   assert.equal(finalSnapshot.stages[0]?.status, "succeeded");
+});
+
+test("submit-only workflow can be completed by orchestrator loop", async () => {
+  const dir = createTempControlPlaneDir();
+  const previousDir = process.env.SUNO_EXPORT_CONTROL_PLANE_DIR;
+  process.env.SUNO_EXPORT_CONTROL_PLANE_DIR = dir;
+
+  const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), "suno-export-phase6-in-"));
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "suno-export-phase6-out-"));
+  const databasePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "suno-export-phase6-db-")), "metadata.sqlite");
+
+  try {
+    await runProcessFlow({
+      input: inputDir,
+      output: outputDir,
+      runtimeMode: "distributed",
+      database: databasePath,
+    });
+
+    const repository = new LocalControlPlaneRepository(dir);
+    const [queuedJob] = await repository.listJobs(1);
+    assert.equal(queuedJob?.status, "queued");
+
+    await runOrchestratorFlow({ once: true, pollInterval: "10" });
+    await runOrchestratorFlow({ once: true, pollInterval: "10" });
+    await runOrchestratorFlow({ once: true, pollInterval: "10" });
+
+    const [completedJob] = await repository.listJobs(1);
+    assert.equal(completedJob?.status, "completed");
+  } finally {
+    if (previousDir == null) {
+      delete process.env.SUNO_EXPORT_CONTROL_PLANE_DIR;
+    } else {
+      process.env.SUNO_EXPORT_CONTROL_PLANE_DIR = previousDir;
+    }
+  }
 });
