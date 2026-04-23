@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import * as os from "os";
 import type {
   ICentralLogRepository,
+  IRuntimeConfig,
   IOrchestrationJob,
   IOrchestrationRepository,
   IOrchestrationStage,
@@ -13,7 +14,9 @@ import type {
   WorkerRole,
 } from "../lib/interfaces";
 import { CentralLogger, DatabaseLogSink } from "../logging";
+import { LeaseManager } from "./lease-manager";
 import { LocalControlPlaneRepository } from "./local-control-plane";
+import { DEFAULT_RUNTIME_CONFIG } from "./runtime-defaults";
 
 type StagePlan = {
   type: OrchestrationStageType;
@@ -39,14 +42,17 @@ type RunLocalWorkflowOptions<TPayload> = {
 
 export class LocalJobOrchestrator {
   private readonly logger: CentralLogger;
+  private readonly leaseManager: LeaseManager;
 
   constructor(
-    private readonly repository: IOrchestrationRepository & ICentralLogRepository = new LocalControlPlaneRepository(),
+    private readonly repository: LocalControlPlaneRepository = new LocalControlPlaneRepository(),
+    private readonly runtimeConfig: IRuntimeConfig = DEFAULT_RUNTIME_CONFIG,
   ) {
     this.logger = new CentralLogger({
       minimumLevel: "info",
       sinks: [new DatabaseLogSink(this.repository)],
     });
+    this.leaseManager = new LeaseManager(this.repository, runtimeConfig);
   }
 
   async runWorkflow<TPayload extends Record<string, unknown>, TResult>(
@@ -131,6 +137,32 @@ export class LocalJobOrchestrator {
             throw new Error(`Stage ${stageType} is not defined for workflow ${options.workflowType}`);
           }
 
+          let lease = null;
+          const hasCapacity = await this.leaseManager.hasAvailableCapacity(stageType);
+          if (!hasCapacity) {
+            await this.repository.updateStageStatus(stageState.stage.id, "blocked");
+            await this.repository.updateWorkItemStatus(stageState.workItem.id, "blocked");
+            await this.repository.appendStatusEvent(buildStatusEvent({
+              jobId: runningJob.id,
+              stageId: stageState.stage.id,
+              workItemId: stageState.workItem.id,
+              entityId: stageState.stage.id,
+              eventType: "stage-blocked",
+              message: `Stage blocked waiting for capacity: ${stageType}`,
+              scope: "stage",
+              workerInstanceId: workerInstance.id,
+            }));
+          }
+
+          lease = await this.leaseManager.acquireStageLease({
+            stageType,
+            workerInstanceId: workerInstance.id,
+            workerRole: stageState.workItem.workerRole,
+            jobId: runningJob.id,
+            stageId: stageState.stage.id,
+            workItemId: stageState.workItem.id,
+          });
+
           await this.repository.updateStageStatus(stageState.stage.id, "running", { startedAt: new Date() });
           await this.repository.updateWorkItemStatus(stageState.workItem.id, "running", { startedAt: new Date() });
           await this.repository.appendStatusEvent(buildStatusEvent({
@@ -167,6 +199,7 @@ export class LocalJobOrchestrator {
               scope: "stage",
               workerInstanceId: workerInstance.id,
             }));
+            await this.leaseManager.releaseStageLease(lease);
             return result;
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -198,6 +231,7 @@ export class LocalJobOrchestrator {
               workerInstanceId: workerInstance.id,
               properties: { errorMessage: message },
             });
+            await this.leaseManager.releaseStageLease(lease);
             throw error;
           }
         },

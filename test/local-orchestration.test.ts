@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { LocalControlPlaneRepository, LocalJobOrchestrator } from "../src/orchestration";
+import { DEFAULT_RUNTIME_CONFIG } from "../src/orchestration/runtime-defaults";
 
 function createTempControlPlaneDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "suno-export-orchestration-"));
@@ -92,4 +93,123 @@ test("local job orchestrator records stage and job completion", async () => {
     "succeeded",
   ]);
   assert.ok(snapshot.statusEvents.length >= 4);
+});
+
+test("metadata acquisition waits while asset acquisition lease is active", async () => {
+  const dir = createTempControlPlaneDir();
+  const repo1 = new LocalControlPlaneRepository(dir);
+  const repo2 = new LocalControlPlaneRepository(dir);
+  const orchestrator1 = new LocalJobOrchestrator(repo1, {
+    ...DEFAULT_RUNTIME_CONFIG,
+    concurrency: {
+      ...DEFAULT_RUNTIME_CONFIG.concurrency,
+      metadataAcquisitionMaxActive: 1,
+      assetAcquisitionMaxActive: 1,
+    },
+  });
+  const orchestrator2 = new LocalJobOrchestrator(repo2, {
+    ...DEFAULT_RUNTIME_CONFIG,
+    concurrency: {
+      ...DEFAULT_RUNTIME_CONFIG.concurrency,
+      metadataAcquisitionMaxActive: 1,
+      assetAcquisitionMaxActive: 1,
+    },
+  });
+
+  let releaseAssetStage!: () => void;
+  const assetStageStarted = new Promise<void>((resolve) => {
+    releaseAssetStage = resolve;
+  });
+
+  const assetRun = orchestrator1.runWorkflow(
+    {
+      workflowType: "download",
+      payload: { output: "/tmp/out" },
+      stagePlan: [{ type: "asset-acquisition", workerRole: "asset" }],
+    },
+    async ({ runStage }) => {
+      await runStage("asset-acquisition", async () => assetStageStarted);
+    },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const metadataRun = orchestrator2.runWorkflow(
+    {
+      workflowType: "fetch-metadata",
+      payload: { ids: "clip-1" },
+      stagePlan: [{ type: "metadata-acquisition", workerRole: "metadata" }],
+    },
+    async ({ runStage }) => {
+      await runStage("metadata-acquisition", async () => undefined);
+    },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const metadataJobId = (await repo2.listJobs(1))[0]?.id;
+  assert.ok(metadataJobId);
+  const blockedSnapshot = await orchestrator2.getJobSnapshot(metadataJobId!);
+  assert.equal(blockedSnapshot.stages[0]?.status, "blocked");
+
+  releaseAssetStage();
+  await assetRun;
+  const metadataResult = await metadataRun;
+  const finalSnapshot = await orchestrator2.getJobSnapshot(metadataResult.jobId);
+  assert.equal(finalSnapshot.stages[0]?.status, "succeeded");
+});
+
+test("conversion stage capacity respects configured max active leases", async () => {
+  const dir = createTempControlPlaneDir();
+  const runtimeConfig = {
+    ...DEFAULT_RUNTIME_CONFIG,
+    concurrency: {
+      ...DEFAULT_RUNTIME_CONFIG.concurrency,
+      conversionConcurrency: 1,
+    },
+  };
+
+  const orchestrator1 = new LocalJobOrchestrator(new LocalControlPlaneRepository(dir), runtimeConfig);
+  const orchestrator2 = new LocalJobOrchestrator(new LocalControlPlaneRepository(dir), runtimeConfig);
+
+  let releaseConversionStage!: () => void;
+  const conversionGate = new Promise<void>((resolve) => {
+    releaseConversionStage = resolve;
+  });
+
+  const firstRun = orchestrator1.runWorkflow(
+    {
+      workflowType: "process",
+      payload: { output: "/tmp/out" },
+      stagePlan: [{ type: "conversion", workerRole: "conversion" }],
+    },
+    async ({ runStage }) => {
+      await runStage("conversion", async () => conversionGate);
+    },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const secondRun = orchestrator2.runWorkflow(
+    {
+      workflowType: "process",
+      payload: { output: "/tmp/out2" },
+      stagePlan: [{ type: "conversion", workerRole: "conversion" }],
+    },
+    async ({ runStage }) => {
+      await runStage("conversion", async () => undefined);
+    },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const secondJobId = (await new LocalControlPlaneRepository(dir).listJobs(2))
+    .find((job) => job.payload.output === "/tmp/out2")?.id;
+  assert.ok(secondJobId);
+  const blockedSnapshot = await orchestrator2.getJobSnapshot(secondJobId!);
+  assert.equal(blockedSnapshot.stages[0]?.status, "blocked");
+
+  releaseConversionStage();
+  await firstRun;
+  const secondResult = await secondRun;
+  const finalSnapshot = await orchestrator2.getJobSnapshot(secondResult.jobId);
+  assert.equal(finalSnapshot.stages[0]?.status, "succeeded");
 });
