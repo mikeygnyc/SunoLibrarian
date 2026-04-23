@@ -8,10 +8,15 @@ import {
   runFetchMetadataFlow,
   runImportMetadataJsonFlow,
   runListFlow,
+  runLogsFlow,
   runMetadataFlow,
+  runJobStatusFlow,
+  runOrchestratorFlow,
   runProcessFlow,
   runRefreshFlow,
   runSyncFlow,
+  runWatchJobFlow,
+  runWorkerFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
@@ -43,6 +48,13 @@ function addMetadataDatabaseOptions(command: Command): Command {
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres");
 }
 
+function addRuntimeModeOptions(command: Command): Command {
+  return command
+    .option("--runtime-mode <mode>", "Execution mode: local or distributed", "local")
+    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+    .option("--submit-only", "Submit the job without executing it in this process");
+}
+
 program
   .command("clear-auth-token")
   .description("Clear the cached Suno authentication token")
@@ -60,7 +72,7 @@ addMetadataDatabaseOptions(program
   .requiredOption("-o, --output <path>", "Output metadata JSON file"))
   .action(withCliError(runExportMetadataJsonFlow));
 
-program
+addRuntimeModeOptions(program
   .command("download")
   .description("Download tracks from Suno")
   .option("-t, --token <token>", "Authentication token")
@@ -85,10 +97,10 @@ program
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
   .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
   .option("--delay <ms>", "Delay between downloads in ms", "1000")
-  .option("--flush-cache", "Clear cache before starting")
+  .option("--flush-cache", "Clear cache before starting"))
   .action(withCliError(runDownloadFlow));
 
-program
+addRuntimeModeOptions(program
   .command("sync")
   .description("Download tracks, then run converter in one chained workflow")
   .option("-t, --token <token>", "Authentication token")
@@ -116,15 +128,15 @@ program
   .option("--library <dir>", "Final converted library output (default: same as --output)")
   .option("--process-formats <formats>", "Converter formats", "flac,mp3,alac")
   .option("--process-bitrate <kbps>", "Converter MP3 bitrate", "320")
-  .option("--process-concurrency <n>", "Converter processing concurrency", "4")
-  .option("--process-update-concurrency <n>", "Converter update concurrency", "8")
+  .option("--process-concurrency <n>", "Legacy compatibility flag for processing worker concurrency", "4")
+  .option("--process-update-concurrency <n>", "Legacy compatibility flag for conversion/update concurrency", "8")
   .option("--process-existing-metadata", "Re-process all existing metadata after the download phase")
   .option("--no-images", "Skip embedding images during conversion")
   .option("--no-lyrics", "Skip embedding lyrics during conversion")
-  .option("--exit-on-error", "Exit immediately on conversion errors")
+  .option("--exit-on-error", "Exit immediately on conversion errors"))
   .action(withCliError(runSyncFlow));
 
-program
+addRuntimeModeOptions(program
   .command("process")
   .description("Run audio conversion/metadata embedding (converter functionality)")
   .requiredOption("-i, --input <path>", "Input root directory")
@@ -138,17 +150,17 @@ program
   .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--process-formats <formats>", "Audio formats", "flac,mp3,alac")
   .option("--process-bitrate <kbps>", "MP3 bitrate", "320")
-  .option("--process-concurrency <n>", "Processing concurrency", "4")
-  .option("--process-update-concurrency <n>", "Update concurrency", "8")
+  .option("--process-concurrency <n>", "Legacy compatibility flag for processing worker concurrency", "4")
+  .option("--process-update-concurrency <n>", "Legacy compatibility flag for conversion/update concurrency", "8")
   .option("--no-images", "Skip embedding images")
   .option("--no-lyrics", "Skip embedding lyrics")
   .option("--exit-on-error", "Exit on processing error")
   .option("--reconvert-before <iso>", "Only reconvert on/before date")
   .option("--reconvert-after <iso>", "Only reconvert on/after date")
-  .option("--reconvert-missing", "Only process missing formats")
+  .option("--reconvert-missing", "Only process missing formats"))
   .action(withCliError(runProcessFlow));
 
-program
+addRuntimeModeOptions(program
   .command("download-images")
   .description("Download artwork from a JSON list or auto-discover missing images")
   .option("-l, --list <file>", "JSON file containing clipId/thumbnail objects")
@@ -170,7 +182,7 @@ program
   .option("--copy-songs-metadata-to-output", "Export finalized songs_metadata.json to output on completion")
   .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
   .option("--fetch-missing", "Find missing images and download them directly")
-  .option("--delay <ms>", "Delay between downloads in ms", "1000")
+  .option("--delay <ms>", "Delay between downloads in ms", "1000"))
   .action(withCliError(runDownloadImagesFlow));
 
 program
@@ -221,7 +233,7 @@ program
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .action(withCliError(runMetadataFlow));
 
-program
+addRuntimeModeOptions(program
   .command("fetch-metadata")
   .description("Fetch and cache metadata for all tracks")
   .option("-t, --token <token>", "Authentication token")
@@ -238,10 +250,10 @@ program
   .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
   .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
   .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
-  .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
+  .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)"))
   .action(withCliError(runFetchMetadataFlow));
 
-program
+addRuntimeModeOptions(program
   .command("refresh")
   .description("Refresh cached tracks for all workspaces")
   .option("-t, --token <token>", "Authentication token")
@@ -254,7 +266,62 @@ program
   .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
   .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
   .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
-  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
+  .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres"))
   .action(withCliError(runRefreshFlow));
+
+program
+  .command("run-orchestrator")
+  .description("Run the local control-plane orchestrator loop")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--once", "Process at most one polling cycle and exit")
+  .option("--poll-interval <ms>", "Polling interval in ms", "500")
+  .action(withCliError(runOrchestratorFlow));
+
+program
+  .command("run-worker")
+  .description("Run a worker loop for a specific role")
+  .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--once", "Process at most one work item and exit")
+  .option("--poll-interval <ms>", "Polling interval in ms", "500")
+  .action(withCliError(runWorkerFlow));
+
+program
+  .command("job-status <jobId>")
+  .description("Show local orchestrator job status")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--json", "Output job status as JSON")
+  .action(withCliError(runJobStatusFlow));
+
+program
+  .command("watch-job <jobId>")
+  .description("Watch local orchestrator job status until completion")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--json", "Output job status as JSON on each refresh")
+  .option("--interval <ms>", "Polling interval in ms", "1000")
+  .action(withCliError(runWatchJobFlow));
+
+program
+  .command("logs")
+  .description("Query centralized orchestration logs")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--job-id <jobId>", "Filter by job id")
+  .option("--stage-id <stageId>", "Filter by stage id")
+  .option("--work-item-id <workItemId>", "Filter by work item id")
+  .option("--workflow-type <workflow>", "Filter by workflow type")
+  .option("--worker-instance-id <workerInstanceId>", "Filter by worker instance id")
+  .option("--role <role>", "Filter by worker role")
+  .option("--clip-id <clipId>", "Filter by clip id")
+  .option("--level <level>", "Filter by log level")
+  .option("--start-time <iso>", "Only include logs on/after ISO timestamp")
+  .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
+  .option("--limit <n>", "Maximum logs to return", "100")
+  .option("--json", "Output logs as JSON")
+  .action(withCliError(runLogsFlow));
 
 program.parse();

@@ -99,6 +99,8 @@ suno-export [--version] [--help] <command> [command options] [arguments]
 When using default output paths, required directories are created automatically if missing.
 
 For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flow.md).
+For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
+For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
 
 ### GLOBAL OPTIONS
 
@@ -218,6 +220,45 @@ Verification and troubleshooting:
 
 ### COMMANDS
 
+### ORCHESTRATION RUNTIME
+
+Workflow commands now submit durable jobs before they execute work. By default,
+they still run locally in the current process, but they can also leave jobs
+queued for a separate orchestrator or worker process.
+
+Runtime options on workflow commands:
+
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--control-plane <backend>`: `local` or `postgres`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in the current
+  process.
+
+Operational commands:
+
+- `run-orchestrator`: poll for queued work and execute available stages.
+- `run-worker --role <role>`: execute only one worker role.
+- `job-status <jobId>`: show the current durable job state.
+- `watch-job <jobId>`: watch a job until completion.
+- `logs`: query centralized orchestration logs.
+
+Local queued example:
+
+```bash
+suno-export sync \
+  --runtime-mode distributed \
+  --submit-only \
+  --browser http://localhost:9222 \
+  --output ./downloads
+
+suno-export run-orchestrator
+```
+
+The current shared local control plane lives under `~/.suno-export/orchestration`
+and can be overridden with `SUNO_EXPORT_CONTROL_PLANE_DIR`.
+
+For a Postgres-backed control plane, pass `--control-plane postgres` and provide
+`--postgres-url <url>`, or set `SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL`.
+
 ### METADATA STORAGE
 
 The authoritative combined song metadata lives in a database. SQLite remains the default and is created at:
@@ -319,6 +360,9 @@ Options:
 - `--created-before <date>`: include only tracks created on/before this date.
 - `--delay <ms>`: delay between downloads in milliseconds. Default: `1000`.
 - `--flush-cache`: clear local cache before running.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
 
 #### `sync`
 
@@ -351,12 +395,17 @@ Options:
 - `--library <dir>`: final converted library output. Default: same as `--output`.
 - `--process-formats <formats>`: output formats CSV for processor. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate for processor. Default: `320`.
-- `--process-concurrency <n>`: conversion concurrency. Default: `4`.
-- `--process-update-concurrency <n>`: metadata/update concurrency. Default: `8`.
+- `--process-concurrency <n>`: legacy compatibility flag for processing worker
+  concurrency. Default: `4`.
+- `--process-update-concurrency <n>`: legacy compatibility flag for
+  conversion/update concurrency. Default: `8`.
 - `--process-existing-metadata`: re-process all existing metadata after the download phase. By default, sync only processes tracks downloaded during the current run.
 - `--no-images`: skip image embedding during conversion.
 - `--no-lyrics`: skip lyric embedding during conversion.
 - `--exit-on-error`: stop on first conversion error.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
 
 Sync behavior notes:
 
@@ -384,14 +433,19 @@ Options:
 - `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output root on completion.
 - `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
-- `--process-concurrency <n>`: processing concurrency. Default: `4`.
-- `--process-update-concurrency <n>`: update concurrency. Default: `8`.
+- `--process-concurrency <n>`: legacy compatibility flag for processing worker
+  concurrency. Default: `4`.
+- `--process-update-concurrency <n>`: legacy compatibility flag for
+  conversion/update concurrency. Default: `8`.
 - `--no-images`: skip image embedding.
 - `--no-lyrics`: skip lyric embedding.
 - `--exit-on-error`: exit on processing error.
 - `--reconvert-before <iso>`: only reconvert tracks at or before the given timestamp.
 - `--reconvert-after <iso>`: only reconvert tracks at or after the given timestamp.
 - `--reconvert-missing`: only produce missing formats.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
 
 #### `download-images`
 
@@ -419,11 +473,149 @@ Options:
 - `--fetch-image-list <file>`: discover missing images and write JSON list to file.
 - `--fetch-missing`: discover missing images and download them directly.
 - `--delay <ms>`: delay between image downloads in milliseconds. Default: `1000`.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
 
 Notes:
 
 - You must pass at least one of: `--list`, `--fetch-image-list`, `--fetch-missing`.
 - `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and the configured metadata database.
+
+#### `fetch-metadata`
+
+Fetch and cache metadata for all tracks or a selected set of track IDs.
+
+```text
+suno-export fetch-metadata [options]
+```
+
+Options:
+
+- `-t, --token <token>`: authentication token.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint
+  (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or
+  `--browser`.
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
+- `--profile-directory <name>`: Chrome profile directory inside
+  `--browser-profile`.
+- `--ids <ids>`: comma-separated track IDs to fetch.
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`.
+  Default: `sqlite`.
+- `--database <path>`: SQLite metadata database path. Default:
+  `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted,
+  `SUNO_EXPORT_POSTGRES_URL` is used.
+- `-w, --workspace <id>`: only process the given workspace ID.
+- `--created-after <date>`: include only tracks created on/after this date.
+- `--created-before <date>`: include only tracks created on/before this date.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
+
+#### `refresh`
+
+Refresh cached tracks for all workspaces.
+
+```text
+suno-export refresh [options]
+```
+
+Options:
+
+- `-t, --token <token>`: authentication token.
+- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint
+  (default: `http://localhost:9222`).
+- `--ignore-cached-token`: skip the cached auth token and use `--token` or
+  `--browser`.
+- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
+- `--profile-directory <name>`: Chrome profile directory inside
+  `--browser-profile`.
+- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`.
+  Default: `sqlite`.
+- `--database <path>`: SQLite metadata database path. Default:
+  `data/suno-export.sqlite`.
+- `--postgres-url <url>`: Postgres connection URL. If omitted,
+  `SUNO_EXPORT_POSTGRES_URL` is used.
+- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
+- `--submit-only`: submit the job and exit without executing it in this
+  process.
+
+#### `run-orchestrator`
+
+Run the local control-plane orchestrator loop.
+
+```text
+suno-export run-orchestrator [options]
+```
+
+Options:
+
+- `--once`: process at most one polling cycle and exit.
+- `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
+
+#### `run-worker`
+
+Run a worker loop for a specific role.
+
+```text
+suno-export run-worker --role <role> [options]
+```
+
+Options:
+
+- `--role <role>`: `auth`, `metadata`, `asset`, `processing`, or `conversion`.
+- `--once`: process at most one work item and exit.
+- `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
+
+#### `job-status`
+
+Show local orchestrator job status.
+
+```text
+suno-export job-status <jobId> [options]
+```
+
+Options:
+
+- `--json`: emit JSON output.
+
+#### `watch-job`
+
+Watch local orchestrator job status until completion.
+
+```text
+suno-export watch-job <jobId> [options]
+```
+
+Options:
+
+- `--json`: emit JSON output on each refresh.
+- `--interval <ms>`: polling interval in milliseconds. Default: `1000`.
+
+#### `logs`
+
+Query centralized orchestration logs.
+
+```text
+suno-export logs [options]
+```
+
+Options:
+
+- `--job-id <jobId>`: filter by job id.
+- `--stage-id <stageId>`: filter by stage id.
+- `--work-item-id <workItemId>`: filter by work item id.
+- `--workflow-type <workflow>`: filter by workflow type.
+- `--worker-instance-id <workerInstanceId>`: filter by worker instance id.
+- `--role <role>`: filter by worker role.
+- `--clip-id <clipId>`: filter by clip id.
+- `--level <level>`: filter by log level.
+- `--start-time <iso>`: only include logs on or after the given timestamp.
+- `--end-time <iso>`: only include logs on or before the given timestamp.
+- `--limit <n>`: maximum logs to return. Default: `100`.
+- `--json`: emit JSON output.
 
 #### `list`
 
