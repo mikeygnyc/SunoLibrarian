@@ -8,6 +8,7 @@ import {
   runFetchMetadataFlow,
   runImportMetadataJsonFlow,
   runListFlow,
+  runLogsFlow,
   runMetadataFlow,
   runJobStatusFlow,
   runOrchestratorFlow,
@@ -294,5 +295,22 @@ program
   .option("--json", "Output job status as JSON on each refresh")
   .option("--interval <ms>", "Polling interval in ms", "1000")
   .action(withCliError(runWatchJobFlow));
+
+program
+  .command("logs")
+  .description("Query centralized orchestration logs")
+  .option("--job-id <jobId>", "Filter by job id")
+  .option("--stage-id <stageId>", "Filter by stage id")
+  .option("--work-item-id <workItemId>", "Filter by work item id")
+  .option("--workflow-type <workflow>", "Filter by workflow type")
+  .option("--worker-instance-id <workerInstanceId>", "Filter by worker instance id")
+  .option("--role <role>", "Filter by worker role")
+  .option("--clip-id <clipId>", "Filter by clip id")
+  .option("--level <level>", "Filter by log level")
+  .option("--start-time <iso>", "Only include logs on/after ISO timestamp")
+  .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
+  .option("--limit <n>", "Maximum logs to return", "100")
+  .option("--json", "Output logs as JSON")
+  .action(withCliError(runLogsFlow));
 
 program.parse();

@@ -4,6 +4,7 @@ import * as path from "path";
 import { SunoClient } from "./client";
 import type { IWorkspace } from "./lib/interfaces";
 import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalControlPlaneRepository, LocalJobOrchestrator, type ClaimedWorkItem, type LocalWorkflowContext } from "./orchestration";
+import { CentralLogger, DatabaseLogSink } from "./logging";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -556,9 +557,52 @@ export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): 
   }
 }
 
+export async function runLogsFlow(options: CliOptions = {}): Promise<void> {
+  const repository = new LocalControlPlaneRepository();
+  await repository.initialize();
+  const result = await repository.query({
+    jobId: typeof options.jobId === "string" ? options.jobId : undefined,
+    stageId: typeof options.stageId === "string" ? options.stageId : undefined,
+    workItemId: typeof options.workItemId === "string" ? options.workItemId : undefined,
+    workflowType: typeof options.workflowType === "string" ? options.workflowType as any : undefined,
+    workerInstanceId: typeof options.workerInstanceId === "string" ? options.workerInstanceId : undefined,
+    role: typeof options.role === "string" ? options.role as any : undefined,
+    clipId: typeof options.clipId === "string" ? options.clipId : undefined,
+    level: typeof options.level === "string" ? options.level as any : undefined,
+    startTime: parseOptionalDate(options.startTime, "--start-time"),
+    endTime: parseOptionalDate(options.endTime, "--end-time"),
+    limit: options.limit ? parseInt(String(options.limit), 10) : 100,
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.entries.length === 0) {
+    console.log("No logs matched the requested filters.");
+    return;
+  }
+
+  result.entries.forEach((entry) => {
+    const segments = [
+      entry.timestamp.toISOString(),
+      entry.level.toUpperCase(),
+      entry.context?.workflowType,
+      entry.context?.role,
+      entry.context?.jobId,
+      entry.context?.stageId,
+      entry.context?.workItemId,
+      entry.message,
+    ].filter((segment): segment is string => Boolean(segment));
+    console.log(segments.join(" | "));
+  });
+}
+
 export async function runOrchestratorFlow(options: CliOptions = {}): Promise<void> {
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
+  const logger = createRuntimeLogger();
   const roles: Array<"orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion"> = [
     "orchestrator",
     "auth",
@@ -575,6 +619,12 @@ export async function runOrchestratorFlow(options: CliOptions = {}): Promise<voi
     }
 
     if (once || processed === 0) {
+      if (processed === 0) {
+        await logger.debug("orchestrator poll found no runnable work", {
+          role: "orchestrator",
+          properties: { pollIntervalMs },
+        });
+      }
       if (once) return;
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
@@ -589,11 +639,16 @@ export async function runWorkerFlow(options: CliOptions = {}): Promise<void> {
 
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
+  const logger = createRuntimeLogger();
 
   do {
     const processed = await processWorkerRole(role, { ...options, once: true });
     if (once) return;
     if (processed === 0) {
+      await logger.debug("worker poll found no runnable work", {
+        role,
+        properties: { pollIntervalMs },
+      });
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
   } while (true);
@@ -688,6 +743,7 @@ async function submitWorkflowJob(
 ): Promise<string> {
   const repository = new LocalControlPlaneRepository();
   await repository.initialize();
+  const logger = createRuntimeLogger(repository);
   const now = new Date();
   const jobId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   await repository.createJob({
@@ -729,6 +785,16 @@ async function submitWorkflowJob(
     });
   }
 
+  await logger.info("workflow job submitted", {
+    jobId,
+    workflowType,
+    role: "orchestrator",
+    properties: {
+      runtimeMode: "distributed",
+      stageCount: stagePlan.length,
+    },
+  });
+
   return jobId;
 }
 
@@ -738,6 +804,7 @@ async function processWorkerRole(
 ): Promise<number> {
   const repository = new LocalControlPlaneRepository();
   await repository.initialize();
+  const logger = createRuntimeLogger(repository);
   const workerInstanceId = `worker-${role}-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
   await repository.upsertWorkerInstance({
     id: workerInstanceId,
@@ -749,11 +816,32 @@ async function processWorkerRole(
     heartbeatAt: new Date(),
     metadata: { kind: "worker-runtime" },
   });
+  await logger.info("worker polling for work", {
+    workerInstanceId,
+    role,
+    properties: { runtimeMode: "distributed" },
+  });
 
   const claimed = await repository.claimNextRunnableWorkItem(role, workerInstanceId);
   if (!claimed) {
+    await logger.debug("no runnable work claimed", {
+      workerInstanceId,
+      role,
+    });
     return 0;
   }
+
+  await logger.info("work item claimed", {
+    workerInstanceId,
+    role,
+    jobId: claimed.job.id,
+    stageId: claimed.stage.id,
+    workItemId: claimed.workItem.id,
+    workflowType: claimed.job.workflowType,
+    properties: {
+      stageType: claimed.stage.stageType,
+    },
+  });
 
   await executeClaimedWorkItem(repository, claimed, workerInstanceId);
   return 1;
@@ -765,11 +853,23 @@ async function executeClaimedWorkItem(
   workerInstanceId: string,
 ): Promise<void> {
   const leaseManager = new LeaseManager(repository, DEFAULT_RUNTIME_CONFIG);
+  const logger = createRuntimeLogger(repository);
   const hasCapacity = await leaseManager.hasAvailableCapacity(claimed.stage.stageType);
   if (!hasCapacity) {
     await repository.updateStageStatus(claimed.stage.id, "blocked");
     await repository.updateWorkItemStatus(claimed.workItem.id, "blocked", {
       leaseOwnerId: undefined,
+    });
+    await logger.warn("work item blocked waiting for capacity", {
+      workerInstanceId,
+      role: claimed.workItem.workerRole,
+      jobId: claimed.job.id,
+      workflowType: claimed.job.workflowType,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
+      properties: {
+        stageType: claimed.stage.stageType,
+      },
     });
     return;
   }
@@ -782,10 +882,34 @@ async function executeClaimedWorkItem(
     stageId: claimed.stage.id,
     workItemId: claimed.workItem.id,
   });
+  await logger.info("lease acquired for work item", {
+    workerInstanceId,
+    role: claimed.workItem.workerRole,
+    jobId: claimed.job.id,
+    workflowType: claimed.job.workflowType,
+    stageId: claimed.stage.id,
+    workItemId: claimed.workItem.id,
+    properties: {
+      stageType: claimed.stage.stageType,
+      leaseId: lease?.id,
+      resourceKey: lease?.resourceKey,
+    },
+  });
 
   await repository.updateJobStatus(claimed.job.id, "running", { startedAt: claimed.job.startedAt ?? new Date() });
   await repository.updateStageStatus(claimed.stage.id, "running", { startedAt: new Date() });
   await repository.updateWorkItemStatus(claimed.workItem.id, "running", { startedAt: new Date() });
+  await logger.info("work item execution started", {
+    workerInstanceId,
+    role: claimed.workItem.workerRole,
+    jobId: claimed.job.id,
+    workflowType: claimed.job.workflowType,
+    stageId: claimed.stage.id,
+    workItemId: claimed.workItem.id,
+    properties: {
+      stageType: claimed.stage.stageType,
+    },
+  });
 
   try {
     const workflowOptions = claimed.job.payload as CliOptions;
@@ -793,10 +917,28 @@ async function executeClaimedWorkItem(
     await repository.updateStageStatus(claimed.stage.id, "succeeded", { completedAt: new Date() });
     await repository.updateWorkItemStatus(claimed.workItem.id, "succeeded", { completedAt: new Date() });
     await leaseManager.releaseStageLease(lease);
+    await logger.info("work item execution completed", {
+      workerInstanceId,
+      role: claimed.workItem.workerRole,
+      jobId: claimed.job.id,
+      workflowType: claimed.job.workflowType,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
+      properties: {
+        stageType: claimed.stage.stageType,
+        leaseId: lease?.id,
+      },
+    });
 
     const stages = await repository.listStages(claimed.job.id);
     if (stages.every((stage) => stage.status === "succeeded")) {
       await repository.updateJobStatus(claimed.job.id, "completed", { completedAt: new Date() });
+      await logger.info("job completed in worker runtime", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+      });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -804,6 +946,20 @@ async function executeClaimedWorkItem(
     await repository.updateWorkItemStatus(claimed.workItem.id, "failed", { completedAt: new Date(), errorMessage: message });
     await repository.updateJobStatus(claimed.job.id, "failed", { completedAt: new Date(), errorMessage: message });
     await leaseManager.releaseStageLease(lease);
+    console.error(`Worker stage failed [${claimed.stage.stageType}] for job ${claimed.job.id}: ${message}`);
+    await logger.error("work item execution failed", {
+      workerInstanceId,
+      role: claimed.workItem.workerRole,
+      jobId: claimed.job.id,
+      workflowType: claimed.job.workflowType,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
+      properties: {
+        stageType: claimed.stage.stageType,
+        errorMessage: message,
+        leaseId: lease?.id,
+      },
+    });
     throw error;
   }
 }
@@ -883,4 +1039,22 @@ async function executeStageHandler(
       }
       return;
   }
+}
+
+function createRuntimeLogger(repository: LocalControlPlaneRepository = new LocalControlPlaneRepository()): CentralLogger {
+  return new CentralLogger({
+    minimumLevel: "debug",
+    sinks: [new DatabaseLogSink(repository)],
+  });
+}
+
+function parseOptionalDate(value: unknown, label: string): Date | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid date for ${label}: ${value}`);
+  }
+  return parsed;
 }
