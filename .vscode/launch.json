@@ -112,8 +112,11 @@
         "--browser-profile",
         "/path/to/chrome-user-data",
         "--profile-directory",
-        "Profile 2"
+        "Profile 2",
+        "--database-type",
+        "postgres"
       ],
+      "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
       "skipFiles": [
         "<node_internals>/**"
@@ -138,13 +141,16 @@
         "import-metadata-json",
         "--input",
         "/path/to/songs_metadata.json",
+        "--database-type",
+        "postgres"
       ],
+      "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
       "skipFiles": [
         "<node_internals>/**"
       ]
     },
-     {
+    {
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Image List",

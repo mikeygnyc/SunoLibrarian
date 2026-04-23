@@ -78,10 +78,13 @@ export function normalizeMetadata(meta: ISongData): ISongData {
     normalized.thumbnail = normalized.rawApiResponse.image_large_url;
   }
 
+  const displayTags = splitTags(normalized.rawApiResponse?.display_tags);
+  const negativeDisplayTags = splitTags(normalized.rawApiResponse?.metadata?.negative_tags);
+
   normalized.style = normalized.rawApiResponse?.metadata?.tags || null;
-  normalized.tags = splitTags(normalized.rawApiResponse?.display_tags);
+  normalized.tags = normalized.tags?.length ? normalized.tags : displayTags;
   normalized.remixParent = normalized.rawApiResponse?.metadata?.cover_clip_id || undefined;
-  normalized.negativeTags = splitTags(normalized.rawApiResponse?.metadata?.negative_tags);
+  normalized.negativeTags = normalized.negativeTags?.length ? normalized.negativeTags : negativeDisplayTags;
   normalized.isHidden = normalized.rawApiResponse?.is_hidden || false;
   normalized.gptDescriptionPrompt = normalized.rawApiResponse?.metadata?.gpt_description_prompt || null;
   normalized.mashupSource = normalized.rawApiResponse?.metadata?.mashup_clip_ids || [];
