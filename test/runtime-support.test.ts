@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import { cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, getWorkflowStagePlan, serializeJobPayload, submitWorkflowJob } from "../src/orchestration";
+import { cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, getWorkflowStagePlan, restartRecentlyFailedAuthJobs, serializeJobPayload, submitWorkflowJob } from "../src/orchestration";
 import { runOrchestratorFlow } from "../src/cli-actions";
 
 function createTempControlPlaneDir(): string {
@@ -120,6 +120,77 @@ test("orchestrator loop does not execute cancelled queued jobs", async () => {
       assert.ok(snapshot.workItems.every((workItem) => workItem.status === "cancelled"));
     } finally {
       await repository.close();
+    }
+  } finally {
+    if (previousDir == null) {
+      delete process.env.SUNO_EXPORT_CONTROL_PLANE_DIR;
+    } else {
+      process.env.SUNO_EXPORT_CONTROL_PLANE_DIR = previousDir;
+    }
+  }
+});
+
+test("restartRecentlyFailedAuthJobs requeues recent auth-related failures once", async () => {
+  const dir = createTempControlPlaneDir();
+  const previousDir = process.env.SUNO_EXPORT_CONTROL_PLANE_DIR;
+  process.env.SUNO_EXPORT_CONTROL_PLANE_DIR = dir;
+
+  try {
+    const failedJobId = await submitWorkflowJob("download", {
+      controlPlane: "local",
+      output: "/tmp/downloads",
+      submitOnly: true,
+    });
+
+    const repository = createControlPlaneRepository({ controlPlane: "local" });
+    try {
+      await repository.initialize();
+      const snapshot = await getJobSnapshot(repository, failedJobId);
+      const authorizationStage = snapshot.stages.find((stage) => stage.stageType === "authorization");
+      const authorizationWorkItem = snapshot.workItems.find((workItem) => workItem.stageType === "authorization");
+      assert.ok(authorizationStage);
+      assert.ok(authorizationWorkItem);
+
+      const failedAt = new Date();
+      await repository.updateStageStatus(authorizationStage.id, "failed", {
+        completedAt: failedAt,
+        errorCode: "auth_missing",
+        errorMessage: "Authentication required: provide either --token or --browser",
+      });
+      await repository.updateWorkItemStatus(authorizationWorkItem.id, "failed", {
+        completedAt: failedAt,
+        errorCode: "auth_missing",
+        errorMessage: "Authentication required: provide either --token or --browser",
+      });
+      await repository.updateJobStatus(failedJobId, "failed", {
+        completedAt: failedAt,
+        errorCode: "auth_missing",
+        errorMessage: "Authentication required: provide either --token or --browser",
+      });
+    } finally {
+      await repository.close();
+    }
+
+    const firstRestart = await restartRecentlyFailedAuthJobs({ controlPlane: "local" });
+    assert.equal(firstRestart.originalJobIds.length, 1);
+    assert.equal(firstRestart.originalJobIds[0], failedJobId);
+    assert.equal(firstRestart.restartedJobIds.length, 1);
+    assert.notEqual(firstRestart.restartedJobIds[0], failedJobId);
+
+    const secondRestart = await restartRecentlyFailedAuthJobs({ controlPlane: "local" });
+    assert.deepEqual(secondRestart.restartedJobIds, []);
+
+    const validationRepository = createControlPlaneRepository({ controlPlane: "local" });
+    try {
+      await validationRepository.initialize();
+      const jobs = await validationRepository.listJobs(10);
+      assert.equal(jobs.length, 2);
+      const originalSnapshot = await getJobSnapshot(validationRepository, failedJobId);
+      assert.ok(originalSnapshot.statusEvents.some((event) => event.eventType === "job-restarted-after-auth"));
+      const restartedSnapshot = await getJobSnapshot(validationRepository, firstRestart.restartedJobIds[0]);
+      assert.equal(restartedSnapshot.job?.status, "queued");
+    } finally {
+      await validationRepository.close();
     }
   } finally {
     if (previousDir == null) {

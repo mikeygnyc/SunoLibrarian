@@ -18,23 +18,31 @@ type WorkflowRequestMap = {
   "refresh": IHttpApiRefreshWorkflowRequest;
 };
 
+export interface IHttpApiWorkflowServerDefaults {
+  downloadRoot: string;
+  libraryRoot: string;
+}
+
 export function validateWorkflowSubmission(
   workflowType: WorkflowType,
   payload: unknown,
+  serverDefaults: IHttpApiWorkflowServerDefaults,
 ): CliOptions {
   if (!isPlainObject(payload)) {
     throw createValidationError("Workflow request body must be an object");
   }
 
+  assertServerOwnedFieldsAbsent(payload);
+
   switch (workflowType) {
     case "download":
-      return mapDownloadRequest(payload as WorkflowRequestMap["download"]);
+      return mapDownloadRequest(payload as WorkflowRequestMap["download"], serverDefaults);
     case "process":
-      return mapProcessRequest(payload as unknown as WorkflowRequestMap["process"]);
+      return mapProcessRequest(payload as unknown as WorkflowRequestMap["process"], serverDefaults);
     case "sync":
-      return mapSyncRequest(payload as unknown as WorkflowRequestMap["sync"]);
+      return mapSyncRequest(payload as unknown as WorkflowRequestMap["sync"], serverDefaults);
     case "download-images":
-      return mapDownloadImagesRequest(payload as WorkflowRequestMap["download-images"]);
+      return mapDownloadImagesRequest(payload as WorkflowRequestMap["download-images"], serverDefaults);
     case "fetch-metadata":
       return mapFetchMetadataRequest(payload as WorkflowRequestMap["fetch-metadata"]);
     case "refresh":
@@ -42,43 +50,48 @@ export function validateWorkflowSubmission(
   }
 }
 
-function mapDownloadRequest(request: IHttpApiDownloadWorkflowRequest): CliOptions {
+function mapDownloadRequest(
+  request: IHttpApiDownloadWorkflowRequest,
+  serverDefaults: IHttpApiWorkflowServerDefaults,
+): CliOptions {
   return {
     ...mapCommonRequest(request),
     workspace: optionalString(request.workspaceId, "workspaceId"),
     format: optionalEnum(request.format, ["mp3", "wav"], "format"),
-    output: optionalString(request.output, "output"),
+    output: serverDefaults.downloadRoot,
     createdAfter: optionalString(request.createdAfter, "createdAfter"),
     createdBefore: optionalString(request.createdBefore, "createdBefore"),
-    delay: optionalPositiveIntegerString(request.delayMs, "delayMs"),
     flushCache: optionalBoolean(request.flushCache, "flushCache"),
   };
 }
 
-function mapProcessRequest(request: IHttpApiProcessWorkflowRequest): CliOptions {
+function mapProcessRequest(
+  request: IHttpApiProcessWorkflowRequest,
+  serverDefaults: IHttpApiWorkflowServerDefaults,
+): CliOptions {
   return {
     ...mapProcessingCommonRequest(request),
-    input: requiredString(request.input, "input"),
-    output: requiredString(request.output, "output"),
+    input: serverDefaults.downloadRoot,
+    output: serverDefaults.libraryRoot,
   };
 }
 
-function mapSyncRequest(request: IHttpApiSyncWorkflowRequest): CliOptions {
+function mapSyncRequest(
+  request: IHttpApiSyncWorkflowRequest,
+  serverDefaults: IHttpApiWorkflowServerDefaults,
+): CliOptions {
   return {
     ...mapCommonRequest(request),
     workspace: optionalString(request.workspaceId, "workspaceId"),
     format: optionalEnum(request.format, ["mp3", "wav"], "format"),
-    output: requiredString(request.output, "output"),
-    library: optionalString(request.libraryOutput, "libraryOutput"),
+    output: serverDefaults.downloadRoot,
+    library: serverDefaults.libraryRoot,
     createdAfter: optionalString(request.createdAfter, "createdAfter"),
     createdBefore: optionalString(request.createdBefore, "createdBefore"),
-    delay: optionalPositiveIntegerString(request.delayMs, "delayMs"),
     flushCache: optionalBoolean(request.flushCache, "flushCache"),
     processExistingMetadata: optionalBoolean(request.processExistingMetadata, "processExistingMetadata"),
     processFormats: optionalCsv(request.formats, "formats"),
     processBitrate: optionalPositiveIntegerString(request.bitrateKbps, "bitrateKbps"),
-    processConcurrency: optionalPositiveIntegerString(request.songConcurrency, "songConcurrency"),
-    processUpdateConcurrency: optionalPositiveIntegerString(request.updateConcurrency, "updateConcurrency"),
     images: optionalBoolean(request.embedImages, "embedImages"),
     lyrics: optionalBoolean(request.embedLyrics, "embedLyrics"),
     exitOnError: optionalBoolean(request.exitOnError, "exitOnError"),
@@ -89,14 +102,16 @@ function mapSyncRequest(request: IHttpApiSyncWorkflowRequest): CliOptions {
   };
 }
 
-function mapDownloadImagesRequest(request: IHttpApiDownloadImagesWorkflowRequest): CliOptions {
+function mapDownloadImagesRequest(
+  request: IHttpApiDownloadImagesWorkflowRequest,
+  serverDefaults: IHttpApiWorkflowServerDefaults,
+): CliOptions {
   return {
     ...mapCommonRequest(request),
-    output: optionalString(request.output, "output"),
+    output: serverDefaults.downloadRoot,
     list: optionalString(request.listPath, "listPath"),
     fetchImageList: optionalString(request.fetchImageListPath, "fetchImageListPath"),
     fetchMissing: optionalBoolean(request.fetchMissing, "fetchMissing"),
-    delay: optionalPositiveIntegerString(request.delayMs, "delayMs"),
   };
 }
 
@@ -121,8 +136,6 @@ function mapProcessingCommonRequest(
     ...mapCommonRequest(request),
     processFormats: optionalCsv(request.formats, "formats"),
     processBitrate: optionalPositiveIntegerString(request.bitrateKbps, "bitrateKbps"),
-    processConcurrency: optionalPositiveIntegerString(request.songConcurrency, "songConcurrency"),
-    processUpdateConcurrency: optionalPositiveIntegerString(request.updateConcurrency, "updateConcurrency"),
     images: optionalBoolean(request.embedImages, "embedImages"),
     lyrics: optionalBoolean(request.embedLyrics, "embedLyrics"),
     exitOnError: optionalBoolean(request.exitOnError, "exitOnError"),
@@ -135,14 +148,8 @@ function mapProcessingCommonRequest(
 
 function mapCommonRequest(request: {
   auth?: unknown;
-  metadataStore?: unknown;
-  importMetadataJson?: unknown;
-  exportMetadataJson?: unknown;
-  metadataFile?: unknown;
-  copySongsMetadataToOutput?: unknown;
 }): CliOptions {
   const auth = optionalObject(request.auth, "auth");
-  const metadataStore = optionalObject(request.metadataStore, "metadataStore");
 
   return {
     token: auth ? optionalString(auth.token, "auth.token") : undefined,
@@ -150,14 +157,29 @@ function mapCommonRequest(request: {
     ignoreCachedToken: auth ? optionalBoolean(auth.ignoreCachedToken, "auth.ignoreCachedToken") : undefined,
     browserProfile: auth ? optionalString(auth.browserProfile, "auth.browserProfile") : undefined,
     profileDirectory: auth ? optionalString(auth.profileDirectory, "auth.profileDirectory") : undefined,
-    databaseType: metadataStore ? optionalEnum(metadataStore.type, ["sqlite", "postgres"], "metadataStore.type") : undefined,
-    database: metadataStore ? optionalString(metadataStore.sqlitePath, "metadataStore.sqlitePath") : undefined,
-    postgresUrl: metadataStore ? optionalString(metadataStore.postgresUrl, "metadataStore.postgresUrl") : undefined,
-    importMetadataJson: optionalString(request.importMetadataJson, "importMetadataJson"),
-    exportMetadataJson: optionalString(request.exportMetadataJson, "exportMetadataJson"),
-    metadataFile: optionalString(request.metadataFile, "metadataFile"),
-    copySongsMetadataToOutput: optionalBoolean(request.copySongsMetadataToOutput, "copySongsMetadataToOutput"),
   };
+}
+
+function assertServerOwnedFieldsAbsent(payload: Record<string, unknown>): void {
+  const disallowedTopLevelFields = [
+    "input",
+    "output",
+    "libraryOutput",
+    "metadataStore",
+    "importMetadataJson",
+    "exportMetadataJson",
+    "metadataFile",
+    "copySongsMetadataToOutput",
+    "delayMs",
+    "songConcurrency",
+    "updateConcurrency",
+  ];
+
+  for (const field of disallowedTopLevelFields) {
+    if (field in payload) {
+      throw createValidationError(`${field} is managed by the server and cannot be set per request`);
+    }
+  }
 }
 
 function requiredString(value: unknown, label: string): string {

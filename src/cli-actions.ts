@@ -1,9 +1,11 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { extractTokenFromBrowser } from "./auth";
 import { createCancellationMonitor, isCancellationError } from "./cancellation";
-import type { ICentralLogRepository, IClaimedWorkItem, IOrchestrationRepository, IWorkspace } from "./lib/interfaces";
-import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, getWorkflowStagePlan, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./orchestration";
+import { HttpApiClient } from "./http-api-client";
+import type { ICentralLogRepository, IClaimedWorkItem, IJobSnapshot, ILogQueryResult, IOrchestrationRepository, IWorkspace, WorkflowType } from "./lib/interfaces";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, getWorkflowStagePlan, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./orchestration";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -12,6 +14,7 @@ import {
   ConversionService,
   filterWorkspaces,
   getAuthenticatedClientWithDeps,
+  LibrarianService,
   MetadataAcquisitionService,
   parseTrackIdsOption,
   ProcessingPlannerService,
@@ -37,6 +40,11 @@ const DEFAULT_WORKER_POLL_INTERVAL_MS = 500;
 
 export { getAuthenticatedClientWithDeps };
 export type { AuthClient, AuthDeps, AuthStorage };
+export type CaptureAuthTokenDeps = {
+  extractTokenFromBrowser: typeof extractTokenFromBrowser;
+  storage: Pick<Storage, "setAuthToken">;
+  log: Pick<Console, "log">;
+};
 
 type DownloadedTrackHook = (params: {
   clipId: string;
@@ -68,6 +76,7 @@ const metadataAcquisitionService = new MetadataAcquisitionService();
 const assetAcquisitionService = new AssetAcquisitionService();
 const processingPlannerService = new ProcessingPlannerService();
 const conversionService = new ConversionService();
+const librarianService = new LibrarianService(authService, metadataAcquisitionService);
 
 configureMetadataAcquisitionService({
   resolveMetadataStoreOptions,
@@ -157,6 +166,44 @@ export async function runClearAuthTokenFlow(): Promise<void> {
   const storage = new Storage();
   storage.clearAuthToken();
   console.log("Cached authentication token cleared.");
+}
+
+export async function captureAuthTokenWithDeps(
+  options: CliOptions,
+  deps: CaptureAuthTokenDeps,
+): Promise<string> {
+  const browserUrl = resolveBrowserEndpoint(options);
+  if (!browserUrl) {
+    throw new Error("Browser authentication is required: provide --browser [url] to capture a token");
+  }
+
+  const token = await deps.extractTokenFromBrowser(browserUrl, {
+    userDataDir: resolveBrowserUserDataDir(options),
+    profileDirectory: resolveBrowserProfileDirectory(options),
+    abortSignal: options.__abortSignal,
+  });
+
+  if (options.saveLocal === true) {
+    deps.storage.setAuthToken(token);
+    deps.log.log("Saved captured token to the local cache.");
+  }
+
+  if (options.json === true) {
+    deps.log.log(JSON.stringify({ token }, null, 2));
+  } else {
+    deps.log.log("Captured token:");
+    deps.log.log(token);
+  }
+
+  return token;
+}
+
+export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise<void> {
+  await captureAuthTokenWithDeps(options, {
+    extractTokenFromBrowser,
+    storage: new Storage(),
+    log: console,
+  });
 }
 
 export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
@@ -507,6 +554,10 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
   });
 }
 
+export async function runLibrarianFlow(options: CliOptions = {}): Promise<void> {
+  await librarianService.run(options);
+}
+
 export async function runJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
   const repository = createControlPlaneRepository(options);
   try {
@@ -516,26 +567,7 @@ export async function runJobStatusFlow(jobId: string, options: CliOptions = {}):
       throw new Error(`Job not found: ${jobId}`);
     }
 
-    if (options.json) {
-      console.log(JSON.stringify(snapshot, null, 2));
-      return;
-    }
-
-    console.log(`Job ${snapshot.job.id}`);
-    console.log(`  Workflow: ${snapshot.job.workflowType}`);
-    console.log(`  Status: ${snapshot.job.status}`);
-    if (snapshot.job.startedAt) {
-      console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
-    }
-    if (snapshot.job.completedAt) {
-      console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
-    }
-    if (snapshot.stages.length > 0) {
-      console.log("\nStages:");
-      snapshot.stages.forEach((stage) => {
-        console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
-      });
-    }
+    printJobSnapshot(snapshot, options.json === true);
   } finally {
     await repository.close();
   }
@@ -581,32 +613,85 @@ export async function runLogsFlow(options: CliOptions = {}): Promise<void> {
       limit: options.limit ? parseInt(String(options.limit), 10) : 100,
     });
 
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
-
-    if (result.entries.length === 0) {
-      console.log("No logs matched the requested filters.");
-      return;
-    }
-
-    result.entries.forEach((entry) => {
-      const segments = [
-        entry.timestamp.toISOString(),
-        entry.level.toUpperCase(),
-        entry.context?.workflowType,
-        entry.context?.role,
-        entry.context?.jobId,
-        entry.context?.stageId,
-        entry.context?.workItemId,
-        entry.message,
-      ].filter((segment): segment is string => Boolean(segment));
-      console.log(segments.join(" | "));
-    });
+    printLogsResult(result, options.json === true);
   } finally {
     await repository.close();
   }
+}
+
+export async function runApiHealthFlow(options: CliOptions = {}): Promise<void> {
+  const result = await createApiClient(options).getHealth();
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(result.ok ? "API is healthy." : "API is unhealthy.");
+}
+
+export async function runApiSubmitWorkflowFlow(workflow: string, options: CliOptions = {}): Promise<void> {
+  const workflowType = normalizeWorkflowTypeInput(workflow);
+  const payload = await readApiWorkflowPayload(options.payload);
+  const result = await createApiClient(options).submitWorkflow(workflowType, payload as any);
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`Job submitted: ${result.jobId}`);
+  console.log(`  Workflow: ${result.workflowType}`);
+  console.log(`  Status: ${result.status}`);
+}
+
+export async function runApiJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  const snapshot = await createApiClient(options).getJob(jobId);
+  printJobSnapshot(snapshot, options.json === true);
+}
+
+export async function runApiWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  const intervalMs = parseInt(String(options.interval ?? DEFAULT_WATCH_INTERVAL_MS), 10);
+  while (true) {
+    const snapshot = await createApiClient(options).getJob(jobId);
+    console.clear();
+    printJobSnapshot(snapshot, options.json === true);
+
+    if (snapshot.job && ["completed", "failed", "cancelled"].includes(snapshot.job.status)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+export async function runApiCancelJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  const result = await createApiClient(options).cancelJob(
+    jobId,
+    typeof options.reason === "string" ? options.reason : undefined,
+  );
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`Job ${result.jobId} cancelled.`);
+}
+
+export async function runApiLogsFlow(options: CliOptions = {}): Promise<void> {
+  const result = await createApiClient(options).queryLogs({
+    jobId: typeof options.jobId === "string" ? options.jobId : undefined,
+    stageId: typeof options.stageId === "string" ? options.stageId : undefined,
+    workItemId: typeof options.workItemId === "string" ? options.workItemId : undefined,
+    workflowType: typeof options.workflowType === "string" ? normalizeWorkflowTypeInput(options.workflowType) : undefined,
+    workerInstanceId: typeof options.workerInstanceId === "string" ? options.workerInstanceId : undefined,
+    role: typeof options.role === "string" ? options.role as any : undefined,
+    clipId: typeof options.clipId === "string" ? options.clipId : undefined,
+    level: typeof options.level === "string" ? options.level as any : undefined,
+    startTime: parseOptionalDate(options.startTime, "--start-time"),
+    endTime: parseOptionalDate(options.endTime, "--end-time"),
+    limit: options.limit ? parseInt(String(options.limit), 10) : 100,
+  });
+  printLogsResult(result, options.json === true);
 }
 
 export async function runOrchestratorFlow(options: CliOptions = {}): Promise<void> {
@@ -936,6 +1021,9 @@ async function executeClaimedWorkItem(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const authFailureCode = claimed.stage.stageType === "authorization"
+      ? classifyAuthFailure(message)
+      : undefined;
     if (isCancellationError(error)) {
       await repository.cancelJob(claimed.job.id, {
         completedAt: new Date(),
@@ -984,9 +1072,21 @@ async function executeClaimedWorkItem(
       });
       return;
     }
-    await repository.updateStageStatus(claimed.stage.id, "failed", { completedAt: new Date(), errorMessage: message });
-    await repository.updateWorkItemStatus(claimed.workItem.id, "failed", { completedAt: new Date(), errorMessage: message });
-    await repository.updateJobStatus(claimed.job.id, "failed", { completedAt: new Date(), errorMessage: message });
+    await repository.updateStageStatus(claimed.stage.id, "failed", {
+      completedAt: new Date(),
+      errorCode: authFailureCode,
+      errorMessage: message,
+    });
+    await repository.updateWorkItemStatus(claimed.workItem.id, "failed", {
+      completedAt: new Date(),
+      errorCode: authFailureCode,
+      errorMessage: message,
+    });
+    await repository.updateJobStatus(claimed.job.id, "failed", {
+      completedAt: new Date(),
+      errorCode: authFailureCode,
+      errorMessage: message,
+    });
     await leaseManager.releaseStageLease(lease);
     console.error(`Worker stage failed [${claimed.stage.stageType}] for job ${claimed.job.id}: ${message}`);
     await logger.error("work item execution failed", {
@@ -1094,4 +1194,138 @@ function parseOptionalDate(value: unknown, label: string): Date | undefined {
     throw new Error(`Invalid date for ${label}: ${value}`);
   }
   return parsed;
+}
+
+function createApiClient(options: CliOptions): HttpApiClient {
+  if (options.__apiClient) {
+    return options.__apiClient as HttpApiClient;
+  }
+
+  return new HttpApiClient({
+    baseUrl: typeof options.apiUrl === "string" ? options.apiUrl : undefined,
+  });
+}
+
+function normalizeWorkflowTypeInput(value: string): WorkflowType {
+  const trimmed = value.trim();
+  switch (trimmed) {
+    case "download":
+    case "process":
+    case "sync":
+    case "download-images":
+    case "fetch-metadata":
+    case "refresh":
+      return trimmed;
+    default:
+      throw new Error(`Unsupported workflow type: ${value}`);
+  }
+}
+
+async function readApiWorkflowPayload(payloadPath: unknown): Promise<Record<string, unknown>> {
+  if (typeof payloadPath !== "string" || payloadPath.trim().length === 0) {
+    throw new Error("api submit requires --payload <path> or --payload - for stdin");
+  }
+
+  const resolvedPath = payloadPath.trim();
+  const raw = resolvedPath === "-"
+    ? await readStdinText()
+    : await fs.promises.readFile(path.resolve(resolvedPath), "utf8");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Invalid JSON in workflow payload: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Workflow payload must be a JSON object");
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+async function readStdinText(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function printJobSnapshot(snapshot: IJobSnapshot, asJson: boolean): void {
+  if (asJson) {
+    console.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
+
+  if (!snapshot.job) {
+    console.log("Job not found.");
+    return;
+  }
+
+  console.log(`Job ${snapshot.job.id}`);
+  console.log(`  Workflow: ${snapshot.job.workflowType}`);
+  console.log(`  Status: ${snapshot.job.status}`);
+  if (snapshot.job.startedAt) {
+    console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
+  }
+  if (snapshot.job.completedAt) {
+    console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
+  }
+  if (snapshot.stages.length > 0) {
+    console.log("\nStages:");
+    snapshot.stages.forEach((stage) => {
+      console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
+    });
+  }
+}
+
+function resolveBrowserEndpoint(options: CliOptions): string | undefined {
+  const browser = options.browser;
+  if (browser == null || browser === false) return undefined;
+  if (browser === true) return "http://localhost:9222";
+  if (typeof browser === "string") {
+    const trimmed = browser.trim();
+    return trimmed.length > 0 ? trimmed : "http://localhost:9222";
+  }
+  return "http://localhost:9222";
+}
+
+function resolveBrowserUserDataDir(options: CliOptions): string | undefined {
+  if (typeof options.browserProfile !== "string") return undefined;
+  const trimmed = options.browserProfile.trim();
+  return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
+}
+
+function resolveBrowserProfileDirectory(options: CliOptions): string | undefined {
+  if (typeof options.profileDirectory !== "string") return undefined;
+  const trimmed = options.profileDirectory.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function printLogsResult(result: ILogQueryResult, asJson: boolean): void {
+  if (asJson) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.entries.length === 0) {
+    console.log("No logs matched the requested filters.");
+    return;
+  }
+
+  result.entries.forEach((entry) => {
+    const segments = [
+      entry.timestamp.toISOString(),
+      entry.level.toUpperCase(),
+      entry.context?.workflowType,
+      entry.context?.role,
+      entry.context?.jobId,
+      entry.context?.stageId,
+      entry.context?.workItemId,
+      entry.message,
+    ].filter((segment): segment is string => Boolean(segment));
+    console.log(segments.join(" | "));
+  });
 }

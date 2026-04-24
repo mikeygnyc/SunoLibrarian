@@ -1,5 +1,9 @@
 import * as http from "http";
+import * as path from "path";
 import { URL } from "url";
+import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
+import { renderDashboardHtml } from "./http-dashboard";
+import { HttpApiServerLogger } from "./http-api-server-logger";
 import type {
   IHttpApiAuthStatusResponse,
   IHttpApiCancelJobRequest,
@@ -11,12 +15,13 @@ import type {
   IHttpApiLogsResponse,
   IHttpApiMutationResponse,
   IHttpApiSetAuthTokenRequest,
+  IHttpApiSetAuthTokenResponse,
   IHttpApiSubmitJobResponse,
   ILogQueryFilter,
   WorkflowType,
 } from "./lib/interfaces";
 import { validateWorkflowSubmission } from "./http-api-workflows";
-import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, submitWorkflowJob } from "./orchestration";
+import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./orchestration";
 import { Storage } from "./storage";
 import type { CliOptions } from "./services";
 
@@ -24,6 +29,18 @@ type ApiServerOptions = CliOptions & {
   host?: string;
   port?: string | number;
 };
+
+type ApiWorkflowDefaults = Pick<
+  CliOptions,
+  | "databaseType"
+  | "database"
+  | "postgresUrl"
+  | "delay"
+  | "processConcurrency"
+  | "processUpdateConcurrency"
+  | "output"
+  | "library"
+>;
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
@@ -36,8 +53,31 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
     controlPlane: typeof options.controlPlane === "string" ? options.controlPlane : "local",
     postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
   };
+  const workflowDefaults = resolveApiWorkflowDefaults({
+    ...options,
+    ...defaultControlPlane,
+  });
+  const serverLogger = new HttpApiServerLogger({
+    logFilePath: resolveServerLogPath(options.logFile),
+    minimumLevel: "debug",
+  });
+
+  serverLogger.info("serve-api starting", {
+    host,
+    port,
+    controlPlane: defaultControlPlane.controlPlane,
+    workflowDatabaseType: workflowDefaults.databaseType,
+    workflowDatabasePath: workflowDefaults.database,
+    workflowPostgresUrlConfigured: workflowDefaults.databaseType === "postgres" && Boolean(workflowDefaults.postgresUrl),
+    workflowDownloadRoot: workflowDefaults.output,
+    workflowLibraryRoot: workflowDefaults.library,
+    logFilePath: serverLogger.logFilePath,
+  });
 
   const server = http.createServer(async (req, res) => {
+    let method = req.method?.toUpperCase() ?? "";
+    let pathname = req.url ?? "";
+    const startedAt = Date.now();
     try {
       if (!req.url || !req.method) {
         sendJson(res, 400, { error: "Invalid request" });
@@ -45,8 +85,21 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
       }
 
       const url = new URL(req.url, `http://${req.headers.host ?? `${host}:${port}`}`);
-      const pathname = url.pathname;
-      const method = req.method.toUpperCase();
+      pathname = url.pathname;
+      method = req.method.toUpperCase();
+      res.once("finish", () => {
+        serverLogger.info("request completed", {
+          method,
+          pathname,
+          statusCode: res.statusCode,
+          durationMs: Date.now() - startedAt,
+        });
+      });
+
+      if (method === "GET" && (pathname === "/" || pathname === "/dashboard")) {
+        sendHtml(res, 200, renderDashboardHtml());
+        return;
+      }
 
       if (method === "GET" && pathname === "/healthz") {
         const response: IHttpApiHealthResponse = { ok: true };
@@ -72,7 +125,29 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
         }
         const storage = new Storage();
         storage.setAuthToken(token);
-        const response: IHttpApiMutationResponse = { ok: true };
+        let restartedJobIds: string[] = [];
+        let restartError: string | undefined;
+        try {
+          const restartResult = await restartRecentlyFailedAuthJobs(defaultControlPlane);
+          restartedJobIds = restartResult.restartedJobIds;
+          if (restartedJobIds.length > 0) {
+            serverLogger.info("restarted auth-blocked jobs after token update", {
+              restartedJobIds,
+              originalJobIds: restartResult.originalJobIds,
+            });
+          }
+        } catch (error) {
+          restartError = error instanceof Error ? error.message : String(error);
+          serverLogger.error("failed to restart auth-blocked jobs after token update", {
+            error: restartError,
+          });
+        }
+        const response: IHttpApiSetAuthTokenResponse = {
+          ok: true,
+          restartedJobIds,
+          restartedJobCount: restartedJobIds.length,
+          restartError,
+        };
         sendJson(res, 200, response);
         return;
       }
@@ -109,14 +184,22 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
         }
 
         const body = await readJsonBody<Record<string, unknown>>(req);
-        const validatedOptions = validateWorkflowSubmission(workflowType, body);
+        const validatedOptions = validateWorkflowSubmission(workflowType, body, {
+          downloadRoot: String(workflowDefaults.output),
+          libraryRoot: String(workflowDefaults.library),
+        });
         const submitOptions: CliOptions = {
-          ...validatedOptions,
           ...defaultControlPlane,
+          ...workflowDefaults,
+          ...validatedOptions,
           runtimeMode: "distributed",
           submitOnly: true,
         };
         const jobId = await submitWorkflowJob(workflowType, submitOptions);
+        serverLogger.info("workflow submitted via api", {
+          workflowType,
+          jobId,
+        });
         const response: IHttpApiSubmitJobResponse = {
           jobId,
           workflowType,
@@ -208,6 +291,12 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
     } catch (error) {
       const statusCode = isHttpError(error) ? error.statusCode : 500;
       const message = error instanceof Error ? error.message : String(error);
+      serverLogger.error("request failed", {
+        method,
+        pathname,
+        statusCode,
+        error: message,
+      });
       sendJson(res, statusCode, { error: message } satisfies IHttpApiErrorResponse);
     }
   });
@@ -218,6 +307,7 @@ export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<v
   });
 
   console.log(`HTTP API listening on http://${host}:${port}`);
+  console.log(`HTTP API local log file: ${serverLogger.logFilePath}`);
 
   await new Promise<void>((resolve, reject) => {
     const shutdown = () => {
@@ -347,6 +437,52 @@ function sendJson(res: http.ServerResponse, statusCode: number, payload: unknown
     "content-length": Buffer.byteLength(body),
   });
   res.end(body);
+}
+
+function sendHtml(res: http.ServerResponse, statusCode: number, body: string): void {
+  res.writeHead(statusCode, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function resolveApiWorkflowDefaults(options: CliOptions): ApiWorkflowDefaults {
+  const databaseType = typeof options.databaseType === "string"
+    ? options.databaseType
+    : options.controlPlane === "postgres"
+      ? "postgres"
+      : "sqlite";
+  const downloadRoot = resolveDirectoryOption(options.output, DEFAULT_DOWNLOAD_ROOT);
+
+  return {
+    databaseType,
+    database: databaseType === "sqlite"
+      ? (typeof options.database === "string" && options.database.trim().length > 0
+        ? options.database
+        : DEFAULT_DATABASE_PATH)
+      : undefined,
+    postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
+    delay: String(parseIntegerOption(options.delay, 1000, "--delay")),
+    processConcurrency: String(parseIntegerOption(options.processConcurrency, 4, "--process-concurrency")),
+    processUpdateConcurrency: String(parseIntegerOption(options.processUpdateConcurrency, 8, "--process-update-concurrency")),
+    output: downloadRoot,
+    library: resolveDirectoryOption(options.library, path.join(downloadRoot, "library")),
+  };
+}
+
+function resolveServerLogPath(value: unknown): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return path.resolve(value.trim());
+  }
+  return path.resolve("data", "http-api.log");
+}
+
+function resolveDirectoryOption(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return path.resolve(value.trim());
+  }
+  return path.resolve(fallback);
 }
 
 function createHttpError(statusCode: number, message: string): Error & { statusCode: number } {

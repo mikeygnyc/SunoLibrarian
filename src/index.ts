@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import {
+  runApiCancelJobFlow,
+  runApiHealthFlow,
+  runApiJobStatusFlow,
+  runApiLogsFlow,
+  runApiSubmitWorkflowFlow,
+  runApiWatchJobFlow,
+  runCaptureAuthTokenFlow,
   runClearAuthTokenFlow,
   runDownloadFlow,
   runDownloadImagesFlow,
   runExportMetadataJsonFlow,
   runFetchMetadataFlow,
   runImportMetadataJsonFlow,
+  runLibrarianFlow,
   runListFlow,
   runLogsFlow,
   runMetadataFlow,
@@ -55,6 +63,24 @@ function addRuntimeModeOptions(command: Command): Command {
     .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
     .option("--submit-only", "Submit the job without executing it in this process");
 }
+
+function addApiUrlOption(command: Command): Command {
+  return command
+    .option("--api-url <url>", "HTTP API base URL", "http://127.0.0.1:3000");
+}
+
+program
+  .command("capture-auth-token")
+  .description("Capture a fresh Suno auth token locally for pasting into the dashboard or API")
+  .option(
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
+  )
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+  .option("--save-local", "Save the captured token to the local cache after printing it")
+  .option("--json", "Output the captured token as JSON")
+  .action(withCliError(runCaptureAuthTokenFlow));
 
 program
   .command("clear-auth-token")
@@ -270,6 +296,22 @@ addRuntimeModeOptions(program
   .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres"))
   .action(withCliError(runRefreshFlow));
 
+addMetadataDatabaseOptions(program
+  .command("run-librarian")
+  .description("Run the background metadata librarian loop")
+  .option("-t, --token <token>", "Authentication token")
+  .option(
+    "-b, --browser [url]",
+    "Connect to existing Chrome instance (default: http://localhost:9222)",
+  )
+  .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
+  .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+  .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+  .option("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
+  .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
+  .option("--once", "Sync a single workspace and exit"))
+  .action(withCliError(runLibrarianFlow));
+
 program
   .command("run-orchestrator")
   .description("Run the local control-plane orchestrator loop")
@@ -332,6 +374,61 @@ program
   .option("--port <port>", "Port to listen on", "3000")
   .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
   .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
+  .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
+  .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
+  .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
+  .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log")
   .action(withCliError(runServeApiFlow));
+
+addApiUrlOption(program
+  .command("api-health")
+  .description("Check HTTP API health")
+  .option("--json", "Output response as JSON"))
+  .action(withCliError(runApiHealthFlow));
+
+addApiUrlOption(program
+  .command("api-submit <workflow>")
+  .description("Submit a workflow using a validated JSON payload")
+  .requiredOption("--payload <path>", "JSON payload file path, or - to read from stdin")
+  .option("--json", "Output response as JSON"))
+  .action(withCliError(runApiSubmitWorkflowFlow));
+
+addApiUrlOption(program
+  .command("api-job-status <jobId>")
+  .description("Show HTTP API job status")
+  .option("--json", "Output job status as JSON"))
+  .action(withCliError(runApiJobStatusFlow));
+
+addApiUrlOption(program
+  .command("api-watch-job <jobId>")
+  .description("Watch HTTP API job status until completion")
+  .option("--json", "Output job status as JSON on each refresh")
+  .option("--interval <ms>", "Polling interval in ms", "1000"))
+  .action(withCliError(runApiWatchJobFlow));
+
+addApiUrlOption(program
+  .command("api-cancel-job <jobId>")
+  .description("Cancel a queued or running job through the HTTP API")
+  .option("--reason <text>", "Optional cancellation reason")
+  .option("--json", "Output response as JSON"))
+  .action(withCliError(runApiCancelJobFlow));
+
+addApiUrlOption(program
+  .command("api-logs")
+  .description("Query logs through the HTTP API")
+  .option("--job-id <jobId>", "Filter by job id")
+  .option("--stage-id <stageId>", "Filter by stage id")
+  .option("--work-item-id <workItemId>", "Filter by work item id")
+  .option("--workflow-type <workflow>", "Filter by workflow type")
+  .option("--worker-instance-id <workerInstanceId>", "Filter by worker instance id")
+  .option("--role <role>", "Filter by worker role")
+  .option("--clip-id <clipId>", "Filter by clip id")
+  .option("--level <level>", "Filter by log level")
+  .option("--start-time <iso>", "Only include logs on/after ISO timestamp")
+  .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
+  .option("--limit <n>", "Maximum logs to return", "100")
+  .option("--json", "Output logs as JSON"))
+  .action(withCliError(runApiLogsFlow));
 
 program.parse();
