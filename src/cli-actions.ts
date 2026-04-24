@@ -25,7 +25,7 @@ import {
   type AuthStorage,
   type CliOptions,
   type DownloadFlowResult,
-} from "./services";
+} from "./core/services";
 import { Storage } from "./storage";
 import {
   createMetadataStore,

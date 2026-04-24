@@ -24,7 +24,7 @@ import type {
 import { validateWorkflowSubmission } from "./http-api-workflows";
 import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./core/orchestration";
 import { Storage } from "./storage";
-import type { CliOptions } from "./services";
+import type { CliOptions } from "./core/services";
 
 type ApiWorkflowDefaults = Pick<
   ApiServerConfig,
