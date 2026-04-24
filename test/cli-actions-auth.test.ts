@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getAuthenticatedClientWithDeps, type AuthDeps } from "../src/cli-actions";
+import { captureAuthTokenWithDeps, getAuthenticatedClientWithDeps, type AuthDeps } from "../src/cli-actions";
 
 type MockClient = {
   token: string;
@@ -134,4 +134,63 @@ test("propagates non-auth cached-token failures", async () => {
   );
 
   assert.deepEqual(harness.savedTokens, []);
+});
+
+test("captureAuthTokenWithDeps captures and prints a token without saving by default", async () => {
+  const logs: string[] = [];
+  const savedTokens: string[] = [];
+
+  const token = await captureAuthTokenWithDeps(
+    {
+      browser: true,
+      browserProfile: "/tmp/profile-root",
+      profileDirectory: "Profile 2",
+    },
+    {
+      extractTokenFromBrowser: async (browserUrl, options) => {
+        assert.equal(browserUrl, "http://localhost:9222");
+        assert.equal(options?.userDataDir, "/tmp/profile-root");
+        assert.equal(options?.profileDirectory, "Profile 2");
+        return "captured-token";
+      },
+      storage: {
+        setAuthToken: (value: string) => savedTokens.push(value),
+      } as any,
+      log: {
+        log: (message?: unknown) => logs.push(String(message)),
+      },
+    },
+  );
+
+  assert.equal(token, "captured-token");
+  assert.deepEqual(savedTokens, []);
+  assert.deepEqual(logs, ["Captured token:", "captured-token"]);
+});
+
+test("captureAuthTokenWithDeps can save the token locally and emit json", async () => {
+  const logs: string[] = [];
+  const savedTokens: string[] = [];
+
+  await captureAuthTokenWithDeps(
+    {
+      browser: "http://localhost:9333",
+      saveLocal: true,
+      json: true,
+    },
+    {
+      extractTokenFromBrowser: async () => "captured-token",
+      storage: {
+        setAuthToken: (value: string) => savedTokens.push(value),
+      } as any,
+      log: {
+        log: (message?: unknown) => logs.push(String(message)),
+      },
+    },
+  );
+
+  assert.deepEqual(savedTokens, ["captured-token"]);
+  assert.deepEqual(logs, [
+    "Saved captured token to the local cache.",
+    JSON.stringify({ token: "captured-token" }, null, 2),
+  ]);
 });

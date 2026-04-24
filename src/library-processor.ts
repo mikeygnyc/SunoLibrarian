@@ -28,6 +28,7 @@ export class Processor {
   private retryQueue: Set<string> = new Set();
   private retryTimer: NodeJS.Timeout | null = null;
   private runTimestamp: string | null = null;
+  private inferredProcessClipIds: Set<string> | null | undefined;
 
   // When a 403 is encountered during image download, all image downloads pause
   // for 2 minutes. a shared promise tracks this wait so all image downloads
@@ -85,7 +86,17 @@ export class Processor {
     const clipIds = this.config.processClipIds
       ?.map((clipId) => clipId.trim())
       .filter((clipId) => clipId.length > 0);
-    return clipIds?.length ? new Set(clipIds) : null;
+    if (clipIds?.length) {
+      return new Set(clipIds);
+    }
+
+    if (this.inferredProcessClipIds !== undefined) {
+      return this.inferredProcessClipIds;
+    }
+
+    const inferredClipIds = inferProcessTargetClipIdsFromRoots(this.config.inputRoot, this.config.outputRoot);
+    this.inferredProcessClipIds = inferredClipIds.size > 0 ? inferredClipIds : null;
+    return this.inferredProcessClipIds;
   }
 
   private getProcessSongs(songs: ISongData[]): ISongData[] {
@@ -104,6 +115,12 @@ export class Processor {
     // create a single run timestamp so incremental log writes use the same
     // filename for this run instead of creating a new file on every song.
     this.runTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    if (!this.config.processClipIds?.length) {
+      const inferredClipIds = this.getProcessTargetClipIds();
+      if (inferredClipIds) {
+        logger.log(`Inferred ${inferredClipIds.size} process target clip id${inferredClipIds.size === 1 ? "" : "s"} from input/output roots`);
+      }
+    }
     logger.log(`Found ${processSongs.length} songs to process`);
     if (processSongs.length !== this.songs.length) {
       logger.log(`Selected ${processSongs.length} of ${this.songs.length} metadata entries\n`);
@@ -1076,4 +1093,36 @@ export class Processor {
       await fs.promises.copyFile(inputPath, outputPath);
     }
   }
+}
+
+export function inferProcessTargetClipIdsFromRoots(inputRoot: string, outputRoot: string): Set<string> {
+  const clipIds = new Set<string>();
+  const candidateDirs = [
+    path.join(inputRoot, "metadata"),
+    path.join(inputRoot, "wav"),
+    path.join(inputRoot, "mp3"),
+    path.join(outputRoot, "wav"),
+    path.join(outputRoot, "flac"),
+    path.join(outputRoot, "mp3"),
+    path.join(outputRoot, "alac"),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+      continue;
+    }
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const clipId = path.parse(entry.name).name.trim();
+      if (clipId.length > 0) {
+        clipIds.add(clipId);
+      }
+    }
+  }
+
+  return clipIds;
 }

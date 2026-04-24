@@ -110,6 +110,11 @@ The repo also includes a small orchestration-focused HTTP API:
 npm run dev -- serve-api --host 127.0.0.1 --port 3000
 ```
 
+Open `http://127.0.0.1:3000/` for the built-in dashboard shell.
+When the dashboard says jobs are waiting on auth, capture a fresh token on the
+operator machine with `suno-export capture-auth-token --browser
+http://localhost:9222`, then paste it into the Auth panel.
+
 Current endpoints:
 
 - `GET /healthz`: liveness check
@@ -122,8 +127,33 @@ Current endpoints:
 - `POST /api/v1/jobs/:jobId/cancel`: cancel a queued or running job
 - `GET /api/v1/logs?...`: query centralized logs
 
-The API currently submits distributed jobs and relies on the existing
-orchestrator/worker runtime to execute them.
+The API only handles HTTP and control-plane mutations. It does not run the
+orchestrator, workers, or librarian loop in-process. Start those as separate
+processes so each runtime stays focused on one responsibility.
+
+Example separate-process setup:
+
+```bash
+npm run dev -- serve-api --host 127.0.0.1 --port 3000
+npm run dev -- run-orchestrator --control-plane postgres --postgres-url "$SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"
+npm run dev -- run-librarian --browser http://localhost:9222 --database-type postgres
+```
+
+For code-based callers, a small typed client is available in
+[`src/http-api-client.ts`](src/http-api-client.ts).
+
+For future UI work, there is also a dashboard-oriented adapter in
+[`src/http-api-dashboard.ts`](src/http-api-dashboard.ts) that wraps the client
+with workflow-specific submit helpers plus display-friendly job and log view
+models.
+
+There is also a small CLI utility layer on top of that client:
+
+```bash
+npm run dev -- api-health
+npm run dev -- api-submit process --payload ./process-workflow.json
+npm run dev -- api-job-status <jobId>
+```
 
 Preferred workflow submission example:
 
@@ -131,20 +161,16 @@ Preferred workflow submission example:
 curl -X POST http://127.0.0.1:3000/api/v1/workflows/process \
   -H 'content-type: application/json' \
   -d '{
-    "input": "./downloads",
-    "output": "./library",
     "formats": ["flac", "mp3"],
     "bitrateKbps": 320,
-    "songConcurrency": 4,
-    "updateConcurrency": 8,
     "embedImages": true,
-    "embedLyrics": true,
-    "metadataStore": {
-      "type": "sqlite",
-      "sqlitePath": "./data/metadata.sqlite"
-    }
+    "embedLyrics": true
   }'
 ```
+
+Server-owned settings such as filesystem roots, metadata store configuration,
+delay, and worker concurrency are intentionally not accepted in workflow
+requests. Configure those when launching `serve-api`.
 
 ### GLOBAL OPTIONS
 
@@ -344,6 +370,22 @@ suno-export clear-auth-token
 ```
 
 This command removes only the auth token from `~/.suno-export/cache.json`; it does not clear cached tracks, metadata, or the stored device ID.
+
+#### `capture-auth-token`
+
+Capture a fresh Suno bearer token locally for pasting into the dashboard or API.
+
+```text
+suno-export capture-auth-token --browser http://localhost:9222
+```
+
+Options:
+
+- `-b, --browser [url]`: connect to an existing Chrome debug session. Required for token capture.
+- `--browser-profile <dir>`: Chrome user data directory for launched browser.
+- `--profile-directory <name>`: Chrome profile directory inside `--browser-profile`.
+- `--save-local`: save the captured token to the local cache after printing it.
+- `--json`: emit `{ "token": "..." }` JSON instead of plain text output.
 
 #### `import-metadata-json`
 

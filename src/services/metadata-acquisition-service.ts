@@ -51,26 +51,12 @@ export class MetadataAcquisitionService {
     await this.saveWorkspacesToDatabase(options, workspaces);
     const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
 
-    const allTrackIds: string[] = [];
     for (const workspace of targetWorkspaces) {
-      await assertNotCancelled(options);
-      const tracks = await client.getTracks(workspace.id);
-      await this.saveTrackWorkspaceLinks(
-        options,
-        workspace,
-        tracks.map((track) => track.id),
-      );
-      const filteredTracks = tracks.filter((track) => isTrackInDateWindow(track, createdAfter, createdBefore));
-      allTrackIds.push(...filteredTracks.map((track) => track.id));
+      const result = await this.syncWorkspaceMetadata(options, client, workspace, createdAfter, createdBefore);
+      if (result.fetchedMetadataCount === 0) {
+        continue;
+      }
     }
-
-    if (allTrackIds.length === 0) {
-      console.log("No tracks matched the selection criteria; nothing to fetch.");
-      return;
-    }
-
-    console.log(`Fetching metadata for ${allTrackIds.length} tracks...`);
-    await client.fetchAllTracksMetadata(allTrackIds, writeFetchProgress, async () => assertNotCancelled(options));
     console.log("\nMetadata fetch complete!");
   }
 
@@ -80,6 +66,44 @@ export class MetadataAcquisitionService {
     const workspaces = await client.refreshAllWorkspaces(async () => assertNotCancelled(options));
     await this.saveWorkspacesToDatabase(options, workspaces);
     console.log(`Refreshed ${workspaces.length} workspace(s)`);
+  }
+
+  async syncWorkspaceMetadata(
+    options: CliOptions,
+    client: SunoClient,
+    workspace: IWorkspace,
+    createdAfter?: Date,
+    createdBefore?: Date,
+  ): Promise<{ discoveredTrackCount: number; fetchedMetadataCount: number }> {
+    await assertNotCancelled(options);
+    const effectiveCreatedAfter = createdAfter ?? getCreatedAtFilters(options).createdAfter;
+    const effectiveCreatedBefore = createdBefore ?? getCreatedAtFilters(options).createdBefore;
+    const tracks = await client.getTracks(workspace.id);
+    await this.saveTrackWorkspaceLinks(
+      options,
+      workspace,
+      tracks.map((track) => track.id),
+    );
+
+    const filteredTrackIds = tracks
+      .filter((track) => isTrackInDateWindow(track, effectiveCreatedAfter, effectiveCreatedBefore))
+      .map((track) => track.id);
+
+    if (filteredTrackIds.length === 0) {
+      console.log(`[metadata] Workspace ${workspace.name} has no tracks matching the current selection criteria.`);
+      return {
+        discoveredTrackCount: tracks.length,
+        fetchedMetadataCount: 0,
+      };
+    }
+
+    console.log(`[metadata] Fetching metadata for ${filteredTrackIds.length} track(s) in workspace ${workspace.name}...`);
+    await client.fetchAllTracksMetadata(filteredTrackIds, writeFetchProgress, async () => assertNotCancelled(options));
+    console.log("");
+    return {
+      discoveredTrackCount: tracks.length,
+      fetchedMetadataCount: filteredTrackIds.length,
+    };
   }
 }
 

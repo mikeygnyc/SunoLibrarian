@@ -13,6 +13,12 @@ export interface IHttpApiSetAuthTokenRequest {
   token: string;
 }
 
+export interface IHttpApiSetAuthTokenResponse extends IHttpApiMutationResponse {
+  restartedJobIds: string[];
+  restartedJobCount: number;
+  restartError?: string;
+}
+
 export interface IHttpApiAuthConfig {
   token?: string;
   browserUrl?: string;
@@ -43,30 +49,19 @@ export interface IHttpApiSubmitJobResponse {
 
 export interface IHttpApiWorkflowSubmissionBase {
   auth?: IHttpApiAuthConfig;
-  metadataStore?: IHttpApiMetadataStoreConfig;
-  importMetadataJson?: string;
-  exportMetadataJson?: string;
-  metadataFile?: string;
-  copySongsMetadataToOutput?: boolean;
 }
 
 export interface IHttpApiDownloadWorkflowRequest extends IHttpApiWorkflowSubmissionBase {
-  output?: string;
   workspaceId?: string;
   format?: "mp3" | "wav";
   createdAfter?: string;
   createdBefore?: string;
-  delayMs?: number;
   flushCache?: boolean;
 }
 
 export interface IHttpApiProcessWorkflowRequest extends IHttpApiWorkflowSubmissionBase {
-  input: string;
-  output: string;
   formats?: string[];
   bitrateKbps?: number;
-  songConcurrency?: number;
-  updateConcurrency?: number;
   embedImages?: boolean;
   embedLyrics?: boolean;
   exitOnError?: boolean;
@@ -77,19 +72,14 @@ export interface IHttpApiProcessWorkflowRequest extends IHttpApiWorkflowSubmissi
 }
 
 export interface IHttpApiSyncWorkflowRequest extends IHttpApiWorkflowSubmissionBase {
-  output: string;
-  libraryOutput?: string;
   workspaceId?: string;
   format?: "mp3" | "wav";
   createdAfter?: string;
   createdBefore?: string;
-  delayMs?: number;
   flushCache?: boolean;
   processExistingMetadata?: boolean;
   formats?: string[];
   bitrateKbps?: number;
-  songConcurrency?: number;
-  updateConcurrency?: number;
   embedImages?: boolean;
   embedLyrics?: boolean;
   exitOnError?: boolean;
@@ -100,11 +90,9 @@ export interface IHttpApiSyncWorkflowRequest extends IHttpApiWorkflowSubmissionB
 }
 
 export interface IHttpApiDownloadImagesWorkflowRequest extends IHttpApiWorkflowSubmissionBase {
-  output?: string;
   listPath?: string;
   fetchImageListPath?: string;
   fetchMissing?: boolean;
-  delayMs?: number;
 }
 
 export interface IHttpApiFetchMetadataWorkflowRequest extends IHttpApiWorkflowSubmissionBase {
@@ -115,6 +103,15 @@ export interface IHttpApiFetchMetadataWorkflowRequest extends IHttpApiWorkflowSu
 }
 
 export interface IHttpApiRefreshWorkflowRequest extends IHttpApiWorkflowSubmissionBase {}
+
+export interface IHttpApiWorkflowRequestMap {
+  "download": IHttpApiDownloadWorkflowRequest;
+  "process": IHttpApiProcessWorkflowRequest;
+  "sync": IHttpApiSyncWorkflowRequest;
+  "download-images": IHttpApiDownloadImagesWorkflowRequest;
+  "fetch-metadata": IHttpApiFetchMetadataWorkflowRequest;
+  "refresh": IHttpApiRefreshWorkflowRequest;
+}
 
 export interface IHttpApiCancelJobRequest {
   reason?: string;

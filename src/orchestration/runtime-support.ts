@@ -9,10 +9,15 @@ import type {
   WorkerRole,
   WorkflowType,
 } from "../lib/interfaces";
-import { CentralLogger, DatabaseLogSink } from "../logging";
+import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
 import { LocalControlPlaneRepository } from "./local-control-plane";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";
 import type { CliOptions } from "../services";
+
+const RECENT_AUTH_RESTART_WINDOW_MS = 60 * 60 * 1000;
+const RECENT_AUTH_RESTART_LIMIT = 100;
+
+export type AuthFailureCode = "auth_missing" | "auth_invalid" | "auth_expired";
 
 export type ControlPlaneRepository = IOrchestrationRepository & ICentralLogRepository;
 
@@ -36,7 +41,7 @@ export const SUPPORTED_WORKFLOW_TYPES: WorkflowType[] = [
 export function createRuntimeLogger(repository: ControlPlaneRepository): CentralLogger {
   return new CentralLogger({
     minimumLevel: "debug",
-    sinks: [new DatabaseLogSink(repository)],
+    sinks: [new DatabaseLogSink(repository), new ConsoleLogSink()],
   });
 }
 
@@ -66,6 +71,42 @@ export function serializeJobPayload(options: CliOptions): Record<string, unknown
     if (value instanceof SunoClient) return undefined;
     return value;
   })) as Record<string, unknown>;
+}
+
+export function classifyAuthFailure(message: string | undefined): AuthFailureCode | undefined {
+  const normalized = message?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    normalized.includes("authentication required")
+    || normalized.includes("provide either --token or --browser")
+    || normalized.includes("missing auth")
+    || normalized.includes("missing token")
+  ) {
+    return "auth_missing";
+  }
+
+  if (
+    normalized.includes("expired auth")
+    || normalized.includes("expired token")
+  ) {
+    return "auth_expired";
+  }
+
+  if (
+    normalized.includes("invalid auth")
+    || normalized.includes("invalid token")
+    || normalized.includes("cached authentication token was rejected")
+    || normalized.includes("token was rejected")
+    || normalized.includes("401")
+    || normalized.includes("403")
+  ) {
+    return "auth_invalid";
+  }
+
+  return undefined;
 }
 
 export function getWorkflowStagePlan(workflowType: WorkflowType): WorkflowStagePlanItem[] {
@@ -237,6 +278,95 @@ export async function cancelWorkflowJob(
   } finally {
     await repository.close();
   }
+}
+
+export async function restartRecentlyFailedAuthJobs(
+  options: CliOptions = {},
+): Promise<{ restartedJobIds: string[]; originalJobIds: string[] }> {
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const restartedJobIds: string[] = [];
+    const originalJobIds: string[] = [];
+    const jobs = await repository.listJobs(RECENT_AUTH_RESTART_LIMIT);
+    const restartThreshold = Date.now() - RECENT_AUTH_RESTART_WINDOW_MS;
+
+    for (const job of jobs) {
+      if (job.status !== "failed" || job.workflowType === "process") {
+        continue;
+      }
+
+      const completedAtMs = job.completedAt?.getTime() ?? job.updatedAt.getTime();
+      if (completedAtMs < restartThreshold) {
+        continue;
+      }
+
+      const snapshot = await getJobSnapshot(repository, job.id);
+      if (!isRestartableAuthFailure(snapshot)) {
+        continue;
+      }
+
+      const payload = buildRestartPayload(job.payload);
+      const restartedJobId = await submitWorkflowJob(job.workflowType, payload);
+      restartedJobIds.push(restartedJobId);
+      originalJobIds.push(job.id);
+
+      await repository.appendStatusEvent({
+        id: randomUUID(),
+        scope: "job",
+        entityId: job.id,
+        jobId: job.id,
+        eventType: "job-restarted-after-auth",
+        level: "info",
+        message: `Job restarted after auth token refresh as ${restartedJobId}`,
+        payload: { restartedJobId },
+        createdAt: new Date(),
+      });
+    }
+
+    return { restartedJobIds, originalJobIds };
+  } finally {
+    await repository.close();
+  }
+}
+
+function isRestartableAuthFailure(snapshot: IJobSnapshot): boolean {
+  if (!snapshot.job || snapshot.job.status !== "failed") {
+    return false;
+  }
+
+  if (snapshot.statusEvents.some((event) => event.eventType === "job-restarted-after-auth")) {
+    return false;
+  }
+
+  const authorizationStage = snapshot.stages.find((stage) => stage.stageType === "authorization");
+  const authFailureCode = authorizationStage?.errorCode ?? snapshot.job.errorCode;
+  if (authFailureCode === "auth_missing" || authFailureCode === "auth_invalid" || authFailureCode === "auth_expired") {
+    return true;
+  }
+
+  return Boolean(
+    classifyAuthFailure(authorizationStage?.errorMessage)
+    || classifyAuthFailure(snapshot.job.errorMessage)
+  );
+}
+
+function buildRestartPayload(payload: Record<string, unknown>): CliOptions {
+  const restartedPayload: Record<string, unknown> = {
+    ...payload,
+    submitOnly: true,
+    runtimeMode: "distributed",
+  };
+
+  delete restartedPayload.token;
+  delete restartedPayload.browser;
+  delete restartedPayload.ignoreCachedToken;
+  delete restartedPayload.__authenticatedClient;
+  delete restartedPayload.__abortSignal;
+  delete restartedPayload.saveLocal;
+  delete restartedPayload.json;
+
+  return restartedPayload as CliOptions;
 }
 
 export function createJobCancellationAssertion(
