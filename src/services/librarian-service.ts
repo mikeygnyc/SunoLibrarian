@@ -51,6 +51,11 @@ export class LibrarianService {
     }
 
     const workspace = targetWorkspaces[0];
+    const workspacePolicy = evaluateWorkspaceSyncPolicy(workspace.id, options);
+    if (!workspacePolicy.allowed) {
+      console.log(`[librarian] Skipping workspace ${workspace.id}: ${workspacePolicy.reason}`);
+      return false;
+    }
     console.log(`[librarian] Syncing workspace ${workspace.name} (${workspace.id})`);
     const result = await this.metadataService.syncWorkspaceMetadata(options, resolvedClient, workspace);
     console.log(
@@ -76,6 +81,43 @@ function parsePositiveInteger(value: unknown, fallback: number, label: string): 
     throw new Error(`${label} must be a positive integer`);
   }
   return parsed;
+}
+
+function evaluateWorkspaceSyncPolicy(
+  workspaceId: string,
+  options: CliOptions,
+): { allowed: boolean; reason?: string } {
+  const enabledWorkspaces = normalizeWorkspaceList(options.enabledWorkspaces);
+  const disabledWorkspaces = normalizeWorkspaceList(options.disabledWorkspaces);
+
+  if (disabledWorkspaces?.includes(workspaceId)) {
+    return {
+      allowed: false,
+      reason: "workspace is explicitly disabled by librarian configuration",
+    };
+  }
+
+  if (enabledWorkspaces && !enabledWorkspaces.includes(workspaceId)) {
+    return {
+      allowed: false,
+      reason: "workspace is not included in the enabled-workspaces policy",
+    };
+  }
+
+  return { allowed: true };
+}
+
+function normalizeWorkspaceList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const workspaces = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  return workspaces.length > 0 ? workspaces : undefined;
 }
 
 async function wait(durationMs: number, signal?: AbortSignal): Promise<void> {

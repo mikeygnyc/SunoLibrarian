@@ -12,7 +12,9 @@ export interface CliOptions {
   database?: string;
   databaseType?: string;
   delay?: string | number;
+  disabledWorkspaces?: string[];
   host?: string;
+  enabledWorkspaces?: string[];
   ignoreCachedToken?: boolean;
   interval?: string | number;
   jobId?: string;
