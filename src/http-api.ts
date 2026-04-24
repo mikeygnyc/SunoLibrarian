@@ -22,7 +22,7 @@ import type {
   WorkflowType,
 } from "./core/contracts";
 import { validateWorkflowSubmission } from "./http-api-workflows";
-import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./orchestration";
+import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./core/orchestration";
 import { Storage } from "./storage";
 import type { CliOptions } from "./services";
 

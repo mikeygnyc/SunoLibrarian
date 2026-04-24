@@ -54,12 +54,16 @@ cleanup pass; imports were tightened toward `src/core/contracts` instead.
 
 ## Phase 5: Orchestration Core Extraction
 
-- [ ] Move control-plane repository code into core
-- [ ] Move runtime-support helpers into core
-- [ ] Move workflow stage-plan helpers into core
-- [ ] Move job submission/restart/cancellation helpers into core
-- [ ] Ensure orchestrator, worker, API, and operator CLI all use the same core
+- [x] Move control-plane repository code into core
+- [x] Move runtime-support helpers into core
+- [x] Move workflow stage-plan helpers into core
+- [x] Move job submission/restart/cancellation helpers into core
+- [x] Ensure orchestrator, worker, API, and operator CLI all use the same core
   orchestration modules
+
+This phase currently uses a shared `src/core/orchestration` facade over the
+existing orchestration implementation files to preserve behavior while making
+the core boundary explicit.
 
 ## Phase 6: Service Extraction
 
