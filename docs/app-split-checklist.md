@@ -4,18 +4,20 @@ This checklist turns the app split plan into a concrete execution sequence.
 
 ## Phase 1: Boundary Freeze
 
-- [ ] Write down the responsibility of each target app:
+- [x] Write down the responsibility of each target app:
   - `api`
   - `operator-cli`
   - `orchestrator`
   - `worker`
   - `librarian`
-- [ ] Identify current modules that are app-only versus reusable core
-- [ ] Stop adding new bootstrap logic to `src/index.ts`
-- [ ] Stop adding any runtime loops to `serve-api`
-- [ ] Confirm the rule that one process owns one runtime responsibility
-- [ ] Confirm the rule that one librarian process owns one workspace
-- [ ] Decide where workspace enable/disable state should live
+- [x] Identify current modules that are app-only versus reusable core
+- [x] Stop adding new bootstrap logic to `src/index.ts`
+- [x] Stop adding any runtime loops to `serve-api`
+- [x] Confirm the rule that one process owns one runtime responsibility
+- [x] Confirm the rule that one librarian process owns one workspace
+- [x] Decide where workspace enable/disable state should live
+
+Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 
 ## Phase 2: New Entrypoints
 

@@ -45,6 +45,9 @@ type ApiWorkflowDefaults = Pick<
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
 export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<void> {
+  // The API process is intentionally server-only. Keep worker/orchestrator/
+  // librarian runtime loops out of this bootstrap while the app split is in
+  // progress.
   const host = typeof options.host === "string" && options.host.trim().length > 0
     ? options.host.trim()
     : "127.0.0.1";
