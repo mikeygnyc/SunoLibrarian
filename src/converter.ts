@@ -14,6 +14,8 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   const config: IProcessorConfig = {
     inputRoot: path.resolve(options.input),
     outputRoot: path.resolve(options.output),
+    assertNotCancelled: options.assertNotCancelled,
+    abortSignal: options.abortSignal,
     metadataDatabaseType: metadataStoreConfig.type,
     metadataDatabasePath: metadataStoreConfig.sqlitePath,
     metadataPostgresUrl: metadataStoreConfig.postgresUrl,

@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { assertNotCancelled } from "../cancellation";
 import { Processor } from "../library-processor";
 import { createMetadataStore, describeMetadataStoreConfig, type MetadataStoreConfig } from "../metadata-store";
 import { normalizeMetadata } from "../lib/metadata/normalize-metadata";
@@ -35,6 +36,7 @@ let resolveMetadataJsonExportPath: ResolveMetadataJsonExportPath;
 
 export class AssetAcquisitionService {
   async downloadTracks(options: CliOptions, client: SunoClient): Promise<DownloadFlowResult> {
+    await assertNotCancelled(options);
     const { createdAfter, createdBefore } = getCreatedAtFilters(options);
 
     if (options.flushCache) {
@@ -86,6 +88,7 @@ export class AssetAcquisitionService {
         typeof options.onTrackDownloaded === "function" ? options.onTrackDownloaded : undefined;
 
       for (const workspace of targetWorkspaces) {
+        await assertNotCancelled(options);
         console.log(`\nProcessing workspace: ${workspace.name}`);
         const tracks = await client.getTracks(workspace.id);
         for (const track of tracks) {
@@ -94,6 +97,7 @@ export class AssetAcquisitionService {
         console.log(`Found ${tracks.length} track(s)`);
 
         for (let i = 0; i < tracks.length; i++) {
+          await assertNotCancelled(options);
           const track = tracks[i];
 
           if (!isTrackInDateWindow(track, createdAfter, createdBefore)) {
@@ -133,11 +137,14 @@ export class AssetAcquisitionService {
           console.log(`Downloading (${i + 1}/${tracks.length}): ${(track.title ?? "-")} : ${track.id}`);
 
           try {
+            await assertNotCancelled(options);
             const metadata = await client.fetchTrackMetadata(track.id);
 
             if (options.format === "wav") {
+              await assertNotCancelled(options);
               await client.downloadWav(track.id, filepath, false);
             } else {
+              await assertNotCancelled(options);
               await client.downloadMp3(track.audio_url, filepath, track.id, false);
             }
 
@@ -146,6 +153,7 @@ export class AssetAcquisitionService {
               const imageExt = path.extname(imageUrl) || ".jpeg";
               const imagePath = path.join(imagesDir, `${track.id}${imageExt}`);
               try {
+                await assertNotCancelled(options);
                 await client.downloadImage(imageUrl, imagePath, track.id);
               } catch (err) {
                 console.warn(`Failed to download image: ${err}`);
@@ -205,12 +213,14 @@ export class AssetAcquisitionService {
           }
 
           if (i < tracks.length - 1) {
+            await assertNotCancelled(options);
             await sleep(delay);
           }
         }
       }
 
       console.log(`\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`);
+      await assertNotCancelled(options);
       await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
       return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
     } finally {
@@ -219,6 +229,7 @@ export class AssetAcquisitionService {
   }
 
   async downloadImages(options: CliOptions, client: SunoClient): Promise<void> {
+    await assertNotCancelled(options);
     const outputDir = path.resolve(options.output);
     const storeConfig = resolveMetadataStoreOptions(options);
     const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
@@ -269,11 +280,13 @@ export class AssetAcquisitionService {
     }
 
     for (let i = 0; i < entries.length; i++) {
+      await assertNotCancelled(options);
       const { clipId, thumbnail } = entries[i];
       if (!thumbnail) continue;
 
       let preferredImageUrl = thumbnail;
       try {
+        await assertNotCancelled(options);
         const metadata = await client.fetchTrackMetadata(clipId);
         preferredImageUrl = getPreferredImageUrl(metadata, thumbnail) || thumbnail;
       } catch (err) {
@@ -285,16 +298,19 @@ export class AssetAcquisitionService {
       console.log(`Downloading image ${i + 1}/${entries.length}: ${clipId}`);
 
       try {
+        await assertNotCancelled(options);
         await client.downloadImage(preferredImageUrl, imagePath, clipId);
       } catch (err) {
         console.warn(`Failed downloading ${clipId}: ${err}`);
       }
 
       if (i < entries.length - 1) {
+        await assertNotCancelled(options);
         await sleep(parseInt(options.delay, 10));
       }
     }
 
+    await assertNotCancelled(options);
     await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
   }
 

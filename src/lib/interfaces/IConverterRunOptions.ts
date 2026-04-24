@@ -1,6 +1,8 @@
 export interface IConverterRunOptions {
   input: string;
   output: string;
+  assertNotCancelled?: () => Promise<void> | void;
+  abortSignal?: AbortSignal;
   metadataDatabaseType?: "sqlite" | "postgres";
   metadataDatabase?: string;
   metadataPostgresUrl?: string;

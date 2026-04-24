@@ -1,4 +1,5 @@
 import { createMetadataStore, type MetadataStoreConfig } from "../metadata-store";
+import { assertNotCancelled } from "../cancellation";
 import type { CliOptions } from "./auth-service";
 import type { IWorkspace } from "../lib/interfaces";
 import type { SunoClient } from "../client";
@@ -30,6 +31,7 @@ export class MetadataAcquisitionService {
   }
 
   async fetchMetadata(options: CliOptions, client: SunoClient): Promise<void> {
+    await assertNotCancelled(options);
     const explicitIds = parseTrackIdsOption(options.ids);
     const { createdAfter, createdBefore } = getCreatedAtFilters(options);
 
@@ -39,17 +41,19 @@ export class MetadataAcquisitionService {
 
     if (explicitIds.length > 0) {
       console.log(`Fetching metadata for ${explicitIds.length} tracks from --ids...`);
-      await client.fetchAllTracksMetadata(explicitIds, writeFetchProgress);
+      await client.fetchAllTracksMetadata(explicitIds, writeFetchProgress, async () => assertNotCancelled(options));
       console.log("\nMetadata fetch complete!");
       return;
     }
 
+    await assertNotCancelled(options);
     const workspaces = await client.getWorkspaces();
     await this.saveWorkspacesToDatabase(options, workspaces);
     const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
 
     const allTrackIds: string[] = [];
     for (const workspace of targetWorkspaces) {
+      await assertNotCancelled(options);
       const tracks = await client.getTracks(workspace.id);
       await this.saveTrackWorkspaceLinks(
         options,
@@ -66,13 +70,14 @@ export class MetadataAcquisitionService {
     }
 
     console.log(`Fetching metadata for ${allTrackIds.length} tracks...`);
-    await client.fetchAllTracksMetadata(allTrackIds, writeFetchProgress);
+    await client.fetchAllTracksMetadata(allTrackIds, writeFetchProgress, async () => assertNotCancelled(options));
     console.log("\nMetadata fetch complete!");
   }
 
   async refresh(options: CliOptions, client: SunoClient): Promise<void> {
+    await assertNotCancelled(options);
     console.log("Refreshing all workspaces...");
-    const workspaces = await client.refreshAllWorkspaces();
+    const workspaces = await client.refreshAllWorkspaces(async () => assertNotCancelled(options));
     await this.saveWorkspacesToDatabase(options, workspaces);
     console.log(`Refreshed ${workspaces.length} workspace(s)`);
   }

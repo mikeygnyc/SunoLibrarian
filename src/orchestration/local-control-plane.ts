@@ -99,6 +99,57 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
     });
   }
 
+  async cancelJob(
+    jobId: string,
+    details: Partial<Pick<IOrchestrationJob, "completedAt" | "errorCode" | "errorMessage">> = {},
+  ): Promise<void> {
+    await this.withLockedState((state) => {
+      const cancelledAt = details.completedAt ?? new Date();
+      state.jobs = state.jobs.map((job) => {
+        if (job.id !== jobId) return job;
+        if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+          return job;
+        }
+        return {
+          ...job,
+          status: "cancelled",
+          completedAt: cancelledAt,
+          errorCode: details.errorCode ?? job.errorCode,
+          errorMessage: details.errorMessage ?? job.errorMessage,
+          updatedAt: new Date(),
+        };
+      });
+
+      state.stages = state.stages.map((stage) => {
+        if (stage.jobId !== jobId) return stage;
+        if (stage.status === "succeeded" || stage.status === "failed" || stage.status === "cancelled") {
+          return stage;
+        }
+        return {
+          ...stage,
+          status: "cancelled",
+          completedAt: cancelledAt,
+          updatedAt: new Date(),
+        };
+      });
+
+      state.workItems = state.workItems.map((workItem) => {
+        if (workItem.jobId !== jobId) return workItem;
+        if (workItem.status === "succeeded" || workItem.status === "failed" || workItem.status === "cancelled") {
+          return workItem;
+        }
+        return {
+          ...workItem,
+          status: "cancelled",
+          completedAt: cancelledAt,
+          updatedAt: new Date(),
+        };
+      });
+
+      return state;
+    });
+  }
+
   async createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage> {
     await this.withLockedState((state) => {
       state.stages.push(stage);

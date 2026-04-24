@@ -15,6 +15,8 @@ export class ProcessingPlannerService {
     return {
       input: options.input,
       output: outputDir,
+      assertNotCancelled: options.__assertNotCancelled,
+      abortSignal: options.__abortSignal,
       metadataDatabaseType: storeConfig.type,
       metadataDatabase: storeConfig.sqlitePath,
       metadataPostgresUrl: storeConfig.postgresUrl,

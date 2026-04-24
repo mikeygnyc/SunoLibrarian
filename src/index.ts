@@ -19,6 +19,7 @@ import {
   runWorkerFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
+import { runServeApiFlow } from "./http-api";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 
 const program = new Command();
@@ -323,5 +324,14 @@ program
   .option("--limit <n>", "Maximum logs to return", "100")
   .option("--json", "Output logs as JSON")
   .action(withCliError(runLogsFlow));
+
+program
+  .command("serve-api")
+  .description("Run the HTTP API server")
+  .option("--host <host>", "Host interface to bind", "127.0.0.1")
+  .option("--port <port>", "Port to listen on", "3000")
+  .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+  .option("--postgres-url <url>", "Postgres control-plane connection URL")
+  .action(withCliError(runServeApiFlow));
 
 program.parse();

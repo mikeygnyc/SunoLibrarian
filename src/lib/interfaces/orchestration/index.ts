@@ -1,5 +1,6 @@
 export * from "./IOrchestrationShared";
 export * from "./IOrchestrationJob";
+export * from "./IJobSnapshot";
 export * from "./IOrchestrationStage";
 export * from "./IWorkItem";
 export * from "./IWorkerLease";

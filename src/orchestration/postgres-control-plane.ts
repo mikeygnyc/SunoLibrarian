@@ -265,6 +265,59 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     );
   }
 
+  async cancelJob(
+    jobId: string,
+    details: Partial<Pick<IOrchestrationJob, "completedAt" | "errorCode" | "errorMessage">> = {},
+  ): Promise<void> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cancelledAt = toDate(details.completedAt ?? new Date());
+      await client.query(
+        `
+        UPDATE orchestration_jobs
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            error_code = COALESCE($3, error_code),
+            error_message = COALESCE($4, error_message),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND status NOT IN ('completed', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt, details.errorCode ?? null, details.errorMessage ?? null],
+      );
+      await client.query(
+        `
+        UPDATE orchestration_stages
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = $1
+          AND status NOT IN ('succeeded', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt],
+      );
+      await client.query(
+        `
+        UPDATE work_items
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = $1
+          AND status NOT IN ('succeeded', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage> {
     await this.initialize();
     await this.pool.query(

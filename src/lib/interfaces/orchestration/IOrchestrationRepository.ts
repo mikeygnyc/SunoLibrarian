@@ -24,6 +24,10 @@ export interface IOrchestrationRepository {
     status: OrchestrationJobStatus,
     details?: Partial<Pick<IOrchestrationJob, "startedAt" | "completedAt" | "errorCode" | "errorMessage">>,
   ): Promise<void>;
+  cancelJob(
+    jobId: string,
+    details?: Partial<Pick<IOrchestrationJob, "completedAt" | "errorCode" | "errorMessage">>,
+  ): Promise<void>;
   createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage>;
   listStages(jobId: string): Promise<IOrchestrationStage[]>;
   updateStageStatus(

@@ -10,6 +10,7 @@ let browserExitHooksRegistered = false;
 export type BrowserLaunchOptions = {
   userDataDir?: string;
   profileDirectory?: string;
+  abortSignal?: AbortSignal;
 };
 
 type BrowserProfileLaunchPaths = {
@@ -464,8 +465,10 @@ export async function connectOrLaunchBrowser(
   browser: Browser;
   isRemoteBrowser: boolean;
 }> {
+  throwIfAborted(options?.abortSignal);
   if (options?.userDataDir) {
     const browser = await launchLocalDebugBrowser(browserUrl, options);
+    throwIfAborted(options?.abortSignal);
     return { browser, isRemoteBrowser: false };
   }
 
@@ -473,17 +476,20 @@ export async function connectOrLaunchBrowser(
     try {
       console.log(`Connecting to existing browser at ${browserUrl}...`);
       const browser = await puppeteer.connect({ browserURL: browserUrl });
+      throwIfAborted(options?.abortSignal);
       return { browser, isRemoteBrowser: true };
     } catch (error: any) {
       console.warn(
         `Browser session at ${browserUrl} is unavailable (${error?.message || error}). Falling back to local launch.`,
       );
       const browser = await launchLocalDebugBrowser(browserUrl, options);
+      throwIfAborted(options?.abortSignal);
       return { browser, isRemoteBrowser: false };
     }
   }
 
   const browser = await launchLocalDebugBrowser(undefined, options);
+  throwIfAborted(options?.abortSignal);
   return { browser, isRemoteBrowser: false };
 }
 
@@ -497,6 +503,12 @@ export async function extractTokenFromBrowser(
   );
 
   const page = await browser.newPage();
+  const abortCleanup = attachBrowserAbortHandlers({
+    browser,
+    page,
+    isRemoteBrowser,
+    signal: options?.abortSignal,
+  });
 
   let capturedToken: string | null = null;
   let loggedApiRequestCount = 0;
@@ -545,6 +557,7 @@ export async function extractTokenFromBrowser(
   await visitSunoRoutesUntilToken(page, () => capturedToken);
 
   while (!capturedToken) {
+    throwIfAborted(options?.abortSignal);
     await sleep(1000);
     if (page.isClosed()) {
       throw new Error(
@@ -554,6 +567,7 @@ export async function extractTokenFromBrowser(
   }
 
   console.log("Authentication complete! You can continue using the browser.");
+  abortCleanup();
 
   if (isRemoteBrowser) {
     await browser.disconnect();
@@ -566,4 +580,60 @@ export async function extractTokenFromBrowser(
   }
 
   return capturedToken;
+}
+
+export function attachBrowserAbortHandlers(params: {
+  browser: Browser;
+  page?: Page | null;
+  isRemoteBrowser: boolean;
+  signal?: AbortSignal;
+}): () => void {
+  const { browser, page, isRemoteBrowser, signal } = params;
+  if (!signal) return () => {};
+
+  const onAbort = () => {
+    const closePage = async () => {
+      if (!page || page.isClosed()) return;
+      try {
+        await page.close({ runBeforeUnload: false });
+      } catch {
+        // best effort
+      }
+    };
+
+    const closeBrowser = async () => {
+      try {
+        if (isRemoteBrowser) {
+          await browser.disconnect();
+        } else {
+          await browser.close();
+        }
+      } catch {
+        // best effort
+      }
+    };
+
+    void closePage().finally(() => {
+      void closeBrowser();
+    });
+  };
+
+  if (signal.aborted) {
+    onAbort();
+    return () => {};
+  }
+
+  signal.addEventListener("abort", onAbort, { once: true });
+  return () => {
+    signal.removeEventListener("abort", onAbort);
+  };
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const reason = signal.reason;
+  if (reason instanceof Error) {
+    throw reason;
+  }
+  throw new Error(typeof reason === "string" ? reason : "Browser operation cancelled");
 }
