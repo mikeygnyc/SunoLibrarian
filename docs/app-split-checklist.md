@@ -119,11 +119,14 @@ remain local to the API app boundary.
 
 ## Phase 10: Migration Cleanup
 
-- [ ] Reduce the old top-level `src/index.ts` to a compatibility shim or remove
+- [x] Reduce the old top-level `src/index.ts` to a compatibility shim or remove
   it
-- [ ] Remove deprecated bootstrap glue
+- [x] Remove deprecated bootstrap glue
 - [ ] Remove dead imports and stale option wiring
 - [ ] Re-run architecture review and confirm the boundaries still make sense
+
+The remaining top-level `src/index.ts` is now a minimal compatibility shim that
+delegates to the split app bootstraps through `createLegacyProgram()`.
 
 ## Validation Checklist
 

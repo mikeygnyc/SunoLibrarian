@@ -57,10 +57,6 @@ export function createOperatorCliProgram(): Command {
     "Operator CLI for Suno export workflows and control-plane actions",
   );
 
-  // Phase 3 note: operator commands still reuse legacy flow handlers, but this
-  // app now owns its own config surface and will narrow further as shared
-  // contracts move out of the CLI bootstrap.
-  normalizeOperatorCliConfig({});
   registerOperatorCliCommands(program);
   return program;
 }
