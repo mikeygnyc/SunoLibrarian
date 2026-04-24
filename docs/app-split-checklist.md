@@ -21,15 +21,15 @@ Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 
 ## Phase 2: New Entrypoints
 
-- [ ] Create `apps/api/src/main.ts`
-- [ ] Create `apps/operator-cli/src/main.ts`
-- [ ] Create `apps/orchestrator/src/main.ts`
-- [ ] Create `apps/worker/src/main.ts`
-- [ ] Create `apps/librarian/src/main.ts`
-- [ ] Point each new entrypoint at existing implementation functions first
-- [ ] Keep the old entrypoint working during the transition
-- [ ] Add temporary compatibility scripts if needed
-- [ ] Ensure librarian entrypoints accept explicit workspace ownership
+- [x] Create `apps/api/src/main.ts`
+- [x] Create `apps/operator-cli/src/main.ts`
+- [x] Create `apps/orchestrator/src/main.ts`
+- [x] Create `apps/worker/src/main.ts`
+- [x] Create `apps/librarian/src/main.ts`
+- [x] Point each new entrypoint at existing implementation functions first
+- [x] Keep the old entrypoint working during the transition
+- [x] Add temporary compatibility scripts if needed
+- [x] Ensure librarian entrypoints accept explicit workspace ownership
 
 ## Phase 3: Config Cleanup
 
@@ -120,13 +120,13 @@ Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 
 If doing this incrementally, start here:
 
-- [ ] add separate app entrypoints
-- [ ] move `serve-api` bootstrap under `apps/api`
-- [ ] move `run-orchestrator` bootstrap under `apps/orchestrator`
-- [ ] move `run-worker` bootstrap under `apps/worker`
-- [ ] move `run-librarian` bootstrap under `apps/librarian`
-- [ ] make `run-librarian` explicitly workspace-scoped
+- [x] add separate app entrypoints
+- [x] move `serve-api` bootstrap under `apps/api`
+- [x] move `run-orchestrator` bootstrap under `apps/orchestrator`
+- [x] move `run-worker` bootstrap under `apps/worker`
+- [x] move `run-librarian` bootstrap under `apps/librarian`
+- [x] make `run-librarian` explicitly workspace-scoped
 - [ ] add workspace enable/disable configuration for librarian-managed sync
-- [ ] move `capture-auth-token` and operator utilities under `apps/operator-cli`
+- [x] move `capture-auth-token` and operator utilities under `apps/operator-cli`
 
 That slice gives the architectural win early, even before deeper module moves.
