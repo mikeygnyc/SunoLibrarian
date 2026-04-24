@@ -107,7 +107,7 @@ For migration guidance, see [Orchestration Migration Notes](docs/orchestration-m
 The repo also includes a small orchestration-focused HTTP API:
 
 ```bash
-npm run dev -- serve-api --host 127.0.0.1 --port 3000
+npm run dev:api -- --host 127.0.0.1 --port 3000
 ```
 
 Open `http://127.0.0.1:3000/` for the built-in dashboard shell.
@@ -134,9 +134,9 @@ processes so each runtime stays focused on one responsibility.
 Example separate-process setup:
 
 ```bash
-npm run dev -- serve-api --host 127.0.0.1 --port 3000
-npm run dev -- run-orchestrator --control-plane postgres --postgres-url "$SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"
-npm run dev -- run-librarian --browser http://localhost:9222 --database-type postgres
+npm run dev:api -- --host 127.0.0.1 --port 3000
+npm run dev:orchestrator -- --control-plane postgres --postgres-url "$SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"
+npm run dev:librarian -- --workspace <workspaceId> --browser http://localhost:9222 --database-type postgres
 ```
 
 For code-based callers, a small typed client is available in
@@ -150,9 +150,9 @@ models.
 There is also a small CLI utility layer on top of that client:
 
 ```bash
-npm run dev -- api-health
-npm run dev -- api-submit process --payload ./process-workflow.json
-npm run dev -- api-job-status <jobId>
+npm run dev:operator -- api-health
+npm run dev:operator -- api-submit process --payload ./process-workflow.json
+npm run dev:operator -- api-job-status <jobId>
 ```
 
 Preferred workflow submission example:
