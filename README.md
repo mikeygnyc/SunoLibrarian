@@ -102,6 +102,50 @@ For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flo
 For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
 For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
 
+## HTTP API
+
+The repo also includes a small orchestration-focused HTTP API:
+
+```bash
+npm run dev -- serve-api --host 127.0.0.1 --port 3000
+```
+
+Current endpoints:
+
+- `GET /healthz`: liveness check
+- `GET /api/v1/auth/status`: whether a cached token is present
+- `POST /api/v1/auth/token`: set cached auth token with JSON body `{ "token": "..." }`
+- `DELETE /api/v1/auth/token`: clear cached auth token
+- `GET /api/v1/jobs?limit=100`: list submitted jobs
+- `POST /api/v1/workflows/:workflow`: submit a validated workflow payload without raw CLI options
+- `GET /api/v1/jobs/:jobId`: fetch job snapshot, stages, work items, and status events
+- `POST /api/v1/jobs/:jobId/cancel`: cancel a queued or running job
+- `GET /api/v1/logs?...`: query centralized logs
+
+The API currently submits distributed jobs and relies on the existing
+orchestrator/worker runtime to execute them.
+
+Preferred workflow submission example:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/v1/workflows/process \
+  -H 'content-type: application/json' \
+  -d '{
+    "input": "./downloads",
+    "output": "./library",
+    "formats": ["flac", "mp3"],
+    "bitrateKbps": 320,
+    "songConcurrency": 4,
+    "updateConcurrency": 8,
+    "embedImages": true,
+    "embedLyrics": true,
+    "metadataStore": {
+      "type": "sqlite",
+      "sqlitePath": "./data/metadata.sqlite"
+    }
+  }'
+```
+
 ### GLOBAL OPTIONS
 
 - `-V, --version`: print CLI version.

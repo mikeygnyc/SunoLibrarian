@@ -1,10 +1,9 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { SunoClient } from "./client";
+import { createCancellationMonitor, isCancellationError } from "./cancellation";
 import type { ICentralLogRepository, IClaimedWorkItem, IOrchestrationRepository, IWorkspace } from "./lib/interfaces";
-import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalControlPlaneRepository, LocalJobOrchestrator, PostgresControlPlaneRepository, type LocalWorkflowContext } from "./orchestration";
-import { CentralLogger, DatabaseLogSink } from "./logging";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, getWorkflowStagePlan, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./orchestration";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -43,8 +42,6 @@ type DownloadedTrackHook = (params: {
   clipId: string;
   outputDir: string;
 }) => void;
-
-type ControlPlaneRepository = IOrchestrationRepository & ICentralLogRepository;
 
 function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
   return typeof options.metadataFile === "string" && options.metadataFile.trim().length > 0
@@ -323,7 +320,7 @@ async function runRefreshWorkflow(options: CliOptions): Promise<void> {
 
 export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlowResult> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("download", options, getStagePlan("download"));
+    const jobId = await submitWorkflowJob("download", options);
     console.log(`Job submitted: ${jobId}`);
     return {
       outputDir: path.resolve(options.output),
@@ -350,7 +347,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
 
 export async function runProcessFlow(options: CliOptions): Promise<void> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("process", options, getStagePlan("process"));
+    const jobId = await submitWorkflowJob("process", options);
     console.log(`Job submitted: ${jobId}`);
     return;
   }
@@ -368,7 +365,7 @@ export async function runProcessFlow(options: CliOptions): Promise<void> {
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("sync", options, getStagePlan("sync"));
+    const jobId = await submitWorkflowJob("sync", options);
     console.log(`Job submitted: ${jobId}`);
     return;
   }
@@ -458,7 +455,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
 
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("download-images", options, getStagePlan("download-images"));
+    const jobId = await submitWorkflowJob("download-images", options);
     console.log(`Job submitted: ${jobId}`);
     return;
   }
@@ -476,7 +473,7 @@ export async function runDownloadImagesFlow(options: CliOptions): Promise<void> 
 
 export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("fetch-metadata", options, getStagePlan("fetch-metadata"));
+    const jobId = await submitWorkflowJob("fetch-metadata", options);
     console.log(`Job submitted: ${jobId}`);
     return;
   }
@@ -494,7 +491,7 @@ export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
 
 export async function runRefreshFlow(options: CliOptions): Promise<void> {
   if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("refresh", options, getStagePlan("refresh"));
+    const jobId = await submitWorkflowJob("refresh", options);
     console.log(`Job submitted: ${jobId}`);
     return;
   }
@@ -693,7 +690,7 @@ function createLocalJobOrchestrator(options: CliOptions = {}): LocalJobOrchestra
 async function runLocalWorkflowCommand<TResult>(
   workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
   options: CliOptions,
-  stagePlan: Array<{ type: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"; workerRole: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion" }>,
+  stagePlan: WorkflowStagePlanItem[],
   runner: (context: LocalWorkflowContext) => Promise<TResult>,
 ): Promise<{ jobId: string; result: TResult }> {
   const orchestrator = createLocalJobOrchestrator(options);
@@ -712,127 +709,6 @@ async function runLocalWorkflowCommand<TResult>(
       return result;
     },
   );
-}
-
-function serializeJobPayload(options: CliOptions): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(options, (_key, value) => {
-    if (typeof value === "function") return undefined;
-    if (value instanceof Date) return value.toISOString();
-    if (value instanceof SunoClient) return undefined;
-    return value;
-  })) as Record<string, unknown>;
-}
-
-function getStagePlan(
-  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
-): Array<{ type: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"; workerRole: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion" }> {
-  switch (workflowType) {
-    case "download":
-      return [
-        { type: "authorization", workerRole: "auth" },
-        { type: "asset-acquisition", workerRole: "asset" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-    case "process":
-      return [
-        { type: "processing", workerRole: "processing" },
-        { type: "conversion", workerRole: "conversion" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-    case "sync":
-      return [
-        { type: "authorization", workerRole: "auth" },
-        { type: "asset-acquisition", workerRole: "asset" },
-        { type: "processing", workerRole: "processing" },
-        { type: "conversion", workerRole: "conversion" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-    case "download-images":
-      return [
-        { type: "authorization", workerRole: "auth" },
-        { type: "asset-acquisition", workerRole: "asset" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-    case "fetch-metadata":
-      return [
-        { type: "authorization", workerRole: "auth" },
-        { type: "metadata-acquisition", workerRole: "metadata" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-    case "refresh":
-      return [
-        { type: "authorization", workerRole: "auth" },
-        { type: "metadata-acquisition", workerRole: "metadata" },
-        { type: "finalization", workerRole: "orchestrator" },
-      ];
-  }
-}
-
-async function submitWorkflowJob(
-  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
-  options: CliOptions,
-  stagePlan: ReturnType<typeof getStagePlan>,
-): Promise<string> {
-  const repository = createControlPlaneRepository(options);
-  try {
-    await repository.initialize();
-    const logger = createRuntimeLogger(repository);
-    const now = new Date();
-    const jobId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    await repository.createJob({
-      id: jobId,
-      workflowType,
-      status: "queued",
-      runtimeMode: "distributed",
-      payload: serializeJobPayload(options),
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    for (const [index, stagePlanItem] of stagePlan.entries()) {
-      const stageId = `${jobId}-stage-${index + 1}`;
-      const workItemId = `${jobId}-work-${index + 1}`;
-      await repository.createStage({
-        id: stageId,
-        jobId,
-        stageType: stagePlanItem.type,
-        status: "pending",
-        sequence: index + 1,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await repository.createWorkItem({
-        id: workItemId,
-        jobId,
-        stageId,
-        stageType: stagePlanItem.type,
-        status: "pending",
-        workerRole: stagePlanItem.workerRole,
-        attemptCount: 0,
-        payload: {
-          workflowType,
-          stageType: stagePlanItem.type,
-        },
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    await logger.info("workflow job submitted", {
-      jobId,
-      workflowType,
-      role: "orchestrator",
-      properties: {
-        runtimeMode: "distributed",
-        stageCount: stagePlan.length,
-        controlPlaneBackend: resolveControlPlaneBackend(options),
-      },
-    });
-
-    return jobId;
-  } finally {
-    await repository.close();
-  }
 }
 
 async function processWorkerRole(
@@ -901,13 +777,95 @@ async function executeClaimedWorkItem(
 ): Promise<void> {
   const leaseManager = new LeaseManager(repository, DEFAULT_RUNTIME_CONFIG);
   const logger = createRuntimeLogger(repository);
-  const hasCapacity = await leaseManager.hasAvailableCapacity(claimed.stage.stageType);
-  if (!hasCapacity) {
-    await repository.updateStageStatus(claimed.stage.id, "blocked");
-    await repository.updateWorkItemStatus(claimed.workItem.id, "blocked", {
-      leaseOwnerId: undefined,
+  const cancellationMessage = claimed.job.errorMessage || "Job cancelled by operator request";
+  const cancellationAssertion = createJobCancellationAssertion(claimed.job.id, claimed.job.payload as CliOptions);
+  const cancellationMonitor = createCancellationMonitor(cancellationAssertion);
+  let lease: Awaited<ReturnType<LeaseManager["acquireStageLease"]>> | null = null;
+  try {
+    const currentJob = await repository.getJob(claimed.job.id);
+    if (currentJob?.status === "cancelled") {
+      await repository.updateStageStatus(claimed.stage.id, "cancelled", { completedAt: new Date(), errorMessage: cancellationMessage });
+      await repository.updateWorkItemStatus(claimed.workItem.id, "cancelled", { completedAt: new Date(), errorMessage: cancellationMessage });
+      await logger.info("skipping claimed work item because job is cancelled", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+        },
+      });
+      return;
+    }
+
+    const hasCapacity = await leaseManager.hasAvailableCapacity(claimed.stage.stageType);
+    if (!hasCapacity) {
+      await repository.updateStageStatus(claimed.stage.id, "blocked");
+      await repository.updateWorkItemStatus(claimed.workItem.id, "blocked", {
+        leaseOwnerId: undefined,
+      });
+      await logger.warn("work item blocked waiting for capacity", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+        },
+      });
+      return;
+    }
+
+    lease = await leaseManager.acquireStageLease({
+      stageType: claimed.stage.stageType,
+      workerInstanceId,
+      workerRole: claimed.workItem.workerRole,
+      jobId: claimed.job.id,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
     });
-    await logger.warn("work item blocked waiting for capacity", {
+    await logger.info("lease acquired for work item", {
+      workerInstanceId,
+      role: claimed.workItem.workerRole,
+      jobId: claimed.job.id,
+      workflowType: claimed.job.workflowType,
+      stageId: claimed.stage.id,
+      workItemId: claimed.workItem.id,
+      properties: {
+        stageType: claimed.stage.stageType,
+        leaseId: lease?.id,
+        resourceKey: lease?.resourceKey,
+      },
+    });
+
+    const jobBeforeStart = await repository.getJob(claimed.job.id);
+    if (jobBeforeStart?.status === "cancelled") {
+      await repository.updateStageStatus(claimed.stage.id, "cancelled", { completedAt: new Date(), errorMessage: jobBeforeStart.errorMessage ?? cancellationMessage });
+      await repository.updateWorkItemStatus(claimed.workItem.id, "cancelled", { completedAt: new Date(), errorMessage: jobBeforeStart.errorMessage ?? cancellationMessage });
+      await leaseManager.releaseStageLease(lease);
+      await logger.info("released claimed work item because job was cancelled before start", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+          leaseId: lease?.id,
+        },
+      });
+      return;
+    }
+
+    await repository.updateJobStatus(claimed.job.id, "running", { startedAt: claimed.job.startedAt ?? new Date() });
+    await repository.updateStageStatus(claimed.stage.id, "running", { startedAt: new Date() });
+    await repository.updateWorkItemStatus(claimed.workItem.id, "running", { startedAt: new Date() });
+    await logger.info("work item execution started", {
       workerInstanceId,
       role: claimed.workItem.workerRole,
       jobId: claimed.job.id,
@@ -918,49 +876,38 @@ async function executeClaimedWorkItem(
         stageType: claimed.stage.stageType,
       },
     });
-    return;
-  }
 
-  const lease = await leaseManager.acquireStageLease({
-    stageType: claimed.stage.stageType,
-    workerInstanceId,
-    workerRole: claimed.workItem.workerRole,
-    jobId: claimed.job.id,
-    stageId: claimed.stage.id,
-    workItemId: claimed.workItem.id,
-  });
-  await logger.info("lease acquired for work item", {
-    workerInstanceId,
-    role: claimed.workItem.workerRole,
-    jobId: claimed.job.id,
-    workflowType: claimed.job.workflowType,
-    stageId: claimed.stage.id,
-    workItemId: claimed.workItem.id,
-    properties: {
-      stageType: claimed.stage.stageType,
-      leaseId: lease?.id,
-      resourceKey: lease?.resourceKey,
-    },
-  });
-
-  await repository.updateJobStatus(claimed.job.id, "running", { startedAt: claimed.job.startedAt ?? new Date() });
-  await repository.updateStageStatus(claimed.stage.id, "running", { startedAt: new Date() });
-  await repository.updateWorkItemStatus(claimed.workItem.id, "running", { startedAt: new Date() });
-  await logger.info("work item execution started", {
-    workerInstanceId,
-    role: claimed.workItem.workerRole,
-    jobId: claimed.job.id,
-    workflowType: claimed.job.workflowType,
-    stageId: claimed.stage.id,
-    workItemId: claimed.workItem.id,
-    properties: {
-      stageType: claimed.stage.stageType,
-    },
-  });
-
-  try {
-    const workflowOptions = claimed.job.payload as CliOptions;
+    const workflowOptions = {
+      ...(claimed.job.payload as CliOptions),
+      __assertNotCancelled: cancellationAssertion,
+      __abortSignal: cancellationMonitor.signal,
+    } as CliOptions;
     await executeStageHandler(claimed.job.workflowType, claimed.stage.stageType, workflowOptions);
+    const jobAfterExecution = await repository.getJob(claimed.job.id);
+    if (jobAfterExecution?.status === "cancelled") {
+      await repository.updateStageStatus(claimed.stage.id, "cancelled", {
+        completedAt: new Date(),
+        errorMessage: jobAfterExecution.errorMessage ?? cancellationMessage,
+      });
+      await repository.updateWorkItemStatus(claimed.workItem.id, "cancelled", {
+        completedAt: new Date(),
+        errorMessage: jobAfterExecution.errorMessage ?? cancellationMessage,
+      });
+      await leaseManager.releaseStageLease(lease);
+      await logger.info("work item observed cancellation after execution", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+          leaseId: lease?.id,
+        },
+      });
+      return;
+    }
     await repository.updateStageStatus(claimed.stage.id, "succeeded", { completedAt: new Date() });
     await repository.updateWorkItemStatus(claimed.workItem.id, "succeeded", { completedAt: new Date() });
     await leaseManager.releaseStageLease(lease);
@@ -989,6 +936,54 @@ async function executeClaimedWorkItem(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (isCancellationError(error)) {
+      await repository.cancelJob(claimed.job.id, {
+        completedAt: new Date(),
+        errorCode: "job_cancelled",
+        errorMessage: message,
+      });
+      await repository.updateStageStatus(claimed.stage.id, "cancelled", { completedAt: new Date(), errorMessage: message });
+      await repository.updateWorkItemStatus(claimed.workItem.id, "cancelled", { completedAt: new Date(), errorMessage: message });
+      await leaseManager.releaseStageLease(lease);
+      await logger.info("work item cancelled cooperatively", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+          leaseId: lease?.id,
+        },
+      });
+      return;
+    }
+    const currentJobAfterError = await repository.getJob(claimed.job.id);
+    if (currentJobAfterError?.status === "cancelled") {
+      await repository.updateStageStatus(claimed.stage.id, "cancelled", {
+        completedAt: new Date(),
+        errorMessage: currentJobAfterError.errorMessage ?? cancellationMessage,
+      });
+      await repository.updateWorkItemStatus(claimed.workItem.id, "cancelled", {
+        completedAt: new Date(),
+        errorMessage: currentJobAfterError.errorMessage ?? cancellationMessage,
+      });
+      await leaseManager.releaseStageLease(lease);
+      await logger.info("work item error ignored because job was cancelled", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+          leaseId: lease?.id,
+        },
+      });
+      return;
+    }
     await repository.updateStageStatus(claimed.stage.id, "failed", { completedAt: new Date(), errorMessage: message });
     await repository.updateWorkItemStatus(claimed.workItem.id, "failed", { completedAt: new Date(), errorMessage: message });
     await repository.updateJobStatus(claimed.job.id, "failed", { completedAt: new Date(), errorMessage: message });
@@ -1008,6 +1003,8 @@ async function executeClaimedWorkItem(
       },
     });
     throw error;
+  } finally {
+    cancellationMonitor.stop();
   }
 }
 
@@ -1086,45 +1083,6 @@ async function executeStageHandler(
       }
       return;
   }
-}
-
-function createRuntimeLogger(repository: ControlPlaneRepository): CentralLogger {
-  return new CentralLogger({
-    minimumLevel: "debug",
-    sinks: [new DatabaseLogSink(repository)],
-  });
-}
-
-function createControlPlaneRepository(options: CliOptions = {}): ControlPlaneRepository {
-  if (resolveControlPlaneBackend(options) === "postgres") {
-    return new PostgresControlPlaneRepository({
-      postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
-    });
-  }
-  return new LocalControlPlaneRepository();
-}
-
-function resolveControlPlaneBackend(options: CliOptions = {}): "local" | "postgres" {
-  if (typeof options.controlPlane === "string" && options.controlPlane.trim() === "postgres") {
-    return "postgres";
-  }
-  if (process.env.SUNO_EXPORT_CONTROL_PLANE_BACKEND?.trim() === "postgres") {
-    return "postgres";
-  }
-  return "local";
-}
-
-async function getJobSnapshot(repository: IOrchestrationRepository, jobId: string): Promise<{
-  job?: Awaited<ReturnType<IOrchestrationRepository["getJob"]>>;
-  stages: Awaited<ReturnType<IOrchestrationRepository["listStages"]>>;
-  workItems: Awaited<ReturnType<IOrchestrationRepository["listWorkItems"]>>;
-  statusEvents: Awaited<ReturnType<IOrchestrationRepository["listStatusEvents"]>>;
-}> {
-  const job = await repository.getJob(jobId);
-  const stages = await repository.listStages(jobId);
-  const workItems = await repository.listWorkItems(jobId);
-  const statusEvents = await repository.listStatusEvents(jobId);
-  return { job, stages, workItems, statusEvents };
 }
 
 function parseOptionalDate(value: unknown, label: string): Date | undefined {

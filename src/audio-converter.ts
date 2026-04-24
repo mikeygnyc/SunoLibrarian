@@ -1,11 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { ISongData, IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import * as logger from "./converter-logger";
-
-const execFileAsync = promisify(execFile);
+import { runCommand } from "./process-utils";
 
 export class AudioConverter {
   constructor(private config: IProcessorConfig) {}
@@ -48,7 +45,9 @@ export class AudioConverter {
     logger.log(`    ffmpeg command: ${JSON.stringify(args)}`);
 
     const convStart = Date.now();
-    await execFileAsync("ffmpeg", args);
+    await runCommand("ffmpeg", args, {
+      signal: this.config.abortSignal,
+    });
     const convElapsed = ((Date.now() - convStart) / 1000).toFixed(2);
     logger.log(`    conversion finished in ${convElapsed}s`);
   }

@@ -20,6 +20,7 @@ export type AuthDeps<TClient extends AuthClient> = {
     browserEndpoint?: string,
     browserUserDataDir?: string,
     browserProfileDirectory?: string,
+    abortSignal?: AbortSignal,
   ) => TClient;
   extractTokenFromBrowser: typeof extractTokenFromBrowser;
   log: Pick<Console, "error" | "log" | "warn">;
@@ -57,6 +58,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
         browserEndpoint,
         browserUserDataDir,
         browserProfileDirectory,
+        options.__abortSignal,
       );
 
       try {
@@ -82,6 +84,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     token = await deps.extractTokenFromBrowser(browserEndpoint, {
       userDataDir: browserUserDataDir,
       profileDirectory: browserProfileDirectory,
+      abortSignal: options.__abortSignal,
     });
     deps.log.log("Token extracted successfully!");
   }
@@ -92,6 +95,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     browserEndpoint,
     browserUserDataDir,
     browserProfileDirectory,
+    options.__abortSignal,
   );
 }
 
@@ -100,6 +104,7 @@ function createClient(
   browserEndpoint?: string,
   browserUserDataDir?: string,
   browserProfileDirectory?: string,
+  abortSignal?: AbortSignal,
 ): SunoClient {
   return new SunoClient(
     token,
@@ -107,6 +112,7 @@ function createClient(
     browserEndpoint,
     browserUserDataDir,
     browserProfileDirectory,
+    abortSignal,
   );
 }
 
