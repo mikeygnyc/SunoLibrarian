@@ -67,16 +67,20 @@ the core boundary explicit.
 
 ## Phase 6: Service Extraction
 
-- [ ] Move auth service into core
-- [ ] Move metadata acquisition service into core
-- [ ] Move asset acquisition service into core
-- [ ] Move processing planner service into core
-- [ ] Move conversion service into core
-- [ ] Move librarian service into core or keep a thin app wrapper around a core
+- [x] Move auth service into core
+- [x] Move metadata acquisition service into core
+- [x] Move asset acquisition service into core
+- [x] Move processing planner service into core
+- [x] Move conversion service into core
+- [x] Move librarian service into core or keep a thin app wrapper around a core
   sync service
 - [ ] Refactor librarian logic away from rotating across all workspaces
 - [ ] Support one-workspace-per-librarian execution
 - [ ] Skip disabled workspaces entirely during background sync
+
+This phase currently uses a shared `src/core/services` facade over the existing
+service implementation files so app-facing code can depend on a core service
+surface before any deeper file moves.
 
 ## Phase 7: Operator CLI Cleanup
 

@@ -1,5 +1,5 @@
 import type { WorkerRole } from "./core/contracts";
-import type { CliOptions } from "./services";
+import type { CliOptions } from "./core/services";
 
 type RuntimeWorkerRole = Extract<WorkerRole, "auth" | "metadata" | "asset" | "processing" | "conversion">;
 type ControlPlaneBackend = "local" | "postgres";

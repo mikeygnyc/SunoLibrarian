@@ -12,7 +12,7 @@ import type {
 import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
 import { LocalControlPlaneRepository } from "./local-control-plane";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";
-import type { CliOptions } from "../services";
+import type { CliOptions } from "../core/services";
 
 const RECENT_AUTH_RESTART_WINDOW_MS = 60 * 60 * 1000;
 const RECENT_AUTH_RESTART_LIMIT = 100;
