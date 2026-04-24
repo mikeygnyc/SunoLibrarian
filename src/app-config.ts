@@ -37,6 +37,31 @@ export type OperatorCliConfig = CliOptions & {
   apiUrl?: string;
 };
 
+export type WorkflowSubmissionOptions = CliOptions & BrowserAuthConfig & {
+  workspace?: string;
+  format?: string;
+  input?: string;
+  output?: string;
+  library?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  flushCache?: boolean;
+  processExistingMetadata?: boolean;
+  processFormats?: string;
+  processBitrate?: string;
+  images?: boolean;
+  lyrics?: boolean;
+  exitOnError?: boolean;
+  reconvertBefore?: string;
+  reconvertAfter?: string;
+  reconvertMissing?: boolean;
+  processClipIds?: string[];
+  list?: string;
+  fetchImageList?: string;
+  fetchMissing?: boolean;
+  ids?: string;
+};
+
 export type OrchestratorConfig = CliOptions & ControlPlaneConfig & {
   once?: boolean;
   pollInterval?: string | number;
@@ -51,6 +76,8 @@ export type WorkerConfig = CliOptions & ControlPlaneConfig & {
 export type LibrarianConfig = CliOptions & BrowserAuthConfig & MetadataStoreConfigInput & {
   postgresUrl?: string;
   workspace: string;
+  enabledWorkspaces?: string[];
+  disabledWorkspaces?: string[];
   librarianInterval?: string | number;
   once?: boolean;
 };
@@ -113,6 +140,8 @@ export function normalizeLibrarianConfig(options: Record<string, unknown>): Libr
     ignoreCachedToken: optionalBoolean(options.ignoreCachedToken),
     browserProfile: optionalString(options.browserProfile),
     profileDirectory: optionalString(options.profileDirectory),
+    enabledWorkspaces: parseWorkspaceListOption(options.enabledWorkspaces),
+    disabledWorkspaces: parseWorkspaceListOption(options.disabledWorkspaces),
     librarianInterval: optionalStringOrNumber(options.librarianInterval),
     once: optionalBoolean(options.once),
     databaseType: optionalString(options.databaseType),
@@ -158,4 +187,21 @@ function optionalWorkerRole(value: unknown): RuntimeWorkerRole | undefined {
     default:
       return undefined;
   }
+}
+
+function parseWorkspaceListOption(value: unknown): string[] | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const workspaces = Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  );
+
+  return workspaces.length > 0 ? workspaces : undefined;
 }

@@ -4,7 +4,7 @@ import { URL } from "url";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 import { renderDashboardHtml } from "./http-dashboard";
 import { HttpApiServerLogger } from "./http-api-server-logger";
-import type { ApiServerConfig } from "./app-config";
+import type { ApiServerConfig, WorkflowSubmissionOptions } from "./app-config";
 import type {
   IHttpApiAuthStatusResponse,
   IHttpApiCancelJobRequest,
@@ -183,7 +183,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
         }
 
         const body = await readJsonBody<Record<string, unknown>>(req);
-        const validatedOptions = validateWorkflowSubmission(workflowType, body, {
+        const validatedOptions: WorkflowSubmissionOptions = validateWorkflowSubmission(workflowType, body, {
           downloadRoot: String(workflowDefaults.output),
           libraryRoot: String(workflowDefaults.library),
         });

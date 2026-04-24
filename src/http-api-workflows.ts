@@ -7,7 +7,7 @@ import type {
   IHttpApiSyncWorkflowRequest,
   WorkflowType,
 } from "./lib/interfaces";
-import type { CliOptions } from "./services";
+import type { WorkflowSubmissionOptions } from "./app-config";
 
 type WorkflowRequestMap = {
   "download": IHttpApiDownloadWorkflowRequest;
@@ -27,7 +27,7 @@ export function validateWorkflowSubmission(
   workflowType: WorkflowType,
   payload: unknown,
   serverDefaults: IHttpApiWorkflowServerDefaults,
-): CliOptions {
+): WorkflowSubmissionOptions {
   if (!isPlainObject(payload)) {
     throw createValidationError("Workflow request body must be an object");
   }
@@ -53,7 +53,7 @@ export function validateWorkflowSubmission(
 function mapDownloadRequest(
   request: IHttpApiDownloadWorkflowRequest,
   serverDefaults: IHttpApiWorkflowServerDefaults,
-): CliOptions {
+): WorkflowSubmissionOptions {
   return {
     ...mapCommonRequest(request),
     workspace: optionalString(request.workspaceId, "workspaceId"),
@@ -68,7 +68,7 @@ function mapDownloadRequest(
 function mapProcessRequest(
   request: IHttpApiProcessWorkflowRequest,
   serverDefaults: IHttpApiWorkflowServerDefaults,
-): CliOptions {
+): WorkflowSubmissionOptions {
   return {
     ...mapProcessingCommonRequest(request),
     input: serverDefaults.downloadRoot,
@@ -79,7 +79,7 @@ function mapProcessRequest(
 function mapSyncRequest(
   request: IHttpApiSyncWorkflowRequest,
   serverDefaults: IHttpApiWorkflowServerDefaults,
-): CliOptions {
+): WorkflowSubmissionOptions {
   return {
     ...mapCommonRequest(request),
     workspace: optionalString(request.workspaceId, "workspaceId"),
@@ -105,7 +105,7 @@ function mapSyncRequest(
 function mapDownloadImagesRequest(
   request: IHttpApiDownloadImagesWorkflowRequest,
   serverDefaults: IHttpApiWorkflowServerDefaults,
-): CliOptions {
+): WorkflowSubmissionOptions {
   return {
     ...mapCommonRequest(request),
     output: serverDefaults.downloadRoot,
@@ -115,7 +115,7 @@ function mapDownloadImagesRequest(
   };
 }
 
-function mapFetchMetadataRequest(request: IHttpApiFetchMetadataWorkflowRequest): CliOptions {
+function mapFetchMetadataRequest(request: IHttpApiFetchMetadataWorkflowRequest): WorkflowSubmissionOptions {
   return {
     ...mapCommonRequest(request),
     ids: optionalCsv(request.trackIds, "trackIds"),
@@ -125,13 +125,13 @@ function mapFetchMetadataRequest(request: IHttpApiFetchMetadataWorkflowRequest):
   };
 }
 
-function mapRefreshRequest(request: IHttpApiRefreshWorkflowRequest): CliOptions {
+function mapRefreshRequest(request: IHttpApiRefreshWorkflowRequest): WorkflowSubmissionOptions {
   return mapCommonRequest(request);
 }
 
 function mapProcessingCommonRequest(
   request: IHttpApiProcessWorkflowRequest | IHttpApiSyncWorkflowRequest,
-): CliOptions {
+): WorkflowSubmissionOptions {
   return {
     ...mapCommonRequest(request),
     processFormats: optionalCsv(request.formats, "formats"),
@@ -148,7 +148,7 @@ function mapProcessingCommonRequest(
 
 function mapCommonRequest(request: {
   auth?: unknown;
-}): CliOptions {
+}): WorkflowSubmissionOptions {
   const auth = optionalObject(request.auth, "auth");
 
   return {

@@ -39,8 +39,8 @@ Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 - [x] Introduce `WorkerConfig`
 - [x] Introduce `LibrarianConfig`
 - [x] Reduce direct reliance on broad `CliOptions` in app bootstraps
-- [ ] Separate workflow submission payloads from bootstrap/runtime config
-- [ ] Add workspace enable/disable config for librarian-managed traffic
+- [x] Separate workflow submission payloads from bootstrap/runtime config
+- [x] Add workspace enable/disable config for librarian-managed traffic
 
 ## Phase 4: Shared Contracts
 
@@ -126,7 +126,7 @@ If doing this incrementally, start here:
 - [x] move `run-worker` bootstrap under `apps/worker`
 - [x] move `run-librarian` bootstrap under `apps/librarian`
 - [x] make `run-librarian` explicitly workspace-scoped
-- [ ] add workspace enable/disable configuration for librarian-managed sync
+- [x] add workspace enable/disable configuration for librarian-managed sync
 - [x] move `capture-auth-token` and operator utilities under `apps/operator-cli`
 
 That slice gives the architectural win early, even before deeper module moves.

@@ -125,6 +125,8 @@ export function createLibrarianProgram(): Command {
       .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
       .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
       .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
+      .option("--enabled-workspaces <ids>", "Comma-separated workspace allowlist for librarian traffic")
+      .option("--disabled-workspaces <ids>", "Comma-separated workspace denylist for librarian traffic")
       .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
       .option("--once", "Sync the configured workspace and exit"),
   );
@@ -521,6 +523,8 @@ function registerLibrarianCommand(program: Command): void {
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
+    .option("--enabled-workspaces <ids>", "Comma-separated workspace allowlist for librarian traffic")
+    .option("--disabled-workspaces <ids>", "Comma-separated workspace denylist for librarian traffic")
     .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
     .option("--once", "Sync the configured workspace and exit"))
     .action(withCliError(async (options) => runLibrarianFlow(normalizeLibrarianConfig(options))));
