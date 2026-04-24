@@ -84,7 +84,8 @@ Suggested responsibilities:
   - can later split into separate worker apps if useful
 
 - `apps/librarian`
-  - background workspace-by-workspace metadata sync only
+  - background metadata sync for one workspace per process
+  - no multi-workspace ownership inside a single librarian process
 
 - `packages/core`
   - orchestration repositories and helpers
@@ -102,8 +103,39 @@ These rules should become explicit and enforced during the refactor:
 - apps may import `packages/core`
 - HTTP handlers do not start long-running runtime loops
 - worker/orchestrator/librarian processes each own one runtime responsibility
+- each librarian process owns at most one workspace
 - workflow request contracts are distinct from process/bootstrap config
 - operator-facing CLI commands are distinct from service processes
+
+## Librarian Model
+
+The target librarian model should be workspace-scoped rather than one process
+rotating across all workspaces.
+
+That means:
+
+- one librarian process should be configured for one workspace
+- multiple workspaces should be handled by multiple librarian processes
+- the system should support disabling specific workspaces entirely to reduce
+  unnecessary traffic
+
+This is a better fit for operational clarity and deployment:
+
+- each librarian has explicit ownership boundaries
+- a busy or noisy workspace does not interfere with others
+- low-value workspaces can be disabled cleanly
+- k8s packaging becomes straightforward because workspace ownership is already
+  process-scoped
+
+Recommended rules:
+
+- a workspace must be explicitly selected for each librarian process
+- disabled workspaces must not be polled or refreshed by background sync
+- workspace enable/disable state should live in server/operator-controlled
+  config rather than workflow request payloads
+
+The current rotating-across-workspaces librarian behavior should therefore be
+treated as transitional rather than target architecture.
 
 ## Refactor Strategy
 
@@ -172,6 +204,14 @@ Introduce narrower config objects such as:
 
 This should happen before or alongside deeper module extraction so the app
 boundaries become visible in types, not just folders.
+
+For the librarian, the config should be workspace-scoped and include workspace
+traffic controls. For example:
+
+- `workspaceId`
+- `enabledWorkspaces`
+- `disabledWorkspaces`
+- sync interval settings
 
 ### Phase 4: Extract Shared Contracts and Core Modules
 
@@ -271,6 +311,7 @@ The first milestone is complete when:
 - orchestrator has its own app entrypoint
 - worker has its own app entrypoint
 - librarian has its own app entrypoint
+- librarian processes are workspace-scoped rather than all-workspace rotators
 - operator utilities are no longer bootstrapped from the same app entrypoint as
   service processes
 - no app imports another app
@@ -284,5 +325,7 @@ Once the split is in place, the next likely improvements are:
 - app-specific config validation
 - thinner app bootstraps with explicit DI/dependencies
 - cleaner container images and k8s deployment definitions per app
+- workspace enable/disable policy for librarians to reduce unnecessary sync
+  traffic
 - possible later split of `worker` into role-specific apps if that becomes
   operationally useful
