@@ -1,5 +1,4 @@
 import { assertNotCancelled } from "../cancellation";
-import type { IWorkspace } from "../lib/interfaces";
 import type { SunoClient } from "../client";
 import { AuthService } from "./auth-service";
 import type { CliOptions } from "./auth-service";
@@ -8,8 +7,6 @@ import { MetadataAcquisitionService, filterWorkspaces } from "./metadata-acquisi
 const DEFAULT_LIBRARIAN_INTERVAL_MS = 5 * 60 * 1000;
 
 export class LibrarianService {
-  private workspaceCursor = 0;
-
   constructor(
     private readonly authService: AuthService = new AuthService(),
     private readonly metadataService: MetadataAcquisitionService = new MetadataAcquisitionService(),
@@ -45,14 +42,15 @@ export class LibrarianService {
     const resolvedClient = client ?? await this.authService.getAuthenticatedClient(options);
     const workspaces = await resolvedClient.getWorkspaces();
     await this.metadataService.saveWorkspacesToDatabase(options, workspaces);
+    const workspaceId = resolvePinnedWorkspaceId(options);
 
-    const targetWorkspaces = filterWorkspaces(workspaces, options.workspace);
+    const targetWorkspaces = filterWorkspaces(workspaces, workspaceId);
     if (targetWorkspaces.length === 0) {
-      console.log("[librarian] No matching workspaces found.");
+      console.log(`[librarian] No matching workspace found for ${workspaceId}.`);
       return false;
     }
 
-    const workspace = this.selectWorkspace(targetWorkspaces, options.workspace);
+    const workspace = targetWorkspaces[0];
     console.log(`[librarian] Syncing workspace ${workspace.name} (${workspace.id})`);
     const result = await this.metadataService.syncWorkspaceMetadata(options, resolvedClient, workspace);
     console.log(
@@ -60,16 +58,13 @@ export class LibrarianService {
     );
     return true;
   }
+}
 
-  private selectWorkspace(workspaces: IWorkspace[], pinnedWorkspaceId: string | undefined): IWorkspace {
-    if (pinnedWorkspaceId) {
-      return workspaces[0];
-    }
-
-    const workspace = workspaces[this.workspaceCursor % workspaces.length];
-    this.workspaceCursor = (this.workspaceCursor + 1) % workspaces.length;
-    return workspace;
+function resolvePinnedWorkspaceId(options: CliOptions): string {
+  if (typeof options.workspace === "string" && options.workspace.trim().length > 0) {
+    return options.workspace.trim();
   }
+  throw new Error("run-librarian requires --workspace so each librarian process owns exactly one workspace");
 }
 
 function parsePositiveInteger(value: unknown, fallback: number, label: string): number {
