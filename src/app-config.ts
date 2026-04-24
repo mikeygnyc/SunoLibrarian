@@ -1,4 +1,4 @@
-import type { WorkerRole } from "./lib/interfaces";
+import type { WorkerRole } from "./core/contracts";
 import type { CliOptions } from "./services";
 
 type RuntimeWorkerRole = Extract<WorkerRole, "auth" | "metadata" | "asset" | "processing" | "conversion">;
