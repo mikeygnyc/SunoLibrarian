@@ -113,9 +113,9 @@ remain local to the API app boundary.
 
 - [x] Add per-app build scripts
 - [x] Add per-app dev scripts
-- [ ] Update VS Code launch configs to target new app entrypoints
+- [x] Update VS Code launch configs to target new app entrypoints
 - [x] Update README command examples
-- [ ] Update docs to describe the multi-process app model
+- [x] Update docs to describe the multi-process app model
 
 ## Phase 10: Migration Cleanup
 

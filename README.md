@@ -101,6 +101,7 @@ When using default output paths, required directories are created automatically 
 For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flow.md).
 For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
 For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
+For the split app entrypoints and multi-process runtime layout, see [App Runtime Model](docs/app-runtime-model.md).
 
 ## HTTP API
 
