@@ -1,0 +1,373 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "-f",
+        "wav"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - List",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "list",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Workspaces",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "workspaces",
+        "--token",
+        "YOUR_TOKEN_HERE"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Sync",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sync",
+        "-o",
+        "/path/to/output/directory/",
+        "--metadata-file",
+        "/path/to/songs_metadata.json",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "--database-type",
+        "postgres"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Import JSON",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "import-metadata-json",
+        "--input",
+        "/path/to/songs_metadata.json",
+        "--database-type",
+        "postgres"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug CLI - Image List",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download-images",
+        "--list",
+        "${workspaceFolder}/image_list.json",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Process",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "process",
+        "-i",
+        "${workspaceFolder}/downloads",
+        "-o",
+        "${workspaceFolder}/library",
+        "--process-formats",
+        "flac,mp3,alac,wav",
+        "--exit-on-error",
+        "--reconvert-missing"
+      ],
+      "console": "internalConsole",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Capture Auth Token",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/index.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "capture-auth-token",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2"
+      ],
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Dashboard",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/api/main.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "3000",
+        "--control-plane",
+        "postgres",
+        "--database-type",
+        "postgres",
+        "--output",
+        "${workspaceFolder}/downloads",
+        "--library",
+        "${workspaceFolder}/library",
+        "--log-file",
+        "${workspaceFolder}/data/http-api.log"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Orchestrator",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/orchestrator/main.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Librarian",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/librarian/main.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--workspace",
+        "YOUR_WORKSPACE_ID_HERE",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "--database-type",
+        "postgres",
+        "--librarian-interval",
+        "300000"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Auth",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "auth",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ]
+}
