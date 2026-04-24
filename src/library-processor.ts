@@ -27,7 +27,6 @@ export class Processor {
   // the background using a timer so they don't block processing.
   private retryQueue: Set<string> = new Set();
   private retryTimer: NodeJS.Timeout | null = null;
-  private runTimestamp: string | null = null;
   private inferredProcessClipIds: Set<string> | null | undefined;
 
   // When a 403 is encountered during image download, all image downloads pause
@@ -112,9 +111,6 @@ export class Processor {
     // metadata loader is now async
     this.songs = await this.loadMetadata();
     const processSongs = this.getProcessSongs(this.songs);
-    // create a single run timestamp so incremental log writes use the same
-    // filename for this run instead of creating a new file on every song.
-    this.runTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
     if (!this.config.processClipIds?.length) {
       const inferredClipIds = this.getProcessTargetClipIds();
       if (inferredClipIds) {
@@ -262,11 +258,8 @@ export class Processor {
     await this.downloadImageIfNeeded(song, true);
     logStep("downloadImageIfNeeded");
 
-    // Check if copyWav will do work and if any formats will be converted
+    // Check if copyWav will do work.
     const willCopyWav = await this.wouldCopyWav(song, wavPath);
-    const willConvertAnyFormat = this.config.formats
-      .filter(format => format !== "wav")
-      .some(format => this.shouldConvert(song, format));
 
     // Track actual completion
     let didCopyWav = false;
@@ -512,30 +505,6 @@ export class Processor {
     // more expensive comparisons could be added here if needed
   }
 
-  private async embedAllFormats(song: ISongData): Promise<void> {
-    const tasks = this.config.formats
-      .filter(format => format !== "wav")
-      .map(async format => {
-        const ext = format === "alac" ? "m4a" : format;
-        const filePath = path.join(this.config.outputRoot, format, `${song.clipId}.${ext}`);
-        
-        if (await this.fileExists(filePath)) {
-          const startTime = Date.now();
-          logger.log(`  Embedding metadata in ${format.toUpperCase()}`);
-          try {
-            await this.metadataProc.embedMetadata(song, ext, filePath);
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            logger.log(`  ${format.toUpperCase()} embedded in ${elapsed}s`);
-          } catch (err) {
-            logger.error(`  Failed to embed metadata: ${err}`);
-            if (this.config.exitOnError) throw err;
-          }
-        }
-      });
-    
-    await Promise.all(tasks);
-  }
-
   private async updateExistingFiles(songs: ISongData[]): Promise<void> {
     await assertNotCancelled(this.config);
     logger.log("\n=== Updating all files with metadata ===");
@@ -724,39 +693,6 @@ export class Processor {
     }
   }
 
-  private async cleanupOldBackups(baseFilePath: string): Promise<void> {
-    // Find all backup files matching the pattern baseFilePath.*.bak
-    const dir = path.dirname(baseFilePath);
-    const filename = path.basename(baseFilePath);
-    const backupPattern = new RegExp(`^${filename}\.\\d+\.bak$`);
-
-    try {
-      const files = await fs.promises.readdir(dir);
-      const backups = files
-        .filter(f => backupPattern.test(f))
-        .map(f => ({
-          name: f,
-          path: path.join(dir, f),
-          timestamp: parseInt(f.match(/\\d+/)?.[0] || "0", 10),
-        }))
-        .sort((a, b) => b.timestamp - a.timestamp); // newest first
-
-      // delete all but the 3 most recent
-      if (backups.length > 3) {
-        for (const backup of backups.slice(3)) {
-          try {
-            await fs.promises.unlink(backup.path);
-            logger.log(`  deleted old backup: ${backup.name}`);
-          } catch (err: any) {
-            logger.warn(`  failed to delete backup ${backup.name}: ${err.message}`);
-          }
-        }
-      }
-    } catch (err: any) {
-      logger.warn(`failed to clean up backups: ${err.message}`);
-    }
-  }
-
   private async safeUnlink(filePath: string): Promise<boolean> {
     // attempt to remove a file, retrying a few times when EBUSY is encountered
     const attempts = 3;
@@ -834,13 +770,6 @@ export class Processor {
       logger.warn(`persistState error: ${err}`);
     });
     return this.persistenceChain;
-  }
-
-  private dateReviver(key: string, value: any): any {
-    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
-      return new Date(value);
-    }
-    return value;
   }
 
   private async ensureDirectories(): Promise<void> {

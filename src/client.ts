@@ -1,7 +1,6 @@
 import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import type { Page } from 'puppeteer';
 import type { IRateLimitConfig, ITrack, IWorkspace, ITrackMetadata } from './lib/interfaces';
 import { CancellationError } from './cancellation';
@@ -1224,8 +1223,8 @@ export class SunoClient {
   async downloadFromUrl(
     downloadUrl: string,
     filename: string,
-    clipId: string,
-    format: string,
+    _clipId: string,
+    _format: string,
     trackMetadata: ITrackMetadata | null = null,
     metadata: any = {}
   ): Promise<void> {

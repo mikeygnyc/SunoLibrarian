@@ -45,7 +45,7 @@ export class LocalJobOrchestrator {
 
   constructor(
     private readonly repository: IOrchestrationRepository & ICentralLogRepository,
-    private readonly runtimeConfig: IRuntimeConfig = DEFAULT_RUNTIME_CONFIG,
+    runtimeConfig: IRuntimeConfig = DEFAULT_RUNTIME_CONFIG,
   ) {
     this.logger = new CentralLogger({
       minimumLevel: "info",
