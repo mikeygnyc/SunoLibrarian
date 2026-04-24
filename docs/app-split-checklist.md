@@ -33,12 +33,12 @@ Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 
 ## Phase 3: Config Cleanup
 
-- [ ] Introduce `ApiServerConfig`
-- [ ] Introduce `OperatorCliConfig`
-- [ ] Introduce `OrchestratorConfig`
-- [ ] Introduce `WorkerConfig`
-- [ ] Introduce `LibrarianConfig`
-- [ ] Reduce direct reliance on broad `CliOptions` in app bootstraps
+- [x] Introduce `ApiServerConfig`
+- [x] Introduce `OperatorCliConfig`
+- [x] Introduce `OrchestratorConfig`
+- [x] Introduce `WorkerConfig`
+- [x] Introduce `LibrarianConfig`
+- [x] Reduce direct reliance on broad `CliOptions` in app bootstraps
 - [ ] Separate workflow submission payloads from bootstrap/runtime config
 - [ ] Add workspace enable/disable config for librarian-managed traffic
 

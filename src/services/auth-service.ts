@@ -3,7 +3,53 @@ import { extractTokenFromBrowser } from "../auth";
 import { SunoClient } from "../client";
 import { Storage } from "../storage";
 
-export type CliOptions = Record<string, any>;
+export interface CliOptions {
+  [key: string]: any;
+  apiUrl?: string;
+  browser?: string | boolean;
+  browserProfile?: string;
+  controlPlane?: string;
+  database?: string;
+  databaseType?: string;
+  delay?: string | number;
+  host?: string;
+  ignoreCachedToken?: boolean;
+  interval?: string | number;
+  jobId?: string;
+  json?: boolean;
+  librarianInterval?: string | number;
+  library?: string;
+  level?: string;
+  limit?: string | number;
+  list?: string;
+  logFile?: string;
+  once?: boolean;
+  output?: string;
+  payload?: string;
+  pollInterval?: string | number;
+  port?: string | number;
+  postgresUrl?: string;
+  processConcurrency?: string | number;
+  processUpdateConcurrency?: string | number;
+  profileDirectory?: string;
+  reason?: string;
+  role?: string;
+  runtimeMode?: string;
+  startTime?: string;
+  stageId?: string;
+  submitOnly?: boolean;
+  token?: string;
+  workerInstanceId?: string;
+  workflowType?: string;
+  workItemId?: string;
+  workspace?: string;
+  __abortSignal?: AbortSignal;
+  __authenticatedClient?: SunoClient;
+  __storage?: {
+    clearCache?: () => void;
+  };
+  onTrackDownloaded?: (params: { clipId: string; outputDir: string }) => void;
+}
 
 const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
 

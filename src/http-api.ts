@@ -4,6 +4,7 @@ import { URL } from "url";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 import { renderDashboardHtml } from "./http-dashboard";
 import { HttpApiServerLogger } from "./http-api-server-logger";
+import type { ApiServerConfig } from "./app-config";
 import type {
   IHttpApiAuthStatusResponse,
   IHttpApiCancelJobRequest,
@@ -25,13 +26,8 @@ import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneReposito
 import { Storage } from "./storage";
 import type { CliOptions } from "./services";
 
-type ApiServerOptions = CliOptions & {
-  host?: string;
-  port?: string | number;
-};
-
 type ApiWorkflowDefaults = Pick<
-  CliOptions,
+  ApiServerConfig,
   | "databaseType"
   | "database"
   | "postgresUrl"
@@ -44,7 +40,7 @@ type ApiWorkflowDefaults = Pick<
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
-export async function runServeApiFlow(options: ApiServerOptions = {}): Promise<void> {
+export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<void> {
   // The API process is intentionally server-only. Keep worker/orchestrator/
   // librarian runtime loops out of this bootstrap while the app split is in
   // progress.
@@ -450,7 +446,7 @@ function sendHtml(res: http.ServerResponse, statusCode: number, body: string): v
   res.end(body);
 }
 
-function resolveApiWorkflowDefaults(options: CliOptions): ApiWorkflowDefaults {
+function resolveApiWorkflowDefaults(options: ApiServerConfig): ApiWorkflowDefaults {
   const databaseType = typeof options.databaseType === "string"
     ? options.databaseType
     : options.controlPlane === "postgres"

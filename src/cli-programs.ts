@@ -1,5 +1,12 @@
 import { Command } from "commander";
 import {
+  normalizeApiServerConfig,
+  normalizeLibrarianConfig,
+  normalizeOperatorCliConfig,
+  normalizeOrchestratorConfig,
+  normalizeWorkerConfig,
+} from "./app-config";
+import {
   runApiCancelJobFlow,
   runApiHealthFlow,
   runApiJobStatusFlow,
@@ -50,6 +57,10 @@ export function createOperatorCliProgram(): Command {
     "Operator CLI for Suno export workflows and control-plane actions",
   );
 
+  // Phase 3 note: operator commands still reuse legacy flow handlers, but this
+  // app now owns its own config surface and will narrow further as shared
+  // contracts move out of the CLI bootstrap.
+  normalizeOperatorCliConfig({});
   registerOperatorCliCommands(program);
   return program;
 }
@@ -58,7 +69,7 @@ export function createApiProgram(): Command {
   return createAppRuntimeProgram(
     "suno-export-api",
     "HTTP API server for Suno export control-plane operations",
-    runServeApiFlow,
+    async (options) => runServeApiFlow(normalizeApiServerConfig(options)),
     (program) => program
       .option("--host <host>", "Host interface to bind", "127.0.0.1")
       .option("--port <port>", "Port to listen on", "3000")
@@ -76,7 +87,7 @@ export function createOrchestratorProgram(): Command {
   return createAppRuntimeProgram(
     "suno-export-orchestrator",
     "Orchestrator runtime for Suno export distributed workflows",
-    runOrchestratorFlow,
+    async (options) => runOrchestratorFlow(normalizeOrchestratorConfig(options)),
     (program) => program
       .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
       .option("--postgres-url <url>", "Postgres control-plane connection URL")
@@ -89,7 +100,7 @@ export function createWorkerProgram(): Command {
   return createAppRuntimeProgram(
     "suno-export-worker",
     "Worker runtime for a single Suno export worker role",
-    runWorkerFlow,
+    async (options) => runWorkerFlow(normalizeWorkerConfig(options)),
     (program) => program
       .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
       .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
@@ -103,7 +114,7 @@ export function createLibrarianProgram(): Command {
   return createAppRuntimeProgram(
     "suno-export-librarian",
     "Workspace-scoped librarian runtime for Suno metadata synchronization",
-    runLibrarianFlow,
+    async (options) => runLibrarianFlow(normalizeLibrarianConfig(options)),
     (program) => addMetadataDatabaseOptions(program)
       .option("-t, --token <token>", "Authentication token")
       .option(
@@ -129,7 +140,7 @@ function createBaseProgram(name: string, description: string): Command {
 function createAppRuntimeProgram(
   name: string,
   description: string,
-  handler: (options?: Record<string, unknown>) => Promise<void>,
+  handler: (options: Record<string, unknown>) => Promise<void>,
   configure: (program: Command) => Command,
 ): Command {
   const program = createBaseProgram(name, description);
@@ -148,6 +159,18 @@ function withCliError<TArgs extends unknown[], TResult>(
       console.error("Error:", error instanceof Error ? error.message : error);
       process.exit(1);
     }
+  };
+}
+
+function withOperatorCliConfig<TArgs extends unknown[], TResult>(
+  handler: (...args: TArgs) => Promise<TResult>,
+) {
+  return async (...args: TArgs): Promise<void> => {
+    const lastArg = args[args.length - 1];
+    if (lastArg && typeof lastArg === "object") {
+      normalizeOperatorCliConfig(lastArg as Record<string, unknown>);
+    }
+    await withCliError(handler)(...args);
   };
 }
 
@@ -182,24 +205,24 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("--save-local", "Save the captured token to the local cache after printing it")
     .option("--json", "Output the captured token as JSON")
-    .action(withCliError(runCaptureAuthTokenFlow));
+    .action(withOperatorCliConfig(runCaptureAuthTokenFlow));
 
   program
     .command("clear-auth-token")
     .description("Clear the cached Suno authentication token")
-    .action(withCliError(runClearAuthTokenFlow));
+    .action(withOperatorCliConfig(runClearAuthTokenFlow));
 
   addMetadataDatabaseOptions(program
     .command("import-metadata-json")
     .description("Import existing songs_metadata.json data into the metadata database")
     .requiredOption("-i, --input <path>", "Current-format metadata JSON file"))
-    .action(withCliError(runImportMetadataJsonFlow));
+    .action(withOperatorCliConfig(runImportMetadataJsonFlow));
 
   addMetadataDatabaseOptions(program
     .command("export-metadata-json")
     .description("Export metadata database data as current-format JSON")
     .requiredOption("-o, --output <path>", "Output metadata JSON file"))
-    .action(withCliError(runExportMetadataJsonFlow));
+    .action(withOperatorCliConfig(runExportMetadataJsonFlow));
 
   addRuntimeModeOptions(program
     .command("download")
@@ -227,7 +250,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)")
     .option("--delay <ms>", "Delay between downloads in ms", "1000")
     .option("--flush-cache", "Clear cache before starting"))
-    .action(withCliError(runDownloadFlow));
+    .action(withOperatorCliConfig(runDownloadFlow));
 
   addRuntimeModeOptions(program
     .command("sync")
@@ -263,7 +286,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--no-images", "Skip embedding images during conversion")
     .option("--no-lyrics", "Skip embedding lyrics during conversion")
     .option("--exit-on-error", "Exit immediately on conversion errors"))
-    .action(withCliError(runSyncFlow));
+    .action(withOperatorCliConfig(runSyncFlow));
 
   addRuntimeModeOptions(program
     .command("process")
@@ -287,7 +310,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--reconvert-before <iso>", "Only reconvert on/before date")
     .option("--reconvert-after <iso>", "Only reconvert on/after date")
     .option("--reconvert-missing", "Only process missing formats"))
-    .action(withCliError(runProcessFlow));
+    .action(withOperatorCliConfig(runProcessFlow));
 
   addRuntimeModeOptions(program
     .command("download-images")
@@ -312,7 +335,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
     .option("--fetch-missing", "Find missing images and download them directly")
     .option("--delay <ms>", "Delay between downloads in ms", "1000"))
-    .action(withCliError(runDownloadImagesFlow));
+    .action(withOperatorCliConfig(runDownloadImagesFlow));
 
   program
     .command("list")
@@ -330,7 +353,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
     .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
     .option("--json", "Output as JSON")
-    .action(withCliError(runListFlow));
+    .action(withOperatorCliConfig(runListFlow));
 
   program
     .command("workspaces")
@@ -347,7 +370,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
     .option("--json", "Output as JSON")
-    .action(withCliError(runWorkspacesFlow));
+    .action(withOperatorCliConfig(runWorkspacesFlow));
 
   program
     .command("metadata <trackId>")
@@ -360,7 +383,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-    .action(withCliError(runMetadataFlow));
+    .action(withOperatorCliConfig(runMetadataFlow));
 
   addRuntimeModeOptions(program
     .command("fetch-metadata")
@@ -380,7 +403,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
     .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
     .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)"))
-    .action(withCliError(runFetchMetadataFlow));
+    .action(withOperatorCliConfig(runFetchMetadataFlow));
 
   addRuntimeModeOptions(program
     .command("refresh")
@@ -396,7 +419,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
     .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres"))
-    .action(withCliError(runRefreshFlow));
+    .action(withOperatorCliConfig(runRefreshFlow));
 
   program
     .command("job-status <jobId>")
@@ -404,7 +427,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--json", "Output job status as JSON")
-    .action(withCliError(runJobStatusFlow));
+    .action(withOperatorCliConfig(runJobStatusFlow));
 
   program
     .command("watch-job <jobId>")
@@ -413,7 +436,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--json", "Output job status as JSON on each refresh")
     .option("--interval <ms>", "Polling interval in ms", "1000")
-    .action(withCliError(runWatchJobFlow));
+    .action(withOperatorCliConfig(runWatchJobFlow));
 
   program
     .command("logs")
@@ -432,40 +455,40 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
     .option("--limit <n>", "Maximum logs to return", "100")
     .option("--json", "Output logs as JSON")
-    .action(withCliError(runLogsFlow));
+    .action(withOperatorCliConfig(runLogsFlow));
 
   addApiUrlOption(program
     .command("api-health")
     .description("Check HTTP API health")
     .option("--json", "Output response as JSON"))
-    .action(withCliError(runApiHealthFlow));
+    .action(withOperatorCliConfig(runApiHealthFlow));
 
   addApiUrlOption(program
     .command("api-submit <workflow>")
     .description("Submit a workflow using a validated JSON payload")
     .requiredOption("--payload <path>", "JSON payload file path, or - to read from stdin")
     .option("--json", "Output response as JSON"))
-    .action(withCliError(runApiSubmitWorkflowFlow));
+    .action(withOperatorCliConfig(runApiSubmitWorkflowFlow));
 
   addApiUrlOption(program
     .command("api-job-status <jobId>")
     .description("Show HTTP API job status")
     .option("--json", "Output job status as JSON"))
-    .action(withCliError(runApiJobStatusFlow));
+    .action(withOperatorCliConfig(runApiJobStatusFlow));
 
   addApiUrlOption(program
     .command("api-watch-job <jobId>")
     .description("Watch HTTP API job status until completion")
     .option("--json", "Output job status as JSON on each refresh")
     .option("--interval <ms>", "Polling interval in ms", "1000"))
-    .action(withCliError(runApiWatchJobFlow));
+    .action(withOperatorCliConfig(runApiWatchJobFlow));
 
   addApiUrlOption(program
     .command("api-cancel-job <jobId>")
     .description("Cancel a queued or running job through the HTTP API")
     .option("--reason <text>", "Optional cancellation reason")
     .option("--json", "Output response as JSON"))
-    .action(withCliError(runApiCancelJobFlow));
+    .action(withOperatorCliConfig(runApiCancelJobFlow));
 
   addApiUrlOption(program
     .command("api-logs")
@@ -482,7 +505,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
     .option("--limit <n>", "Maximum logs to return", "100")
     .option("--json", "Output logs as JSON"))
-    .action(withCliError(runApiLogsFlow));
+    .action(withOperatorCliConfig(runApiLogsFlow));
 }
 
 function registerLibrarianCommand(program: Command): void {
@@ -500,7 +523,7 @@ function registerLibrarianCommand(program: Command): void {
     .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
     .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
     .option("--once", "Sync the configured workspace and exit"))
-    .action(withCliError(runLibrarianFlow));
+    .action(withCliError(async (options) => runLibrarianFlow(normalizeLibrarianConfig(options))));
 }
 
 function registerOrchestratorCommand(program: Command): void {
@@ -511,7 +534,7 @@ function registerOrchestratorCommand(program: Command): void {
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--once", "Process at most one polling cycle and exit")
     .option("--poll-interval <ms>", "Polling interval in ms", "500")
-    .action(withCliError(runOrchestratorFlow));
+    .action(withCliError(async (options) => runOrchestratorFlow(normalizeOrchestratorConfig(options))));
 }
 
 function registerWorkerCommand(program: Command): void {
@@ -523,7 +546,7 @@ function registerWorkerCommand(program: Command): void {
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--once", "Process at most one work item and exit")
     .option("--poll-interval <ms>", "Polling interval in ms", "500")
-    .action(withCliError(runWorkerFlow));
+    .action(withCliError(async (options) => runWorkerFlow(normalizeWorkerConfig(options))));
 }
 
 function registerServeApiCommand(program: Command): void {
@@ -539,5 +562,5 @@ function registerServeApiCommand(program: Command): void {
     .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
     .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
     .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log")
-    .action(withCliError(runServeApiFlow));
+    .action(withCliError(async (options) => runServeApiFlow(normalizeApiServerConfig(options))));
 }

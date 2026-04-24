@@ -4,6 +4,7 @@ import * as path from "path";
 import { extractTokenFromBrowser } from "./auth";
 import { createCancellationMonitor, isCancellationError } from "./cancellation";
 import { HttpApiClient } from "./http-api-client";
+import type { LibrarianConfig, OrchestratorConfig, WorkerConfig } from "./app-config";
 import type { ICentralLogRepository, IClaimedWorkItem, IJobSnapshot, ILogQueryResult, IOrchestrationRepository, IWorkspace, WorkflowType } from "./lib/interfaces";
 import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, getWorkflowStagePlan, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./orchestration";
 import {
@@ -142,7 +143,7 @@ async function runDownloadWorkflow(options: CliOptions): Promise<DownloadFlowRes
 }
 
 async function runProcessWorkflow(options: CliOptions): Promise<void> {
-  const outputDir = path.resolve(options.output);
+  const outputDir = path.resolve(String(options.output));
   const storeConfig = resolveMetadataStoreOptions(options);
   await importMetadataJsonIfRequested(options, storeConfig);
   await conversionService.run(
@@ -208,9 +209,9 @@ export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise
 
 export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
   const storeConfig = resolveMetadataStoreOptions(options);
-  logMetadataImportStatus(`Starting import from ${path.resolve(options.input)}`);
+  logMetadataImportStatus(`Starting import from ${path.resolve(String(options.input))}`);
   logMetadataImportStatus(`Target database: ${describeMetadataStoreConfig(storeConfig)}`);
-  const result = await importMetadataJsonToDatabase(options.input, storeConfig, {
+  const result = await importMetadataJsonToDatabase(String(options.input), storeConfig, {
     log: logMetadataImportStatus,
   });
   console.log(`Imported ${result.imported} metadata entr${result.imported === 1 ? "y" : "ies"} to ${result.databasePath}`);
@@ -218,16 +219,16 @@ export async function runImportMetadataJsonFlow(options: CliOptions): Promise<vo
 
 export async function runExportMetadataJsonFlow(options: CliOptions): Promise<void> {
   const storeConfig = resolveMetadataStoreOptions(options);
-  logMetadataImportStatus(`Starting export to ${path.resolve(options.output)}`);
+  logMetadataImportStatus(`Starting export to ${path.resolve(String(options.output))}`);
   logMetadataImportStatus(`Source database: ${describeMetadataStoreConfig(storeConfig)}`);
-  const result = await exportMetadataDatabaseToJson(options.output, storeConfig, {
+  const result = await exportMetadataDatabaseToJson(String(options.output), storeConfig, {
     log: logMetadataImportStatus,
   });
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
 }
 
 async function runSyncWorkflow(options: CliOptions): Promise<void> {
-  const outputDir = path.resolve(options.output);
+  const outputDir = path.resolve(String(options.output));
   const conversionOutput = options.library || outputDir;
   const storeConfig = resolveMetadataStoreOptions(options);
   const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
@@ -369,8 +370,8 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
   if (shouldSubmitOnly(options)) {
     const jobId = await submitWorkflowJob("download", options);
     console.log(`Job submitted: ${jobId}`);
-    return {
-      outputDir: path.resolve(options.output),
+      return {
+      outputDir: path.resolve(String(options.output)),
       downloaded: 0,
       skipped: 0,
     };
@@ -425,7 +426,7 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
     { type: "finalization", workerRole: "orchestrator" },
   ], async ({ runStage }) => {
     const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    const outputDir = path.resolve(options.output);
+    const outputDir = path.resolve(String(options.output));
     const conversionOutput = options.library || outputDir;
     const storeConfig = resolveMetadataStoreOptions(options);
     const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
@@ -554,7 +555,7 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
   });
 }
 
-export async function runLibrarianFlow(options: CliOptions = {}): Promise<void> {
+export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> {
   await librarianService.run(options);
 }
 
@@ -694,7 +695,7 @@ export async function runApiLogsFlow(options: CliOptions = {}): Promise<void> {
   printLogsResult(result, options.json === true);
 }
 
-export async function runOrchestratorFlow(options: CliOptions = {}): Promise<void> {
+export async function runOrchestratorFlow(options: OrchestratorConfig = {}): Promise<void> {
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
   const loggerRepository = createControlPlaneRepository(options);
@@ -732,12 +733,8 @@ export async function runOrchestratorFlow(options: CliOptions = {}): Promise<voi
   }
 }
 
-export async function runWorkerFlow(options: CliOptions = {}): Promise<void> {
-  const role = String(options.role ?? "").trim() as "auth" | "metadata" | "asset" | "processing" | "conversion";
-  if (!role) {
-    throw new Error("run-worker requires --role");
-  }
-
+export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
+  const role = options.role;
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
   const loggerRepository = createControlPlaneRepository(options);
@@ -1157,7 +1154,7 @@ async function executeStageHandler(
           copySongsMetadataToOutput: false,
         });
       } else if (stageType === "conversion") {
-        const outputDir = path.resolve(options.output);
+        const outputDir = path.resolve(String(options.output));
         const conversionOutput = options.library || outputDir;
         const storeConfig = resolveMetadataStoreOptions(options);
         await runProcessWorkflow({
@@ -1177,7 +1174,7 @@ async function executeStageHandler(
           processClipIds: undefined,
         });
       } else if (stageType === "finalization") {
-        const outputDir = path.resolve(options.output);
+        const outputDir = path.resolve(String(options.output));
         const storeConfig = resolveMetadataStoreOptions(options);
         await exportMetadataJsonIfRequested(options, storeConfig, resolveMetadataJsonExportPath(outputDir, options));
       }

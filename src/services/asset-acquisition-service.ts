@@ -44,8 +44,8 @@ export class AssetAcquisitionService {
       options.__storage?.clearCache?.();
     }
 
-    const outputDir = path.resolve(options.output);
-    const delay = parseInt(options.delay, 10);
+    const outputDir = path.resolve(String(options.output));
+    const delay = parseInt(String(options.delay), 10);
 
     const mp3Dir = path.join(outputDir, "mp3");
     const wavDir = path.join(outputDir, "wav");
@@ -230,7 +230,7 @@ export class AssetAcquisitionService {
 
   async downloadImages(options: CliOptions, client: SunoClient): Promise<void> {
     await assertNotCancelled(options);
-    const outputDir = path.resolve(options.output);
+    const outputDir = path.resolve(String(options.output));
     const storeConfig = resolveMetadataStoreOptions(options);
     const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
     await importMetadataJsonIfRequested(options, storeConfig);
@@ -250,7 +250,7 @@ export class AssetAcquisitionService {
     }
 
     if (hasListPath) {
-      const listPath = path.resolve(options.list);
+      const listPath = path.resolve(String(options.list));
       if (!fs.existsSync(listPath)) {
         throw new Error(`Image list file not found: ${listPath}`);
       }
@@ -264,7 +264,7 @@ export class AssetAcquisitionService {
       console.log(`Found ${entries.length} image(s) needing download`);
 
       if (wantsFetchedList) {
-        const outFile = path.resolve(options.fetchImageList);
+        const outFile = path.resolve(String(options.fetchImageList));
         fs.writeFileSync(outFile, JSON.stringify(entries, null, 2));
         console.log(`Wrote ${entries.length} images to ${outFile}`);
       }
@@ -306,7 +306,7 @@ export class AssetAcquisitionService {
 
       if (i < entries.length - 1) {
         await assertNotCancelled(options);
-        await sleep(parseInt(options.delay, 10));
+        await sleep(parseInt(String(options.delay), 10));
       }
     }
 
