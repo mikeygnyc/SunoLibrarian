@@ -1,4 +1,4 @@
-import type { ILogEntry, ILogWriteResult } from "../lib/interfaces";
+import type { ILogEntry, ILogWriteResult } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 
 function formatLogEntry(entry: ILogEntry): string {
@@ -40,4 +40,3 @@ export class ConsoleLogSink implements ILogSink {
     };
   }
 }
-

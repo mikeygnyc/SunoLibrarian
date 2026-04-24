@@ -1,4 +1,4 @@
-import type { IOrchestrationRepository, IRuntimeConfig, IWorkerLease, OrchestrationStageType, WorkerRole } from "../lib/interfaces";
+import type { IOrchestrationRepository, IRuntimeConfig, IWorkerLease, OrchestrationStageType, WorkerRole } from "../core/contracts";
 
 type StageLeasePlan = {
   resourceKey: string;

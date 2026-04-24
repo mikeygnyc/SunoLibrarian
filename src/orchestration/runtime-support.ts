@@ -8,7 +8,7 @@ import type {
   OrchestrationStageType,
   WorkerRole,
   WorkflowType,
-} from "../lib/interfaces";
+} from "../core/contracts";
 import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
 import { LocalControlPlaneRepository } from "./local-control-plane";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";

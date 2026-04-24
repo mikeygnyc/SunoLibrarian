@@ -19,7 +19,7 @@ import type {
   IOrchestrationStage,
   IWorkItem,
   OrchestrationStageStatus,
-} from "./lib/interfaces";
+} from "./core/contracts";
 
 export interface IDashboardJobSummary {
   id: string;

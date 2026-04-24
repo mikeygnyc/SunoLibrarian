@@ -1,4 +1,4 @@
-import type { ILogEntry, ILogQueryFilter, ILogQueryResult, ILogQueryService, ILogWriteResult } from "../lib/interfaces";
+import type { ILogEntry, ILogQueryFilter, ILogQueryResult, ILogQueryService, ILogWriteResult } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 
 export interface ILogRepository {
@@ -35,4 +35,3 @@ export class LogQueryService implements ILogQueryService {
     return this.repository.query(filter);
   }
 }
-

@@ -1,4 +1,4 @@
-import type { LogLevel } from "../lib/interfaces";
+import type { LogLevel } from "../core/contracts";
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 10,
@@ -10,4 +10,3 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 export function shouldLog(level: LogLevel, minimumLevel: LogLevel): boolean {
   return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minimumLevel];
 }
-
