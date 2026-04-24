@@ -74,35 +74,47 @@ the core boundary explicit.
 - [x] Move conversion service into core
 - [x] Move librarian service into core or keep a thin app wrapper around a core
   sync service
-- [ ] Refactor librarian logic away from rotating across all workspaces
-- [ ] Support one-workspace-per-librarian execution
-- [ ] Skip disabled workspaces entirely during background sync
+- [x] Refactor librarian logic away from rotating across all workspaces
+- [x] Support one-workspace-per-librarian execution
+- [x] Skip disabled workspaces entirely during background sync
 
 This phase currently uses a shared `src/core/services` facade over the existing
 service implementation files so app-facing code can depend on a core service
 surface before any deeper file moves.
 
+The current librarian implementation no longer rotates across workspaces:
+workspace ownership is explicit, one workspace is required per process, and
+disabled workspaces are skipped before sync work begins.
+
 ## Phase 7: Operator CLI Cleanup
 
-- [ ] Move submit/status/cancel/log queries into `operator-cli`
-- [ ] Move `capture-auth-token` into `operator-cli`
-- [ ] Keep dashboard/API client helpers shared if both CLI and UI need them
-- [ ] Remove service-process startup from the operator CLI entrypoint
+- [x] Move submit/status/cancel/log queries into `operator-cli`
+- [x] Move `capture-auth-token` into `operator-cli`
+- [x] Keep dashboard/API client helpers shared if both CLI and UI need them
+- [x] Remove service-process startup from the operator CLI entrypoint
+
+The dedicated `operator-cli` app exposes operator-facing commands only. Service
+process bootstraps remain in the API/orchestrator/worker/librarian apps, while
+shared dashboard/API client helpers continue to live outside the app entrypoint.
 
 ## Phase 8: API Cleanup
 
-- [ ] Keep `api` limited to HTTP, dashboard, and control-plane mutations
-- [ ] Ensure `api` does not start orchestrator, worker, or librarian loops
-- [ ] Keep server-owned runtime config local to the API app
-- [ ] Confirm token update and auth-failure restart behavior still work from the
+- [x] Keep `api` limited to HTTP, dashboard, and control-plane mutations
+- [x] Ensure `api` does not start orchestrator, worker, or librarian loops
+- [x] Keep server-owned runtime config local to the API app
+- [x] Confirm token update and auth-failure restart behavior still work from the
   API app
+
+The dedicated API app boots `runServeApiFlow` only. HTTP serving, dashboard
+rendering, server-owned workflow defaults, and auth-token update restart logic
+remain local to the API app boundary.
 
 ## Phase 9: Build and Tooling
 
-- [ ] Add per-app build scripts
-- [ ] Add per-app dev scripts
+- [x] Add per-app build scripts
+- [x] Add per-app dev scripts
 - [ ] Update VS Code launch configs to target new app entrypoints
-- [ ] Update README command examples
+- [x] Update README command examples
 - [ ] Update docs to describe the multi-process app model
 
 ## Phase 10: Migration Cleanup

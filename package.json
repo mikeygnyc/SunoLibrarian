@@ -16,6 +16,11 @@
   },
   "scripts": {
     "build": "npm install && tsc -p tsconfig.json",
+    "build:api": "npm run build",
+    "build:operator": "npm run build",
+    "build:orchestrator": "npm run build",
+    "build:worker": "npm run build",
+    "build:librarian": "npm run build",
     "test": "node --test -r ts-node/register test/**/*.test.ts",
     "install:local": "scripts/install.sh",
     "install:global": "scripts/install-global.sh",
