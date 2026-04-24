@@ -182,14 +182,6 @@ function assertServerOwnedFieldsAbsent(payload: Record<string, unknown>): void {
   }
 }
 
-function requiredString(value: unknown, label: string): string {
-  const resolved = optionalString(value, label);
-  if (!resolved) {
-    throw createValidationError(`${label} is required`);
-  }
-  return resolved;
-}
-
 function optionalString(value: unknown, label: string): string | undefined {
   if (value == null) return undefined;
   if (typeof value !== "string") {

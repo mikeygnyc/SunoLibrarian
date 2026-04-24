@@ -24,23 +24,6 @@ type ChromeVersionInfo = {
   profilePath?: string;
 };
 
-const CHROME_PROFILE_COPY_SKIP_NAMES = new Set([
-  "BrowserMetrics",
-  "Cache",
-  "Code Cache",
-  "Crash Reports",
-  "Crashpad",
-  "DawnCache",
-  "DevToolsActivePort",
-  "GrShaderCache",
-  "GPUCache",
-  "Media Cache",
-  "ShaderCache",
-  "SingletonCookie",
-  "SingletonLock",
-  "SingletonSocket",
-]);
-
 function registerBrowserForProcessExit(browser: Browser): void {
   browsersToCloseOnExit.add(browser);
 

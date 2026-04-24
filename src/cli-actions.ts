@@ -5,9 +5,8 @@ import { extractTokenFromBrowser } from "./auth";
 import { createCancellationMonitor, isCancellationError } from "./cancellation";
 import { HttpApiClient } from "./http-api-client";
 import type { LibrarianConfig, OrchestratorConfig, WorkerConfig } from "./app-config";
-import type { ICentralLogRepository, IClaimedWorkItem, IJobSnapshot, ILogQueryResult, IOrchestrationRepository, WorkflowType } from "./core/contracts";
-import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, getWorkflowStagePlan, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./core/orchestration";
-import type { IWorkspace } from "./lib/interfaces";
+import type { IClaimedWorkItem, IJobSnapshot, ILogQueryResult, WorkflowType } from "./core/contracts";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./core/orchestration";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -18,7 +17,6 @@ import {
   getAuthenticatedClientWithDeps,
   LibrarianService,
   MetadataAcquisitionService,
-  parseTrackIdsOption,
   ProcessingPlannerService,
   type AuthClient,
   type AuthDeps,
@@ -28,7 +26,6 @@ import {
 } from "./core/services";
 import { Storage } from "./storage";
 import {
-  createMetadataStore,
   describeMetadataStoreConfig,
   exportMetadataDatabaseToJson,
   importMetadataJsonToDatabase,
@@ -47,11 +44,6 @@ export type CaptureAuthTokenDeps = {
   storage: Pick<Storage, "setAuthToken">;
   log: Pick<Console, "log">;
 };
-
-type DownloadedTrackHook = (params: {
-  clipId: string;
-  outputDir: string;
-}) => void;
 
 function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
   return typeof options.metadataFile === "string" && options.metadataFile.trim().length > 0
@@ -226,73 +218,6 @@ export async function runExportMetadataJsonFlow(options: CliOptions): Promise<vo
     log: logMetadataImportStatus,
   });
   console.log(`Exported ${result.exported} metadata entr${result.exported === 1 ? "y" : "ies"} to ${result.jsonFilePath}`);
-}
-
-async function runSyncWorkflow(options: CliOptions): Promise<void> {
-  const outputDir = path.resolve(String(options.output));
-  const conversionOutput = options.library || outputDir;
-  const storeConfig = resolveMetadataStoreOptions(options);
-  const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
-  const processExistingMetadata = options.processExistingMetadata === true;
-  const downloadedClipIds = new Set<string>();
-  let conversionChain: Promise<void> = Promise.resolve();
-  let queuedConversions = 0;
-  let conversionFailed: Error | null = null;
-
-  const queueConversion = (): void => {
-    queuedConversions++;
-    conversionChain = conversionChain.then(async () => {
-      if (conversionFailed) return;
-      await runProcessWorkflow({
-        input: outputDir,
-        output: conversionOutput,
-        databaseType: storeConfig.type,
-        database: storeConfig.sqlitePath,
-        postgresUrl: storeConfig.postgresUrl,
-        copySongsMetadataToOutput: false,
-        processFormats: options.processFormats,
-        processBitrate: options.processBitrate,
-        processConcurrency: options.processConcurrency,
-        processUpdateConcurrency: options.processUpdateConcurrency,
-        images: options.images,
-        lyrics: options.lyrics,
-        exitOnError: options.exitOnError,
-        processClipIds: processExistingMetadata ? undefined : Array.from(downloadedClipIds),
-      });
-    }).catch((err: any) => {
-      const wrapped = err instanceof Error ? err : new Error(String(err));
-      conversionFailed = wrapped;
-      if (!options.exitOnError) {
-        console.error(`Conversion run failed during sync: ${wrapped.message}`);
-      }
-    });
-  };
-
-  await runDownloadWorkflow({
-    ...options,
-    output: outputDir,
-    databaseType: storeConfig.type,
-    database: storeConfig.sqlitePath,
-    postgresUrl: storeConfig.postgresUrl,
-    exportMetadataJson: undefined,
-    copySongsMetadataToOutput: false,
-    onTrackDownloaded: ({ clipId }: { clipId: string }) => {
-      downloadedClipIds.add(clipId);
-      if (!processExistingMetadata) {
-        queueConversion();
-      }
-    },
-  });
-
-  if (processExistingMetadata) {
-    queueConversion();
-  }
-
-  await conversionChain;
-  if (conversionFailed) {
-    throw conversionFailed;
-  }
-  await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
 }
 
 async function runDownloadImagesWorkflow(options: CliOptions): Promise<void> {

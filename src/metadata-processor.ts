@@ -175,7 +175,7 @@ export class MetadataProcessor {
     console.log(`    atomicparsley: ${elapsed}s`);
   }
 
-  private createCustomAtom(atomName: string, argType: string, value: string, fullName: string): string[] {
+  private createCustomAtom(_atomName: string, _argType: string, value: string, fullName: string): string[] {
     return ["--rDNSatom", value, `name=${fullName}`, `domain=com.apple.iTunes`];
   }
 
