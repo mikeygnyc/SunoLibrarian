@@ -20,7 +20,7 @@ import type {
   IHttpApiSubmitJobResponse,
   ILogQueryFilter,
   WorkflowType,
-} from "./lib/interfaces";
+} from "./core/contracts";
 import { validateWorkflowSubmission } from "./http-api-workflows";
 import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./orchestration";
 import { Storage } from "./storage";

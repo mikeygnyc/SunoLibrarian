@@ -6,7 +6,7 @@ import type {
   IHttpApiRefreshWorkflowRequest,
   IHttpApiSyncWorkflowRequest,
   WorkflowType,
-} from "./lib/interfaces";
+} from "./core/contracts";
 import type { WorkflowSubmissionOptions } from "./app-config";
 
 type WorkflowRequestMap = {

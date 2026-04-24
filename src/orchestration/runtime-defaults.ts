@@ -1,4 +1,4 @@
-import type { IRuntimeConfig } from "../lib/interfaces";
+import type { IRuntimeConfig } from "../core/contracts";
 
 export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
   mode: "local",
@@ -24,4 +24,3 @@ export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
   storageLocations: [],
   defaultRoots: {},
 };
-

@@ -44,9 +44,9 @@ Phase 1 decisions are recorded in `docs/app-split-boundaries.md`.
 
 ## Phase 4: Shared Contracts
 
-- [ ] Move HTTP API contracts into shared core/contracts
-- [ ] Move orchestration interfaces into shared core/contracts
-- [ ] Keep dashboard/client types importing shared contracts only
+- [x] Move HTTP API contracts into shared core/contracts
+- [x] Move orchestration interfaces into shared core/contracts
+- [x] Keep dashboard/client types importing shared contracts only
 - [ ] Remove app-local duplicates of shared types if any appear
 
 ## Phase 5: Orchestration Core Extraction

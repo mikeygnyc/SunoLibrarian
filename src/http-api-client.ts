@@ -14,7 +14,7 @@ import type {
   IHttpApiWorkflowRequestMap,
   ILogQueryFilter,
   WorkflowType,
-} from "./lib/interfaces";
+} from "./core/contracts";
 
 type FetchResponseLike = {
   ok: boolean;

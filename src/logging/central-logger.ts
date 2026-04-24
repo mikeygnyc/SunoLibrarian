@@ -1,4 +1,4 @@
-import type { ILogContext, ILogEntry, ILogWriteResult, LogLevel } from "../lib/interfaces";
+import type { ILogContext, ILogEntry, ILogWriteResult, LogLevel } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 import { shouldLog } from "./log-level";
 

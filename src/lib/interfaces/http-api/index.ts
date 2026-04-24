@@ -1,1 +1,1 @@
-export * from "./IHttpApiContract";
+export * from "../../../core/contracts/http-api";
