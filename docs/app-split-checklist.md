@@ -14,6 +14,8 @@ This checklist turns the app split plan into a concrete execution sequence.
 - [ ] Stop adding new bootstrap logic to `src/index.ts`
 - [ ] Stop adding any runtime loops to `serve-api`
 - [ ] Confirm the rule that one process owns one runtime responsibility
+- [ ] Confirm the rule that one librarian process owns one workspace
+- [ ] Decide where workspace enable/disable state should live
 
 ## Phase 2: New Entrypoints
 
@@ -25,6 +27,7 @@ This checklist turns the app split plan into a concrete execution sequence.
 - [ ] Point each new entrypoint at existing implementation functions first
 - [ ] Keep the old entrypoint working during the transition
 - [ ] Add temporary compatibility scripts if needed
+- [ ] Ensure librarian entrypoints accept explicit workspace ownership
 
 ## Phase 3: Config Cleanup
 
@@ -35,6 +38,7 @@ This checklist turns the app split plan into a concrete execution sequence.
 - [ ] Introduce `LibrarianConfig`
 - [ ] Reduce direct reliance on broad `CliOptions` in app bootstraps
 - [ ] Separate workflow submission payloads from bootstrap/runtime config
+- [ ] Add workspace enable/disable config for librarian-managed traffic
 
 ## Phase 4: Shared Contracts
 
@@ -61,6 +65,9 @@ This checklist turns the app split plan into a concrete execution sequence.
 - [ ] Move conversion service into core
 - [ ] Move librarian service into core or keep a thin app wrapper around a core
   sync service
+- [ ] Refactor librarian logic away from rotating across all workspaces
+- [ ] Support one-workspace-per-librarian execution
+- [ ] Skip disabled workspaces entirely during background sync
 
 ## Phase 7: Operator CLI Cleanup
 
@@ -99,6 +106,8 @@ This checklist turns the app split plan into a concrete execution sequence.
 - [ ] `orchestrator` starts and only runs the orchestrator loop
 - [ ] `worker` starts and only runs worker logic
 - [ ] `librarian` starts and only runs workspace sync
+- [ ] each librarian process is pinned to exactly one workspace
+- [ ] disabled workspaces generate no librarian polling traffic
 - [ ] `operator-cli` can submit jobs, inspect jobs, cancel jobs, and capture
   auth tokens
 - [ ] job submission still works end to end
@@ -114,6 +123,8 @@ If doing this incrementally, start here:
 - [ ] move `run-orchestrator` bootstrap under `apps/orchestrator`
 - [ ] move `run-worker` bootstrap under `apps/worker`
 - [ ] move `run-librarian` bootstrap under `apps/librarian`
+- [ ] make `run-librarian` explicitly workspace-scoped
+- [ ] add workspace enable/disable configuration for librarian-managed sync
 - [ ] move `capture-auth-token` and operator utilities under `apps/operator-cli`
 
 That slice gives the architectural win early, even before deeper module moves.
