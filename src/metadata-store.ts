@@ -238,6 +238,9 @@ export interface MetadataStoreConfigInput {
   postgresUrl?: string;
 }
 
+const METADATA_SCHEMA_LOCK_NAMESPACE = 2048;
+const METADATA_SCHEMA_LOCK_RESOURCE = 2;
+
 export type MetadataStoreLogger = (message: string) => void;
 
 export interface MetadataStoreOptions {
@@ -413,6 +416,20 @@ export async function createMetadataStore(
   }
 
   return new SqliteMetadataStore(resolveDatabasePath(resolvedConfig.sqlitePath), storeOptions);
+}
+
+async function withPostgresAdvisoryLock<T>(
+  client: PoolClient,
+  namespace: number,
+  resource: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  await client.query("SELECT pg_advisory_lock($1, $2)", [namespace, resource]);
+  try {
+    return await work();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1, $2)", [namespace, resource]);
+  }
 }
 
 export async function importMetadataJsonToDatabase(
@@ -887,12 +904,24 @@ export class PostgresMetadataStore implements MetadataStore {
     if (this.initialized) return;
     this.log?.(`Opening Postgres connection: ${this.location}`);
     const connectedAt = Date.now();
-    const existing = await this.pool.query("SELECT to_regclass('public.songs') AS table_name");
-    this.log?.(`Postgres connection ready in ${Date.now() - connectedAt}ms`);
-    this.existedBeforeInitialize = existing.rows[0]?.table_name === "songs";
-    this.log?.(`Postgres songs table ${this.existedBeforeInitialize ? "exists" : "will be created"}`);
-    await this.pool.query(POSTGRES_SCHEMA);
-    this.log?.("Postgres schema ready");
+    const client = await this.pool.connect();
+    try {
+      this.log?.(`Postgres connection ready in ${Date.now() - connectedAt}ms`);
+      await withPostgresAdvisoryLock(
+        client,
+        METADATA_SCHEMA_LOCK_NAMESPACE,
+        METADATA_SCHEMA_LOCK_RESOURCE,
+        async () => {
+          const existing = await client.query("SELECT to_regclass('public.songs') AS table_name");
+          this.existedBeforeInitialize = existing.rows[0]?.table_name === "songs";
+          this.log?.(`Postgres songs table ${this.existedBeforeInitialize ? "exists" : "will be created"}`);
+          await client.query(POSTGRES_SCHEMA);
+          this.log?.("Postgres schema ready");
+        },
+      );
+    } finally {
+      client.release();
+    }
     this.initialized = true;
   }
 
