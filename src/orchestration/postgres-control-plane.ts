@@ -161,6 +161,9 @@ export type ControlPlaneOptions = {
   schema?: string;
 };
 
+const CONTROL_PLANE_SCHEMA_LOCK_NAMESPACE = 2048;
+const CONTROL_PLANE_SCHEMA_LOCK_RESOURCE = 1;
+
 export function resolveControlPlanePostgresUrl(postgresUrl?: string): string {
   const resolved = postgresUrl?.trim()
     || process.env.SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL
@@ -189,7 +192,14 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     if (this.initialized) return;
     const client = await this.pool.connect();
     try {
-      await this.applySchema(client);
+      await withAdvisoryLock(
+        client,
+        CONTROL_PLANE_SCHEMA_LOCK_NAMESPACE,
+        CONTROL_PLANE_SCHEMA_LOCK_RESOURCE,
+        async () => {
+          await this.applySchema(client);
+        },
+      );
       this.initialized = true;
     } finally {
       client.release();
@@ -879,6 +889,20 @@ function addEqualsClause(clauses: string[], params: unknown[], sql: string, valu
 
 function toDate(value?: Date): Date | null {
   return value ?? null;
+}
+
+async function withAdvisoryLock<T>(
+  client: PoolClient,
+  namespace: number,
+  resource: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  await client.query("SELECT pg_advisory_lock($1, $2)", [namespace, resource]);
+  try {
+    return await work();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1, $2)", [namespace, resource]);
+  }
 }
 
 function toJson(value: unknown): string {

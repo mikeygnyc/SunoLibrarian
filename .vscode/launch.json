@@ -54,7 +54,7 @@
         "--browser-profile",
         "/Users/mikegales/.suno-export/chrome-user-data",
         "--profile-directory",
-        "Profile 2",
+        "Profile 2"
       ],
       "console": "internalConsole",
       "skipFiles": [
@@ -244,13 +244,12 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug Dashboard",
+      "name": "Debug API",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "runtimeArgs": [
         "node"
       ],
       "program": "${workspaceFolder}/dist/apps/api/main.js",
-      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ],
@@ -287,7 +286,6 @@
         "node"
       ],
       "program": "${workspaceFolder}/dist/apps/orchestrator/main.js",
-      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ],
@@ -314,7 +312,6 @@
         "node"
       ],
       "program": "${workspaceFolder}/dist/apps/librarian/main.js",
-      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ],
@@ -343,13 +340,96 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "Debug Worker - Asset",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "asset",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Processing",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "processing",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Conversion",
+      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
+      "runtimeArgs": [
+        "node"
+      ],
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "conversion",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
       "name": "Debug Worker - Auth",
       "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
       "runtimeArgs": [
         "node"
       ],
       "program": "${workspaceFolder}/dist/apps/worker/main.js",
-      "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ],
@@ -368,6 +448,35 @@
       "skipFiles": [
         "<node_internals>/**"
       ]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug API Stack",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "configurations": [
+        "Debug API",
+        "Debug Orchestrator",
+        "Debug Worker - Auth",
+        "Debug Worker - Asset",
+        "Debug Worker - Processing",
+        "Debug Worker - Conversion"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Debug API Stack + Librarian",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "configurations": [
+        "Debug API",
+        "Debug Orchestrator",
+        "Debug Worker - Auth",
+        "Debug Worker - Asset",
+        "Debug Worker - Processing",
+        "Debug Worker - Conversion",
+        "Debug Librarian"
+      ],
+      "stopAll": true
     }
   ]
 }
