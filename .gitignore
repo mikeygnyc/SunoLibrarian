@@ -19,3 +19,4 @@ node_modules
 data
 data/*
 .env
+.DS_Store
