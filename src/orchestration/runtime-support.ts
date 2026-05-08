@@ -10,7 +10,7 @@ import type {
   WorkflowType,
 } from "../core/contracts";
 import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
-import { LocalControlPlaneRepository } from "./local-control-plane";
+import { LocalControlPlaneRepository, resolveLocalControlPlaneDir } from "./local-control-plane";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";
 import type { CliOptions } from "../core/services";
 
@@ -51,7 +51,7 @@ export function createControlPlaneRepository(options: CliOptions = {}): ControlP
       postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
     });
   }
-  return new LocalControlPlaneRepository();
+  return new LocalControlPlaneRepository(resolveLocalControlPlaneDir(options.controlPlaneDir));
 }
 
 export function resolveControlPlaneBackend(options: CliOptions = {}): "local" | "postgres" {

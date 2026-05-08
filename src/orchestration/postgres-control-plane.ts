@@ -9,6 +9,7 @@ import type {
   IOrchestrationJob,
   IOrchestrationRepository,
   IOrchestrationStage,
+  IRuntimeStateCleanupResult,
   IStatusEvent,
   IWorkItem,
   IWorkerInstance,
@@ -163,6 +164,7 @@ export type ControlPlaneOptions = {
 
 const CONTROL_PLANE_SCHEMA_LOCK_NAMESPACE = 2048;
 const CONTROL_PLANE_SCHEMA_LOCK_RESOURCE = 1;
+const CONTROL_PLANE_BOOTSTRAPPED_ENV = "SUNO_EXPORT_CONTROL_PLANE_BOOTSTRAPPED";
 
 export function resolveControlPlanePostgresUrl(postgresUrl?: string): string {
   const resolved = postgresUrl?.trim()
@@ -190,6 +192,10 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    if (process.env[CONTROL_PLANE_BOOTSTRAPPED_ENV] === "1") {
+      this.initialized = true;
+      return;
+    }
     const client = await this.pool.connect();
     try {
       await withAdvisoryLock(
@@ -796,6 +802,51 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
       [jobId],
     );
     return result.rows.map(mapStatusEventRow);
+  }
+
+  async cleanupStaleRuntimeState(staleBefore: Date): Promise<IRuntimeStateCleanupResult> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const removedWorkerInstancesResult = await client.query(
+        `
+        DELETE FROM worker_instances
+        WHERE heartbeat_at <= $1
+        `,
+        [toDate(staleBefore)],
+      );
+
+      const expiredLeasesResult = await client.query(
+        `
+        UPDATE worker_leases
+        SET status = 'expired',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'active'
+          AND (
+            lease_expires_at <= $1
+            OR NOT EXISTS (
+              SELECT 1
+              FROM worker_instances wi
+              WHERE wi.id = worker_leases.worker_instance_id
+            )
+          )
+        `,
+        [toDate(staleBefore)],
+      );
+
+      await client.query("COMMIT");
+      return {
+        expiredLeaseCount: expiredLeasesResult.rowCount ?? 0,
+        removedWorkerInstanceCount: removedWorkerInstancesResult.rowCount ?? 0,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async write(entry: ILogEntry): Promise<void> {

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { LibrarianService } from "../src/services/librarian-service";
 
-test("LibrarianService rotates through workspaces one per cycle", async () => {
-  const syncedWorkspaceIds: string[] = [];
+test("LibrarianService requires a pinned workspace for each cycle", async () => {
   const service = new LibrarianService(
     {
       async getAuthenticatedClient() {
@@ -19,8 +18,7 @@ test("LibrarianService rotates through workspaces one per cycle", async () => {
     } as any,
     {
       async saveWorkspacesToDatabase() {},
-      async syncWorkspaceMetadata(_options: unknown, _client: unknown, workspace: { id: string }) {
-        syncedWorkspaceIds.push(workspace.id);
+      async syncWorkspaceMetadata() {
         return {
           discoveredTrackCount: 1,
           fetchedMetadataCount: 1,
@@ -29,11 +27,10 @@ test("LibrarianService rotates through workspaces one per cycle", async () => {
     } as any,
   );
 
-  await service.runSingleWorkspaceCycle({});
-  await service.runSingleWorkspaceCycle({});
-  await service.runSingleWorkspaceCycle({});
-
-  assert.deepEqual(syncedWorkspaceIds, ["ws-1", "ws-2", "ws-1"]);
+  await assert.rejects(
+    service.runSingleWorkspaceCycle({}),
+    /run-librarian requires --workspace/,
+  );
 });
 
 test("LibrarianService respects a pinned workspace", async () => {

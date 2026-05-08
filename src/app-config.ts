@@ -1,4 +1,4 @@
-import type { WorkerRole } from "./core/contracts";
+import type { SupervisorRuntimeMode, SupervisorWorkerSpec, WorkerRole } from "./core/contracts";
 import type { CliOptions } from "./core/services";
 
 type RuntimeWorkerRole = Extract<WorkerRole, "auth" | "metadata" | "asset" | "processing" | "conversion">;
@@ -6,6 +6,7 @@ type ControlPlaneBackend = "local" | "postgres";
 
 export interface ControlPlaneConfig {
   controlPlane?: ControlPlaneBackend;
+  controlPlaneDir?: string;
   postgresUrl?: string;
 }
 
@@ -65,12 +66,16 @@ export type WorkflowSubmissionOptions = CliOptions & BrowserAuthConfig & {
 export type OrchestratorConfig = CliOptions & ControlPlaneConfig & {
   once?: boolean;
   pollInterval?: string | number;
+  healthHost?: string;
+  healthPort?: string | number;
 };
 
 export type WorkerConfig = CliOptions & ControlPlaneConfig & {
   role: RuntimeWorkerRole;
   once?: boolean;
   pollInterval?: string | number;
+  healthHost?: string;
+  healthPort?: string | number;
 };
 
 export type LibrarianConfig = CliOptions & BrowserAuthConfig & MetadataStoreConfigInput & {
@@ -80,13 +85,42 @@ export type LibrarianConfig = CliOptions & BrowserAuthConfig & MetadataStoreConf
   disabledWorkspaces?: string[];
   librarianInterval?: string | number;
   once?: boolean;
+  healthHost?: string;
+  healthPort?: string | number;
+};
+
+export type SupervisorConfig = ControlPlaneConfig & {
+  cacheDir?: string;
+  token?: string;
+  browser?: string | boolean;
+  ignoreCachedToken?: boolean;
+  browserProfile?: string;
+  profileDirectory?: string;
+  databaseType?: string;
+  database?: string;
+  mode?: SupervisorRuntimeMode;
+  apiHost?: string;
+  apiPort?: string | number;
+  healthHost?: string;
+  orchestratorHealthPort?: string | number;
+  workerTopology?: SupervisorWorkerSpec[];
+  workerRoles?: RuntimeWorkerRole[];
+  workerHealthPortBase?: string | number;
+  librarianInterval?: string | number;
+  librarianHealthPortBase?: string | number;
+  workspaceRefreshIntervalMs?: string | number;
+  excludedWorkspaces?: string[];
+  workspacePolicyFile?: string;
+  startupTimeoutMs?: string | number;
 };
 
 export function normalizeApiServerConfig(options: Record<string, unknown>): ApiServerConfig {
   return {
+    cacheDir: optionalString(options.cacheDir),
     host: optionalString(options.host),
     port: optionalStringOrNumber(options.port),
     controlPlane: optionalControlPlane(options.controlPlane),
+    controlPlaneDir: optionalString(options.controlPlaneDir),
     postgresUrl: optionalString(options.postgresUrl),
     databaseType: optionalString(options.databaseType),
     database: optionalString(options.database),
@@ -105,10 +139,14 @@ export function normalizeOperatorCliConfig(options: Record<string, unknown>): Op
 
 export function normalizeOrchestratorConfig(options: Record<string, unknown>): OrchestratorConfig {
   return {
+    cacheDir: optionalString(options.cacheDir),
     controlPlane: optionalControlPlane(options.controlPlane),
+    controlPlaneDir: optionalString(options.controlPlaneDir),
     postgresUrl: optionalString(options.postgresUrl),
     once: optionalBoolean(options.once),
     pollInterval: optionalStringOrNumber(options.pollInterval),
+    healthHost: optionalString(options.healthHost),
+    healthPort: optionalStringOrNumber(options.healthPort),
   };
 }
 
@@ -119,11 +157,15 @@ export function normalizeWorkerConfig(options: Record<string, unknown>): WorkerC
   }
 
   return {
+    cacheDir: optionalString(options.cacheDir),
     role,
     controlPlane: optionalControlPlane(options.controlPlane),
+    controlPlaneDir: optionalString(options.controlPlaneDir),
     postgresUrl: optionalString(options.postgresUrl),
     once: optionalBoolean(options.once),
     pollInterval: optionalStringOrNumber(options.pollInterval),
+    healthHost: optionalString(options.healthHost),
+    healthPort: optionalStringOrNumber(options.healthPort),
   };
 }
 
@@ -134,6 +176,7 @@ export function normalizeLibrarianConfig(options: Record<string, unknown>): Libr
   }
 
   return {
+    cacheDir: optionalString(options.cacheDir),
     workspace,
     token: optionalString(options.token),
     browser: optionalBrowserOption(options.browser),
@@ -144,9 +187,41 @@ export function normalizeLibrarianConfig(options: Record<string, unknown>): Libr
     disabledWorkspaces: parseWorkspaceListOption(options.disabledWorkspaces),
     librarianInterval: optionalStringOrNumber(options.librarianInterval),
     once: optionalBoolean(options.once),
+    healthHost: optionalString(options.healthHost),
+    healthPort: optionalStringOrNumber(options.healthPort),
     databaseType: optionalString(options.databaseType),
     database: optionalString(options.database),
     postgresUrl: optionalString(options.postgresUrl),
+  };
+}
+
+export function normalizeSupervisorConfig(options: Record<string, unknown>): SupervisorConfig {
+  return {
+    cacheDir: optionalString(options.cacheDir),
+    token: optionalString(options.token),
+    browser: optionalBrowserOption(options.browser),
+    ignoreCachedToken: optionalBoolean(options.ignoreCachedToken),
+    browserProfile: optionalString(options.browserProfile),
+    profileDirectory: optionalString(options.profileDirectory),
+    databaseType: optionalString(options.databaseType),
+    database: optionalString(options.database),
+    mode: optionalSupervisorRuntimeMode(options.mode),
+    controlPlane: optionalControlPlane(options.controlPlane),
+    controlPlaneDir: optionalString(options.controlPlaneDir),
+    postgresUrl: optionalString(options.postgresUrl),
+    apiHost: optionalString(options.apiHost),
+    apiPort: optionalStringOrNumber(options.apiPort),
+    healthHost: optionalString(options.healthHost),
+    orchestratorHealthPort: optionalStringOrNumber(options.orchestratorHealthPort),
+    workerTopology: parseWorkerTopologyOption(options.workerTopology),
+    workerRoles: parseWorkerRolesOption(options.workerRoles),
+    workerHealthPortBase: optionalStringOrNumber(options.workerHealthPortBase),
+    librarianInterval: optionalStringOrNumber(options.librarianInterval),
+    librarianHealthPortBase: optionalStringOrNumber(options.librarianHealthPortBase),
+    workspaceRefreshIntervalMs: optionalStringOrNumber(options.workspaceRefreshIntervalMs),
+    excludedWorkspaces: parseWorkspaceListOption(options.excludedWorkspaces),
+    workspacePolicyFile: optionalString(options.workspacePolicyFile),
+    startupTimeoutMs: optionalStringOrNumber(options.startupTimeoutMs),
   };
 }
 
@@ -187,6 +262,56 @@ function optionalWorkerRole(value: unknown): RuntimeWorkerRole | undefined {
     default:
       return undefined;
   }
+}
+
+function optionalSupervisorRuntimeMode(value: unknown): SupervisorRuntimeMode | undefined {
+  return value === "local" || value === "remote" ? value : undefined;
+}
+
+function parseWorkerRolesOption(value: unknown): SupervisorWorkerSpec["role"][] | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const roles = Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((entry) => optionalWorkerRole(entry))
+        .filter((entry): entry is RuntimeWorkerRole => Boolean(entry)),
+    ),
+  );
+
+  return roles.length > 0 ? roles : undefined;
+}
+
+function parseWorkerTopologyOption(value: unknown): SupervisorWorkerSpec[] | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const counts = new Map<RuntimeWorkerRole, number>();
+  for (const rawEntry of value.split(",")) {
+    const entry = rawEntry.trim();
+    if (!entry) continue;
+
+    const [rawRole, rawCount] = entry.split("=");
+    const role = optionalWorkerRole(rawRole);
+    const parsedCount = Number.parseInt(String(rawCount ?? "1"), 10);
+    if (!role || !Number.isFinite(parsedCount) || parsedCount < 0) {
+      throw new Error(
+        "Invalid --worker-topology entry. Use role=count with roles auth, metadata, asset, processing, conversion",
+      );
+    }
+
+    counts.set(role, parsedCount);
+  }
+
+  const specs = Array.from(counts.entries())
+    .filter(([, count]) => count > 0)
+    .map(([role, count]) => ({ role, count }));
+
+  return specs.length > 0 ? specs : [];
 }
 
 function parseWorkspaceListOption(value: unknown): string[] | undefined {

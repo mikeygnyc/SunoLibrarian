@@ -10,6 +10,7 @@ import type {
   IOrchestrationJob,
   IOrchestrationRepository,
   IOrchestrationStage,
+  IRuntimeStateCleanupResult,
   IStatusEvent,
   IWorkItem,
   IWorkerInstance,
@@ -44,7 +45,7 @@ const EMPTY_STATE: PersistedState = {
 };
 
 export class LocalControlPlaneRepository implements IOrchestrationRepository, ICentralLogRepository {
-  constructor(private readonly baseDir: string = resolveDefaultControlPlaneDir()) {}
+  constructor(private readonly baseDir: string = resolveLocalControlPlaneDir()) {}
 
   async initialize(): Promise<void> {
     fs.mkdirSync(this.baseDir, { recursive: true });
@@ -353,6 +354,39 @@ export class LocalControlPlaneRepository implements IOrchestrationRepository, IC
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   }
 
+  async cleanupStaleRuntimeState(staleBefore: Date): Promise<IRuntimeStateCleanupResult> {
+    return this.withLockedState((state) => {
+      const activeWorkerIds = new Set(
+        state.workerInstances
+          .filter((worker) => worker.heartbeatAt > staleBefore)
+          .map((worker) => worker.id),
+      );
+      const removedWorkerInstanceCount = state.workerInstances.length - activeWorkerIds.size;
+
+      state.workerInstances = state.workerInstances.filter((worker) => activeWorkerIds.has(worker.id));
+
+      let expiredLeaseCount = 0;
+      state.workerLeases = state.workerLeases.map((lease) => {
+        const shouldExpire = lease.status === "active"
+          && (lease.leaseExpiresAt <= staleBefore || !activeWorkerIds.has(lease.workerInstanceId));
+        if (!shouldExpire) {
+          return lease;
+        }
+        expiredLeaseCount += 1;
+        return {
+          ...lease,
+          status: "expired",
+          updatedAt: new Date(),
+        };
+      });
+
+      return {
+        expiredLeaseCount,
+        removedWorkerInstanceCount,
+      };
+    });
+  }
+
   async write(entry: ILogEntry): Promise<void> {
     await this.withLogsLock((logs) => {
       logs.push(entry);
@@ -549,9 +583,17 @@ function dateReviver(_key: string, value: unknown): unknown {
   return value;
 }
 
-function resolveDefaultControlPlaneDir(): string {
-  return process.env.SUNO_EXPORT_CONTROL_PLANE_DIR?.trim()
-    || path.join(os.homedir(), ".suno-export", "orchestration");
+export function resolveLocalControlPlaneDir(configuredDir?: string): string {
+  const explicitDir = typeof configuredDir === "string" && configuredDir.trim().length > 0
+    ? configuredDir.trim()
+    : undefined;
+  const envDir = process.env.SUNO_EXPORT_CONTROL_PLANE_DIR?.trim();
+
+  return path.resolve(
+    explicitDir
+      || envDir
+      || path.join(os.homedir(), ".suno-export", "orchestration"),
+  );
 }
 
 function randomLeaseId(): string {

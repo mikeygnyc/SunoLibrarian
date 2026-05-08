@@ -5,16 +5,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "download",
@@ -28,6 +21,9 @@
         "wav"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -36,16 +32,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - List",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "list",
@@ -57,6 +46,9 @@
         "Profile 2"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -65,16 +57,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Workspaces",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "workspaces",
@@ -82,6 +67,9 @@
         "YOUR_TOKEN_HERE"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -90,16 +78,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Sync",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "sync",
@@ -118,6 +99,9 @@
       ],
       "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -126,16 +110,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Import JSON",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "import-metadata-json",
@@ -146,6 +123,9 @@
       ],
       "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -154,16 +134,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Image List",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "download-images",
@@ -177,6 +150,9 @@
         "Profile 2"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -185,16 +161,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Process",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "process",
@@ -208,6 +177,9 @@
         "--reconvert-missing"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -216,16 +188,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Capture Auth Token",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "capture-auth-token",
@@ -236,7 +201,10 @@
         "--profile-directory",
         "Profile 2"
       ],
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -245,15 +213,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug API",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/api/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--host",
@@ -272,7 +234,40 @@
         "${workspaceFolder}/data/http-api.log"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Local Stack (Supervisor)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/supervisor/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "--database-type",
+        "postgres",
+        "--control-plane",
+        "postgres"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "autoAttachChildProcesses": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -281,15 +276,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Orchestrator",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/orchestrator/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--control-plane",
@@ -298,7 +287,10 @@
         "500"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -307,15 +299,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Librarian",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/librarian/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--workspace",
@@ -332,7 +318,10 @@
         "300000"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -341,15 +330,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Worker - Asset",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/worker/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--role",
@@ -360,7 +343,10 @@
         "500"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -369,15 +355,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Worker - Processing",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/worker/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--role",
@@ -388,8 +368,11 @@
         "500"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
-      "skipFiles": [
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [ 
         "<node_internals>/**"
       ]
     },
@@ -397,15 +380,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Worker - Conversion",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/worker/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--role",
@@ -416,7 +393,10 @@
         "500"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -425,15 +405,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Worker - Auth",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/apps/worker/main.js",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
       "cwd": "${workspaceFolder}",
       "args": [
         "--role",
@@ -444,7 +418,28 @@
         "500"
       ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Supervisor (Bare)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/supervisor/main.js",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "autoAttachChildProcesses": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -452,7 +447,7 @@
   ],
   "compounds": [
     {
-      "name": "Debug API Stack",
+      "name": "Debug Split API Stack",
       "preLaunchTask": "tsc: build - tsconfig.json",
       "configurations": [
         "Debug API",
@@ -465,7 +460,7 @@
       "stopAll": true
     },
     {
-      "name": "Debug API Stack + Librarian",
+      "name": "Debug Split API Stack + Librarian",
       "preLaunchTask": "tsc: build - tsconfig.json",
       "configurations": [
         "Debug API",

@@ -5,139 +5,139 @@ sequence.
 
 ## Phase 11.1: Supervisor Boundary Freeze
 
-- [ ] Confirm `apps/supervisor` as the new app boundary
-- [ ] Confirm that `orchestrator` keeps scheduling ownership only
-- [ ] Confirm that supervisor owns runtime topology and process lifecycle
-- [ ] Confirm that API is always part of the supervised topology
-- [ ] Confirm that librarian processes are required supervised children
-- [ ] Confirm that workspaces discovered at runtime create librarians unless
+- [x] Confirm `apps/supervisor` as the new app boundary
+- [x] Confirm that `orchestrator` keeps scheduling ownership only
+- [x] Confirm that supervisor owns runtime topology and process lifecycle
+- [x] Confirm that API is always part of the supervised topology
+- [x] Confirm that librarian processes are required supervised children
+- [x] Confirm that workspaces discovered at runtime create librarians unless
   excluded by initial config
-- [ ] Confirm that operator-driven workspace disable/enable applies after
+- [x] Confirm that operator-driven workspace disable/enable applies after
   initial librarian creation
-- [ ] Confirm that readiness will use lightweight HTTP health endpoints
-- [ ] Confirm that supervisor modes are `local` and `remote`
+- [x] Confirm that readiness will use lightweight HTTP health endpoints
+- [x] Confirm that supervisor modes are `local` and `remote`
 
 Phase 11 decisions are recorded in `docs/runtime-supervisor-plan.md`.
 
 ## Phase 11.2: Supervisor Contracts
 
-- [ ] Introduce `SupervisorRuntimeMode`
-- [ ] Introduce `SupervisorConfig`
-- [ ] Introduce `SupervisorWorkerSpec`
-- [ ] Introduce `SupervisorLibrarianSpec`
-- [ ] Introduce `SupervisorWorkspacePolicy`
-- [ ] Introduce `SupervisedRuntimeTopology`
-- [ ] Separate supervisor topology config from workflow submission config
-- [ ] Define child readiness/health endpoint contracts
-- [ ] Define child identity metadata for logs and status
+- [x] Introduce `SupervisorRuntimeMode`
+- [x] Introduce `SupervisorConfig`
+- [x] Introduce `SupervisorWorkerSpec`
+- [x] Introduce `SupervisorLibrarianSpec`
+- [x] Introduce `SupervisorWorkspacePolicy`
+- [x] Introduce `SupervisedRuntimeTopology`
+- [x] Separate supervisor topology config from workflow submission config
+- [x] Define child readiness/health endpoint contracts
+- [x] Define child identity metadata for logs and status
 
 ## Phase 11.3: Supervisor Entrypoint
 
-- [ ] Create `apps/supervisor/src/main.ts`
-- [ ] Add a dedicated supervisor bootstrap flow
-- [ ] Keep existing split app entrypoints working during the transition
-- [ ] Add per-app script support for supervisor start/dev flows
-- [ ] Add temporary compatibility wiring if needed without widening old
+- [x] Create `apps/supervisor/src/main.ts`
+- [x] Add a dedicated supervisor bootstrap flow
+- [x] Keep existing split app entrypoints working during the transition
+- [x] Add per-app script support for supervisor start/dev flows
+- [x] Add temporary compatibility wiring if needed without widening old
   bootstraps
 
 ## Phase 11.4: Local Child Process Management
 
-- [ ] Implement local child process spawn/stop behavior
-- [ ] Implement child restart policy handling
-- [ ] Implement labeled child log forwarding
-- [ ] Implement startup sequencing based on readiness
-- [ ] Start `api` as a required child
-- [ ] Start `orchestrator` as a required child
-- [ ] Start a configurable worker set
-- [ ] Surface child exit codes and startup failures clearly
+- [x] Implement local child process spawn/stop behavior
+- [x] Implement child restart policy handling
+- [x] Implement labeled child log forwarding
+- [x] Implement startup sequencing based on readiness
+- [x] Start `api` as a required child
+- [x] Start `orchestrator` as a required child
+- [x] Start a configurable worker set
+- [x] Surface child exit codes and startup failures clearly
 
 ## Phase 11.5: Health and Readiness
 
-- [ ] Add lightweight HTTP health endpoints to `api`
-- [ ] Add lightweight HTTP health endpoints to `orchestrator`
-- [ ] Add lightweight HTTP health endpoints to `worker`
-- [ ] Add lightweight HTTP health endpoints to `librarian`
-- [ ] Have supervisor wait for readiness before declaring the stack healthy
-- [ ] Fail fast when a required child never becomes ready
-- [ ] Include child role/workspace metadata in readiness reporting
+- [x] Add lightweight HTTP health endpoints to `api`
+- [x] Add lightweight HTTP health endpoints to `orchestrator`
+- [x] Add lightweight HTTP health endpoints to `worker`
+- [x] Add lightweight HTTP health endpoints to `librarian`
+- [x] Have supervisor wait for readiness before declaring the stack healthy
+- [x] Fail fast when a required child never becomes ready
+- [x] Include child role/workspace metadata in readiness reporting
 
 ## Phase 11.6: Worker Topology Management
 
-- [ ] Add default local worker topology for `auth`, `asset`, `processing`, and
+- [x] Add default local worker topology for `auth`, `asset`, `processing`, and
   `conversion`
-- [ ] Support configurable worker counts per role
-- [ ] Keep worker-role ownership one role per process
-- [ ] Ensure supervisor can run with reduced worker sets when intentionally
+- [x] Support configurable worker counts per role
+- [x] Keep worker-role ownership one role per process
+- [x] Ensure supervisor can run with reduced worker sets when intentionally
   configured
 
 ## Phase 11.7: Librarian Topology Management
 
-- [ ] Add workspace discovery flow owned by supervisor
-- [ ] Create librarian children for discovered workspaces unless initially
+- [x] Add workspace discovery flow owned by supervisor
+- [x] Create librarian children for discovered workspaces unless initially
   excluded
-- [ ] Keep one workspace per librarian process
-- [ ] Add operator-driven disable/enable handling for existing workspace
+- [x] Keep one workspace per librarian process
+- [x] Add operator-driven disable/enable handling for existing workspace
   librarians
-- [ ] Ensure disabled workspaces generate no librarian polling traffic
-- [ ] Ensure newly discovered allowed workspaces create librarians
-- [ ] Ensure excluded workspaces do not create librarians during initial
+- [x] Ensure disabled workspaces generate no librarian polling traffic
+- [x] Ensure newly discovered allowed workspaces create librarians
+- [x] Ensure excluded workspaces do not create librarians during initial
   discovery
 
 ## Phase 11.8: Remote Supervisor Mode
 
-- [ ] Define remote supervisor control interface
-- [ ] Support remote lifecycle actions for `api`
-- [ ] Support remote lifecycle actions for `orchestrator`
-- [ ] Support remote lifecycle actions for `worker`
-- [ ] Support remote lifecycle actions for `librarian`
-- [ ] Preserve the same topology model across local and remote modes
-- [ ] Keep remote mode deployment-tool specific behavior behind a clear adapter
+- [x] Define remote supervisor control interface
+- [x] Support remote lifecycle actions for `api`
+- [x] Support remote lifecycle actions for `orchestrator`
+- [x] Support remote lifecycle actions for `worker`
+- [x] Support remote lifecycle actions for `librarian`
+- [x] Preserve the same topology model across local and remote modes
+- [x] Keep remote mode deployment-tool specific behavior behind a clear adapter
   boundary
 
 ## Phase 11.9: Postgres Role Reduction
 
-- [ ] Remove remaining startup assumptions that Postgres is the rendezvous layer
-- [ ] Keep Postgres focused on durable shared state
-- [ ] Move startup ordering responsibility into supervisor-owned sequencing
-- [ ] Reduce reliance on database state as proof of runtime liveness
-- [ ] Re-review schema/bootstrap behavior under supervised startup
+- [x] Remove remaining startup assumptions that Postgres is the rendezvous layer
+- [x] Keep Postgres focused on durable shared state
+- [x] Move startup ordering responsibility into supervisor-owned sequencing
+- [x] Reduce reliance on database state as proof of runtime liveness
+- [x] Re-review schema/bootstrap behavior under supervised startup
 
 ## Phase 11.10: Tooling and Docs
 
-- [ ] Add per-app build/dev scripts for supervisor
-- [ ] Update VS Code launch configs to prefer supervisor-based local startup
-- [ ] Update README runtime examples for supervisor mode
-- [ ] Document local versus remote supervisor operation
-- [ ] Document librarian discovery, exclusion, and disable/enable behavior
+- [x] Add per-app build/dev scripts for supervisor
+- [x] Update VS Code launch configs to prefer supervisor-based local startup
+- [x] Update README runtime examples for supervisor mode
+- [x] Document local versus remote supervisor operation
+- [x] Document librarian discovery, exclusion, and disable/enable behavior
 
 ## Validation Checklist
 
-- [ ] supervisor starts `api`, `orchestrator`, and required workers in local
+- [x] supervisor starts `api`, `orchestrator`, and required workers in local
   mode
-- [ ] supervisor waits for required children to become healthy
-- [ ] API remains available even while underlying child topology is supervised
-- [ ] orchestrator remains scheduling-only under supervisor control
-- [ ] each worker process still owns exactly one role
-- [ ] librarian children are created for discovered workspaces unless excluded
-- [ ] each librarian process is pinned to exactly one workspace
-- [ ] disabled workspaces generate no librarian polling traffic
-- [ ] excluded workspaces are skipped during initial librarian creation
-- [ ] remote supervisor mode preserves the same runtime topology model
-- [ ] Postgres is no longer required as startup coordination between local child
+- [x] supervisor waits for required children to become healthy
+- [x] API remains available even while underlying child topology is supervised
+- [x] orchestrator remains scheduling-only under supervisor control
+- [x] each worker process still owns exactly one role
+- [x] librarian children are created for discovered workspaces unless excluded
+- [x] each librarian process is pinned to exactly one workspace
+- [x] disabled workspaces generate no librarian polling traffic
+- [x] excluded workspaces are skipped during initial librarian creation
+- [x] remote supervisor mode preserves the same runtime topology model
+- [x] Postgres is no longer required as startup coordination between local child
   processes
-- [ ] startup failures identify the specific child and failed readiness step
+- [x] startup failures identify the specific child and failed readiness step
 
 ## Suggested First Implementation Slice
 
 If doing this incrementally, start here:
 
-- [ ] add `apps/supervisor/src/main.ts`
-- [ ] add supervisor config types
-- [ ] make supervisor start `api`
-- [ ] make supervisor start `orchestrator`
-- [ ] make supervisor start one worker role
-- [ ] add lightweight HTTP health endpoints for those children
-- [ ] have supervisor wait for readiness before reporting success
+- [x] add `apps/supervisor/src/main.ts`
+- [x] add supervisor config types
+- [x] make supervisor start `api`
+- [x] make supervisor start `orchestrator`
+- [x] make supervisor start one worker role
+- [x] add lightweight HTTP health endpoints for those children
+- [x] have supervisor wait for readiness before reporting success
 
 That slice creates the supervisor foundation before layering in full worker
 topology management, workspace discovery, librarian creation, and remote mode

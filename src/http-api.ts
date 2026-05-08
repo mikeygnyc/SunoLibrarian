@@ -101,13 +101,19 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
       }
 
       if (method === "GET" && pathname === "/healthz") {
-        const response: IHttpApiHealthResponse = { ok: true };
+        const response: IHttpApiHealthResponse = {
+          ok: true,
+          status: "ready",
+          service: "api",
+          role: "api",
+          pid: process.pid,
+        };
         sendJson(res, 200, response);
         return;
       }
 
       if (method === "GET" && pathname === "/api/v1/auth/status") {
-        const storage = new Storage();
+        const storage = new Storage({ cacheDir: options.cacheDir });
         const response: IHttpApiAuthStatusResponse = {
           hasToken: Boolean(storage.getAuthToken()),
         };
@@ -122,7 +128,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
           sendJson(res, 400, { error: "token is required" } satisfies IHttpApiErrorResponse);
           return;
         }
-        const storage = new Storage();
+        const storage = new Storage({ cacheDir: options.cacheDir });
         storage.setAuthToken(token);
         let restartedJobIds: string[] = [];
         let restartError: string | undefined;
@@ -152,7 +158,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
       }
 
       if (method === "DELETE" && pathname === "/api/v1/auth/token") {
-        const storage = new Storage();
+        const storage = new Storage({ cacheDir: options.cacheDir });
         storage.clearAuthToken();
         const response: IHttpApiMutationResponse = { ok: true };
         sendJson(res, 200, response);

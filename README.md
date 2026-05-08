@@ -132,6 +132,20 @@ The API only handles HTTP and control-plane mutations. It does not run the
 orchestrator, workers, or librarian loop in-process. Start those as separate
 processes so each runtime stays focused on one responsibility.
 
+Preferred local setup uses the supervisor so the API, orchestrator, workers,
+and librarian children come up as one managed topology:
+
+```bash
+npm run dev:supervisor -- \
+  --browser http://localhost:9222 \
+  --database-type postgres \
+  --control-plane postgres \
+  --postgres-url "$SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"
+```
+
+If you need to debug one runtime at a time, the split app entrypoints still
+work during the transition.
+
 Example separate-process setup:
 
 ```bash
@@ -306,6 +320,9 @@ Runtime options on workflow commands:
 
 Operational commands:
 
+- `run-supervisor`: preferred local runtime entrypoint. Starts the API,
+  orchestrator, worker set, and discovered librarian children as one managed
+  topology.
 - `run-orchestrator`: poll for queued work and execute available stages.
 - `run-worker --role <role>`: execute only one worker role.
 - `job-status <jobId>`: show the current durable job state.
@@ -321,7 +338,8 @@ suno-export sync \
   --browser http://localhost:9222 \
   --output ./downloads
 
-suno-export run-orchestrator
+suno-export run-supervisor \
+  --browser http://localhost:9222
 ```
 
 The current shared local control plane lives under `~/.suno-export/orchestration`
@@ -329,6 +347,12 @@ and can be overridden with `SUNO_EXPORT_CONTROL_PLANE_DIR`.
 
 For a Postgres-backed control plane, pass `--control-plane postgres` and provide
 `--postgres-url <url>`, or set `SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL`.
+
+Under supervisor control, startup ordering moves out of the database and into
+the supervisor itself: the API, orchestrator, workers, and librarian children
+come up only after their own health endpoints are ready. Postgres stays focused
+on durable shared state when you choose the Postgres control plane; it is not
+required as a local startup rendezvous layer.
 
 ### METADATA STORAGE
 
@@ -642,6 +666,9 @@ Options:
 - `--once`: process at most one polling cycle and exit.
 - `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
 
+This runtime is scheduling-only. In distributed mode it creates or advances
+stages, but workers still execute the role-specific work items.
+
 #### `run-worker`
 
 Run a worker loop for a specific role.
@@ -655,6 +682,55 @@ Options:
 - `--role <role>`: `auth`, `metadata`, `asset`, `processing`, or `conversion`.
 - `--once`: process at most one work item and exit.
 - `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
+
+Each worker process owns exactly one role.
+
+#### `run-supervisor`
+
+Run the managed local runtime supervisor.
+
+```text
+suno-export run-supervisor [options]
+```
+
+Use this as the preferred local runtime entrypoint when you want the API,
+orchestrator, worker pool, and librarian children managed together.
+
+Key options:
+
+- `--mode <mode>`: `local` or `remote`. `local` is implemented today.
+- `--control-plane <backend>`: `local` or `postgres`.
+- `--control-plane-dir <path>`: local control-plane state directory override.
+- `--postgres-url <url>`: Postgres control-plane connection URL.
+- `--api-host <host>` / `--api-port <port>`: API child bind address.
+- `--health-host <host>`: host interface for supervised child health endpoints.
+- `--orchestrator-health-port <port>`: orchestrator child health port.
+- `--worker-topology <spec>`: comma-separated worker counts such as
+  `auth=1,asset=1,processing=1,conversion=1`.
+- `--librarian-health-port-base <port>`: base health port for librarian
+  children.
+- `--workspace-refresh-interval-ms <ms>`: how often supervisor re-discovers
+  workspaces and re-applies workspace policy.
+- `--excluded-workspaces <ids>`: workspace IDs skipped during initial
+  librarian creation.
+- `--workspace-policy-file <path>`: JSON file with runtime policy such as
+  `{"disabledWorkspaceIds":["ws-123"]}`.
+
+Supervisor modes:
+
+- `local`: implemented. Spawns and supervises child processes directly.
+- `remote`: reserved for a future adapter. The CLI surface and topology model
+  are in place, but remote lifecycle actions are not implemented yet.
+
+Librarian behavior under supervisor:
+
+- one librarian child is pinned to one workspace
+- newly discovered workspaces create new librarian children unless excluded
+- excluded workspaces are skipped during initial creation
+- `disabledWorkspaceIds` in `--workspace-policy-file` stops existing librarian
+  children and prevents polling traffic for those workspaces
+- removing a workspace from `disabledWorkspaceIds` allows supervisor to create
+  or restart that workspace librarian on the next refresh cycle
 
 #### `job-status`
 

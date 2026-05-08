@@ -1,9 +1,7 @@
 import type { ILogQueryResult } from "../logging";
-import type { IJobSnapshot, IOrchestrationJob, WorkflowType } from "../orchestration";
+import type { IJobSnapshot, IOrchestrationJob, IRuntimeHealthResponse, WorkflowType } from "../orchestration";
 
-export interface IHttpApiHealthResponse {
-  ok: true;
-}
+export interface IHttpApiHealthResponse extends IRuntimeHealthResponse {}
 
 export interface IHttpApiAuthStatusResponse {
   hasToken: boolean;

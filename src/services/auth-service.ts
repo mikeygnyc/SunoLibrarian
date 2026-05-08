@@ -8,7 +8,9 @@ export interface CliOptions {
   apiUrl?: string;
   browser?: string | boolean;
   browserProfile?: string;
+  cacheDir?: string;
   controlPlane?: string;
+  controlPlaneDir?: string;
   database?: string;
   databaseType?: string;
   delay?: string | number;
@@ -68,6 +70,7 @@ export type AuthDeps<TClient extends AuthClient> = {
     browserEndpoint?: string,
     browserUserDataDir?: string,
     browserProfileDirectory?: string,
+    cacheDir?: string,
     abortSignal?: AbortSignal,
   ) => TClient;
   extractTokenFromBrowser: typeof extractTokenFromBrowser;
@@ -81,7 +84,7 @@ export class AuthService {
     }
 
     return getAuthenticatedClientWithDeps(options, {
-      storage: new Storage(),
+      storage: new Storage({ cacheDir: options.cacheDir }),
       createClient,
       extractTokenFromBrowser,
       log: console,
@@ -97,7 +100,6 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
   const browserUserDataDir = resolveBrowserUserDataDir(options);
   const browserProfileDirectory = resolveBrowserProfileDirectory(options);
   const ignoreCachedToken = options.ignoreCachedToken === true;
-
   if (!ignoreCachedToken) {
     const cachedToken = deps.storage.getAuthToken();
     if (cachedToken) {
@@ -106,6 +108,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
         browserEndpoint,
         browserUserDataDir,
         browserProfileDirectory,
+        options.cacheDir,
         options.__abortSignal,
       );
 
@@ -123,7 +126,12 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
   }
 
   if (!options.token && !browserEndpoint) {
-    throw new Error("Authentication required: provide either --token or --browser");
+    throw new Error(
+      [
+        "Authentication required: provide either --token or --browser",
+        `Resolved auth inputs: token=${describeTokenPresence(options.token)}, browser=${describeBrowserOption(options.browser)}, browserEndpoint=${browserEndpoint ?? "undefined"}`,
+      ].join("\n"),
+    );
   }
 
   let token = options.token;
@@ -143,6 +151,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     browserEndpoint,
     browserUserDataDir,
     browserProfileDirectory,
+    options.cacheDir,
     options.__abortSignal,
   );
 }
@@ -152,6 +161,7 @@ function createClient(
   browserEndpoint?: string,
   browserUserDataDir?: string,
   browserProfileDirectory?: string,
+  cacheDir?: string,
   abortSignal?: AbortSignal,
 ): SunoClient {
   return new SunoClient(
@@ -160,6 +170,7 @@ function createClient(
     browserEndpoint,
     browserUserDataDir,
     browserProfileDirectory,
+    cacheDir,
     abortSignal,
   );
 }
@@ -189,4 +200,18 @@ function resolveBrowserProfileDirectory(options: CliOptions): string | undefined
 
 function isAuthFailure(error: any): boolean {
   return error?.status === 401 || error?.status === 403;
+}
+
+function describeTokenPresence(token: CliOptions["token"]): string {
+  return typeof token === "string" && token.trim().length > 0 ? "[provided]" : "[missing]";
+}
+
+function describeBrowserOption(browser: CliOptions["browser"]): string {
+  if (browser === true) return "true";
+  if (browser === false) return "false";
+  if (typeof browser === "string") {
+    const trimmed = browser.trim();
+    return trimmed.length > 0 ? trimmed : '""';
+  }
+  return String(browser);
 }

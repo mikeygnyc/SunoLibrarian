@@ -9,3 +9,4 @@ export * from "../../lib/interfaces/orchestration/IStatusEvent";
 export * from "../../lib/interfaces/orchestration/IStorageLocation";
 export * from "../../lib/interfaces/orchestration/IRuntimeConfig";
 export * from "../../lib/interfaces/orchestration/IOrchestrationRepository";
+export * from "../../lib/interfaces/orchestration/ISupervisorRuntime";
