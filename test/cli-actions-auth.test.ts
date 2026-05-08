@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captureAuthTokenWithDeps, getAuthenticatedClientWithDeps, type AuthDeps } from "../src/cli-actions";
+import { captureAuthTokenWithDeps } from "../src/cli-actions";
+import { getAuthenticatedClientWithDeps, type AuthDeps } from "../src/services/auth-service";
 
 type MockClient = {
   token: string;

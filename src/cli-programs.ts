@@ -4,6 +4,7 @@ import {
   normalizeLibrarianConfig,
   normalizeOperatorCliConfig,
   normalizeOrchestratorConfig,
+  normalizeSupervisorConfig,
   normalizeWorkerConfig,
 } from "./app-config";
 import {
@@ -29,6 +30,7 @@ import {
   runProcessFlow,
   runRefreshFlow,
   runSyncFlow,
+  runSupervisorFlow,
   runWatchJobFlow,
   runWorkerFlow,
   runWorkspacesFlow,
@@ -46,6 +48,7 @@ export function createLegacyProgram(): Command {
   registerLibrarianCommand(program);
   registerOrchestratorCommand(program);
   registerWorkerCommand(program);
+  registerSupervisorCommand(program);
   registerServeApiCommand(program);
 
   return program;
@@ -70,6 +73,7 @@ export function createApiProgram(): Command {
       .option("--host <host>", "Host interface to bind", "127.0.0.1")
       .option("--port <port>", "Port to listen on", "3000")
       .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+      .option("--control-plane-dir <path>", "Local control-plane state directory")
       .option("--postgres-url <url>", "Postgres control-plane connection URL")
       .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
       .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
@@ -86,7 +90,10 @@ export function createOrchestratorProgram(): Command {
     async (options) => runOrchestratorFlow(normalizeOrchestratorConfig(options)),
     (program) => program
       .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+      .option("--control-plane-dir <path>", "Local control-plane state directory")
       .option("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--health-host <host>", "Host interface for orchestrator health endpoint")
+      .option("--health-port <port>", "Port for orchestrator health endpoint")
       .option("--once", "Process at most one polling cycle and exit")
       .option("--poll-interval <ms>", "Polling interval in ms", "500"),
   );
@@ -100,7 +107,10 @@ export function createWorkerProgram(): Command {
     (program) => program
       .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
       .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+      .option("--control-plane-dir <path>", "Local control-plane state directory")
       .option("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--health-host <host>", "Host interface for worker health endpoint")
+      .option("--health-port <port>", "Port for worker health endpoint")
       .option("--once", "Process at most one work item and exit")
       .option("--poll-interval <ms>", "Polling interval in ms", "500"),
   );
@@ -123,8 +133,50 @@ export function createLibrarianProgram(): Command {
       .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
       .option("--enabled-workspaces <ids>", "Comma-separated workspace allowlist for librarian traffic")
       .option("--disabled-workspaces <ids>", "Comma-separated workspace denylist for librarian traffic")
+      .option("--health-host <host>", "Host interface for librarian health endpoint")
+      .option("--health-port <port>", "Port for librarian health endpoint")
       .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
       .option("--once", "Sync the configured workspace and exit"),
+  );
+}
+
+export function createSupervisorProgram(): Command {
+  return createAppRuntimeProgram(
+    "suno-export-supervisor",
+    "Supervisor runtime for managed local Suno export child processes",
+    async (options) => runSupervisorFlow(normalizeSupervisorConfig(options)),
+    (program) => program
+      .option("--mode <mode>", "Supervisor mode: local or remote", "local")
+      .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+      .option("--control-plane-dir <path>", "Local control-plane state directory")
+      .option("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("-t, --token <token>", "Authentication token used for workspace discovery and librarian children")
+      .option(
+        "-b, --browser [url]",
+        "Connect to existing Chrome instance for workspace discovery (default: http://localhost:9222)",
+      )
+      .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
+      .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+      .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+      .option("--database-type <type>", "Metadata database backend for supervised librarian children", "sqlite")
+      .option("--database <path>", "SQLite metadata database path when --database-type is sqlite")
+      .option("--api-host <host>", "Host interface for the supervised API child", "127.0.0.1")
+      .option("--api-port <port>", "Port for the supervised API child", "3000")
+      .option("--health-host <host>", "Host interface for supervised child health endpoints", "127.0.0.1")
+      .option("--orchestrator-health-port <port>", "Health port for the supervised orchestrator child", "3101")
+      .option(
+        "--worker-topology <spec>",
+        "Comma-separated worker topology as role=count entries",
+        "auth=1,asset=1,processing=1,conversion=1",
+      )
+      .option("--worker-roles <roles>", "Comma-separated worker roles to supervise", "auth")
+      .option("--worker-health-port-base <port>", "Base health port for supervised workers", "3200")
+      .option("--librarian-interval <ms>", "Delay between librarian sync cycles in ms", "300000")
+      .option("--librarian-health-port-base <port>", "Base health port for supervised librarian children", "3300")
+      .option("--workspace-refresh-interval-ms <ms>", "Workspace discovery and policy refresh interval in ms", "60000")
+      .option("--excluded-workspaces <ids>", "Comma-separated workspace IDs excluded from initial librarian creation")
+      .option("--workspace-policy-file <path>", "JSON file with runtime workspace policy such as disabledWorkspaceIds")
+      .option("--startup-timeout-ms <ms>", "Maximum readiness wait per child in ms", "15000"),
   );
 }
 
@@ -142,6 +194,7 @@ function createAppRuntimeProgram(
   configure: (program: Command) => Command,
 ): Command {
   const program = createBaseProgram(name, description);
+  addCacheDirOption(program);
   configure(program);
   program.action(withCliError(handler));
   return program;
@@ -174,6 +227,7 @@ function withOperatorCliConfig<TArgs extends unknown[], TResult>(
 
 function addMetadataDatabaseOptions(command: Command): Command {
   return command
+    .option("--cache-dir <path>", "Local cache root directory")
     .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
     .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres");
@@ -183,16 +237,30 @@ function addRuntimeModeOptions(command: Command): Command {
   return command
     .option("--runtime-mode <mode>", "Execution mode: local or distributed", "local")
     .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+    .option("--control-plane-dir <path>", "Local control-plane state directory")
     .option("--submit-only", "Submit the job without executing it in this process");
+}
+
+function addControlPlaneOptions(command: Command): Command {
+  return command
+    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+    .option("--control-plane-dir <path>", "Local control-plane state directory")
+    .option("--postgres-url <url>", "Postgres control-plane connection URL");
 }
 
 function addApiUrlOption(command: Command): Command {
   return command
+    .option("--cache-dir <path>", "Local cache root directory")
     .option("--api-url <url>", "HTTP API base URL", "http://127.0.0.1:3000");
 }
 
+function addCacheDirOption(command: Command): Command {
+  return command
+    .option("--cache-dir <path>", "Local cache root directory");
+}
+
 function registerOperatorCliCommands(program: Command): void {
-  program
+  addCacheDirOption(program
     .command("capture-auth-token")
     .description("Capture a fresh Suno auth token locally for pasting into the dashboard or API")
     .option(
@@ -202,12 +270,12 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("--save-local", "Save the captured token to the local cache after printing it")
-    .option("--json", "Output the captured token as JSON")
+    .option("--json", "Output the captured token as JSON"))
     .action(withOperatorCliConfig(runCaptureAuthTokenFlow));
 
-  program
+  addCacheDirOption(program
     .command("clear-auth-token")
-    .description("Clear the cached Suno authentication token")
+    .description("Clear the cached Suno authentication token"))
     .action(withOperatorCliConfig(runClearAuthTokenFlow));
 
   addMetadataDatabaseOptions(program
@@ -335,7 +403,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--delay <ms>", "Delay between downloads in ms", "1000"))
     .action(withOperatorCliConfig(runDownloadImagesFlow));
 
-  program
+  addCacheDirOption(program
     .command("list")
     .description("List all tracks")
     .option("-t, --token <token>", "Authentication token")
@@ -350,10 +418,10 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
     .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
-    .option("--json", "Output as JSON")
+    .option("--json", "Output as JSON"))
     .action(withOperatorCliConfig(runListFlow));
 
-  program
+  addCacheDirOption(program
     .command("workspaces")
     .description("List all workspaces")
     .option("-t, --token <token>", "Authentication token")
@@ -367,10 +435,10 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
     .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres")
-    .option("--json", "Output as JSON")
+    .option("--json", "Output as JSON"))
     .action(withOperatorCliConfig(runWorkspacesFlow));
 
-  program
+  addCacheDirOption(program
     .command("metadata <trackId>")
     .description("Fetch metadata for a specific track")
     .option("-t, --token <token>", "Authentication token")
@@ -380,7 +448,7 @@ function registerOperatorCliCommands(program: Command): void {
     )
     .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
-    .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+    .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile"))
     .action(withOperatorCliConfig(runMetadataFlow));
 
   addRuntimeModeOptions(program
@@ -419,28 +487,22 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres"))
     .action(withOperatorCliConfig(runRefreshFlow));
 
-  program
+  addControlPlaneOptions(program
     .command("job-status <jobId>")
     .description("Show local orchestrator job status")
-    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
-    .option("--postgres-url <url>", "Postgres control-plane connection URL")
-    .option("--json", "Output job status as JSON")
+    .option("--json", "Output job status as JSON"))
     .action(withOperatorCliConfig(runJobStatusFlow));
 
-  program
+  addControlPlaneOptions(program
     .command("watch-job <jobId>")
     .description("Watch local orchestrator job status until completion")
-    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
-    .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--json", "Output job status as JSON on each refresh")
-    .option("--interval <ms>", "Polling interval in ms", "1000")
+    .option("--interval <ms>", "Polling interval in ms", "1000"))
     .action(withOperatorCliConfig(runWatchJobFlow));
 
-  program
+  addControlPlaneOptions(program
     .command("logs")
     .description("Query centralized orchestration logs")
-    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
-    .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--job-id <jobId>", "Filter by job id")
     .option("--stage-id <stageId>", "Filter by stage id")
     .option("--work-item-id <workItemId>", "Filter by work item id")
@@ -452,7 +514,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--start-time <iso>", "Only include logs on/after ISO timestamp")
     .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
     .option("--limit <n>", "Maximum logs to return", "100")
-    .option("--json", "Output logs as JSON")
+    .option("--json", "Output logs as JSON"))
     .action(withOperatorCliConfig(runLogsFlow));
 
   addApiUrlOption(program
@@ -527,25 +589,21 @@ function registerLibrarianCommand(program: Command): void {
 }
 
 function registerOrchestratorCommand(program: Command): void {
-  program
+  addControlPlaneOptions(program
     .command("run-orchestrator")
     .description("Run the local control-plane orchestrator loop")
-    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
-    .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--once", "Process at most one polling cycle and exit")
-    .option("--poll-interval <ms>", "Polling interval in ms", "500")
+    .option("--poll-interval <ms>", "Polling interval in ms", "500"))
     .action(withCliError(async (options) => runOrchestratorFlow(normalizeOrchestratorConfig(options))));
 }
 
 function registerWorkerCommand(program: Command): void {
-  program
+  addControlPlaneOptions(program
     .command("run-worker")
     .description("Run a worker loop for a specific role")
     .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
-    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
-    .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--once", "Process at most one work item and exit")
-    .option("--poll-interval <ms>", "Polling interval in ms", "500")
+    .option("--poll-interval <ms>", "Polling interval in ms", "500"))
     .action(withCliError(async (options) => runWorkerFlow(normalizeWorkerConfig(options))));
 }
 
@@ -556,6 +614,7 @@ function registerServeApiCommand(program: Command): void {
     .option("--host <host>", "Host interface to bind", "127.0.0.1")
     .option("--port <port>", "Port to listen on", "3000")
     .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+    .option("--control-plane-dir <path>", "Local control-plane state directory")
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
     .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
@@ -563,4 +622,42 @@ function registerServeApiCommand(program: Command): void {
     .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
     .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log")
     .action(withCliError(async (options) => runServeApiFlow(normalizeApiServerConfig(options))));
+}
+
+function registerSupervisorCommand(program: Command): void {
+  addCacheDirOption(program
+    .command("run-supervisor")
+    .description("Run the local supervisor for managed runtime child processes")
+    .option("--mode <mode>", "Supervisor mode: local or remote", "local")
+    .option("--control-plane <backend>", "Control-plane backend: local or postgres", "local")
+    .option("--control-plane-dir <path>", "Local control-plane state directory")
+    .option("--postgres-url <url>", "Postgres control-plane connection URL")
+    .option("-t, --token <token>", "Authentication token used for workspace discovery and librarian children")
+    .option(
+      "-b, --browser [url]",
+      "Connect to existing Chrome instance for workspace discovery (default: http://localhost:9222)",
+    )
+    .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
+    .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
+    .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
+    .option("--database-type <type>", "Metadata database backend for supervised librarian children", "sqlite")
+    .option("--database <path>", "SQLite metadata database path when --database-type is sqlite")
+    .option("--api-host <host>", "Host interface for the supervised API child", "127.0.0.1")
+    .option("--api-port <port>", "Port for the supervised API child", "3000")
+    .option("--health-host <host>", "Host interface for supervised child health endpoints", "127.0.0.1")
+    .option("--orchestrator-health-port <port>", "Health port for the supervised orchestrator child", "3101")
+    .option(
+      "--worker-topology <spec>",
+      "Comma-separated worker topology as role=count entries",
+      "auth=1,asset=1,processing=1,conversion=1",
+    )
+    .option("--worker-roles <roles>", "Comma-separated worker roles to supervise", "auth")
+    .option("--worker-health-port-base <port>", "Base health port for supervised workers", "3200")
+    .option("--librarian-interval <ms>", "Delay between librarian sync cycles in ms", "300000")
+    .option("--librarian-health-port-base <port>", "Base health port for supervised librarian children", "3300")
+    .option("--workspace-refresh-interval-ms <ms>", "Workspace discovery and policy refresh interval in ms", "60000")
+    .option("--excluded-workspaces <ids>", "Comma-separated workspace IDs excluded from initial librarian creation")
+    .option("--workspace-policy-file <path>", "JSON file with runtime workspace policy such as disabledWorkspaceIds")
+    .option("--startup-timeout-ms <ms>", "Maximum readiness wait per child in ms", "15000"))
+    .action(withCliError(async (options) => runSupervisorFlow(normalizeSupervisorConfig(options))));
 }

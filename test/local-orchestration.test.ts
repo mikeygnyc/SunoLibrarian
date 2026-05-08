@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import { runLogsFlow, runOrchestratorFlow, runProcessFlow } from "../src/cli-actions";
+import { runLogsFlow, runOrchestratorFlow, runProcessFlow, runWorkerFlow } from "../src/cli-actions";
 import { LocalControlPlaneRepository, LocalJobOrchestrator } from "../src/orchestration";
 import { DEFAULT_RUNTIME_CONFIG } from "../src/orchestration/runtime-defaults";
 
@@ -54,6 +54,44 @@ test("local control plane repository persists jobs, stages, and logs", async () 
   assert.equal(logs.entries.length, 1);
   assert.ok(fs.existsSync(path.join(dir, "state.json")));
   assert.ok(fs.existsSync(path.join(dir, "logs.json")));
+});
+
+test("local control plane cleanup treats stale worker state as bookkeeping instead of liveness", async () => {
+  const dir = createTempControlPlaneDir();
+  const repository = new LocalControlPlaneRepository(dir);
+  await repository.initialize();
+
+  const staleHeartbeat = new Date("2026-01-01T00:00:00.000Z");
+  const now = new Date("2026-01-01T00:02:00.000Z");
+
+  await repository.upsertWorkerInstance({
+    id: "worker-stale",
+    role: "processing",
+    runtimeMode: "distributed",
+    hostname: "host-a",
+    processId: 123,
+    startedAt: staleHeartbeat,
+    heartbeatAt: staleHeartbeat,
+    metadata: { kind: "worker-runtime" },
+  });
+  await repository.upsertLease({
+    id: "lease-stale",
+    resourceKey: "processing-global",
+    status: "active",
+    workerInstanceId: "worker-stale",
+    workerRole: "processing",
+    leaseExpiresAt: new Date("2026-01-01T00:00:30.000Z"),
+    heartbeatAt: staleHeartbeat,
+    createdAt: staleHeartbeat,
+    updatedAt: staleHeartbeat,
+  });
+
+  const cleanup = await repository.cleanupStaleRuntimeState(now);
+  const activeLeases = await repository.listActiveLeases();
+
+  assert.equal(cleanup.removedWorkerInstanceCount, 1);
+  assert.equal(cleanup.expiredLeaseCount, 1);
+  assert.deepEqual(activeLeases, []);
 });
 
 test("local job orchestrator records stage and job completion", async () => {
@@ -215,7 +253,7 @@ test("conversion stage capacity respects configured max active leases", async ()
   assert.equal(finalSnapshot.stages[0]?.status, "succeeded");
 });
 
-test("submit-only workflow can be completed by orchestrator loop", async () => {
+test("submit-only workflow can be completed by orchestrator and worker loops", async () => {
   const dir = createTempControlPlaneDir();
   const previousDir = process.env.SUNO_EXPORT_CONTROL_PLANE_DIR;
   process.env.SUNO_EXPORT_CONTROL_PLANE_DIR = dir;
@@ -237,7 +275,8 @@ test("submit-only workflow can be completed by orchestrator loop", async () => {
     assert.equal(queuedJob?.status, "queued");
 
     await runOrchestratorFlow({ once: true, pollInterval: "10" });
-    await runOrchestratorFlow({ once: true, pollInterval: "10" });
+    await runWorkerFlow({ role: "processing", once: true, pollInterval: "10" });
+    await runWorkerFlow({ role: "conversion", once: true, pollInterval: "10" });
     await runOrchestratorFlow({ once: true, pollInterval: "10" });
 
     const [completedJob] = await repository.listJobs(1);
@@ -279,7 +318,8 @@ test("centralized logs can be queried by job id after worker execution", async (
     assert.ok(job?.id);
 
     await runOrchestratorFlow({ once: true, pollInterval: "10" });
-    await runOrchestratorFlow({ once: true, pollInterval: "10" });
+    await runWorkerFlow({ role: "processing", once: true, pollInterval: "10" });
+    await runWorkerFlow({ role: "conversion", once: true, pollInterval: "10" });
     await runOrchestratorFlow({ once: true, pollInterval: "10" });
 
     capturedLogs.length = 0;

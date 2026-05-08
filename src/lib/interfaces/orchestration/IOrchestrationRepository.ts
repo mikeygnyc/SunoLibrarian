@@ -13,6 +13,11 @@ export interface IClaimedWorkItem {
   workItem: IWorkItem;
 }
 
+export interface IRuntimeStateCleanupResult {
+  expiredLeaseCount: number;
+  removedWorkerInstanceCount: number;
+}
+
 export interface IOrchestrationRepository {
   initialize(): Promise<void>;
   close(): Promise<void>;
@@ -61,6 +66,7 @@ export interface IOrchestrationRepository {
   }): Promise<IWorkerLease | null>;
   appendStatusEvent(event: IStatusEvent): Promise<void>;
   listStatusEvents(jobId: string): Promise<IStatusEvent[]>;
+  cleanupStaleRuntimeState(staleBefore: Date): Promise<IRuntimeStateCleanupResult>;
 }
 
 export interface ICentralLogRepository {

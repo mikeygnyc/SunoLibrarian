@@ -1,10 +1,11 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import {humanId, poolSize, minLength, maxLength} from 'human-id'
 import { extractTokenFromBrowser } from "./auth";
 import { createCancellationMonitor, isCancellationError } from "./cancellation";
 import { HttpApiClient } from "./http-api-client";
-import type { LibrarianConfig, OrchestratorConfig, WorkerConfig } from "./app-config";
+import type { LibrarianConfig, OrchestratorConfig, SupervisorConfig, WorkerConfig } from "./app-config";
 import type { IClaimedWorkItem, IJobSnapshot, ILogQueryResult, WorkflowType } from "./core/contracts";
 import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./core/orchestration";
 import {
@@ -14,7 +15,6 @@ import {
   configureMetadataAcquisitionService,
   ConversionService,
   filterWorkspaces,
-  getAuthenticatedClientWithDeps,
   LibrarianService,
   MetadataAcquisitionService,
   ProcessingPlannerService,
@@ -25,6 +25,8 @@ import {
   type DownloadFlowResult,
 } from "./core/services";
 import { Storage } from "./storage";
+import { runSupervisor } from "./supervisor/local-supervisor";
+import { startRuntimeHealthServer } from "./supervisor/runtime-health";
 import {
   describeMetadataStoreConfig,
   exportMetadataDatabaseToJson,
@@ -36,8 +38,8 @@ import {
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 const DEFAULT_WATCH_INTERVAL_MS = 1000;
 const DEFAULT_WORKER_POLL_INTERVAL_MS = 500;
+const DEFAULT_RUNTIME_STALE_AFTER_MS = 60_000;
 
-export { getAuthenticatedClientWithDeps };
 export type { AuthClient, AuthDeps, AuthStorage };
 export type CaptureAuthTokenDeps = {
   extractTokenFromBrowser: typeof extractTokenFromBrowser;
@@ -129,7 +131,7 @@ async function runDownloadWorkflow(options: CliOptions): Promise<DownloadFlowRes
   return assetAcquisitionService.downloadTracks(
     {
       ...options,
-      __storage: new Storage(),
+      __storage: new Storage({ cacheDir: options.cacheDir }),
     },
     client,
   );
@@ -156,8 +158,8 @@ async function runProcessWorkflow(options: CliOptions): Promise<void> {
   );
 }
 
-export async function runClearAuthTokenFlow(): Promise<void> {
-  const storage = new Storage();
+export async function runClearAuthTokenFlow(options: CliOptions = {}): Promise<void> {
+  const storage = new Storage({ cacheDir: options.cacheDir });
   storage.clearAuthToken();
   console.log("Cached authentication token cleared.");
 }
@@ -195,7 +197,7 @@ export async function captureAuthTokenWithDeps(
 export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise<void> {
   await captureAuthTokenWithDeps(options, {
     extractTokenFromBrowser,
-    storage: new Storage(),
+    storage: new Storage({ cacheDir: options.cacheDir }),
     log: console,
   });
 }
@@ -482,7 +484,24 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> {
-  await librarianService.run(options);
+  const healthServer = await startRuntimeHealthServer({
+    service: "librarian",
+    role: "librarian",
+    host: options.healthHost,
+    port: options.healthPort,
+    workspaceId: options.workspace,
+  });
+
+  try {
+    healthServer?.markReady();
+    await librarianService.run(options);
+  } finally {
+    await healthServer?.close();
+  }
+}
+
+export async function runSupervisorFlow(options: SupervisorConfig): Promise<void> {
+  await runSupervisor(options);
 }
 
 export async function runJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
@@ -624,24 +643,21 @@ export async function runApiLogsFlow(options: CliOptions = {}): Promise<void> {
 export async function runOrchestratorFlow(options: OrchestratorConfig = {}): Promise<void> {
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
+  const healthServer = await startRuntimeHealthServer({
+    service: "orchestrator",
+    role: "orchestrator",
+    host: options.healthHost,
+    port: options.healthPort,
+  });
   const loggerRepository = createControlPlaneRepository(options);
-  await loggerRepository.initialize();
-  const logger = createRuntimeLogger(loggerRepository);
-  const roles: Array<"orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion"> = [
-    "orchestrator",
-    "auth",
-    "metadata",
-    "asset",
-    "processing",
-    "conversion",
-  ];
 
   try {
+    await loggerRepository.initialize();
+    const logger = createRuntimeLogger(loggerRepository);
+
+    healthServer?.markReady();
     do {
-      let processed = 0;
-      for (const role of roles) {
-        processed += await processWorkerRole(role, { ...options, once: true });
-      }
+      const processed = await processWorkerRole("orchestrator", { ...options, once: true });
 
       if (once || processed === 0) {
         if (processed === 0) {
@@ -655,6 +671,7 @@ export async function runOrchestratorFlow(options: OrchestratorConfig = {}): Pro
       }
     } while (true);
   } finally {
+    await healthServer?.close();
     await loggerRepository.close();
   }
 }
@@ -663,11 +680,19 @@ export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
   const role = options.role;
   const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
+  const healthServer = await startRuntimeHealthServer({
+    service: "worker",
+    role,
+    host: options.healthHost,
+    port: options.healthPort,
+  });
   const loggerRepository = createControlPlaneRepository(options);
-  await loggerRepository.initialize();
-  const logger = createRuntimeLogger(loggerRepository);
 
   try {
+    await loggerRepository.initialize();
+    const logger = createRuntimeLogger(loggerRepository);
+
+    healthServer?.markReady();
     do {
       const processed = await processWorkerRole(role, { ...options, once: true });
       if (once) return;
@@ -680,6 +705,7 @@ export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
       }
     } while (true);
   } finally {
+    await healthServer?.close();
     await loggerRepository.close();
   }
 }
@@ -727,7 +753,9 @@ async function processWorkerRole(
   try {
     await repository.initialize();
     const logger = createRuntimeLogger(repository);
-    const workerInstanceId = `worker-${role}-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+    const staleBefore = new Date(Date.now() - DEFAULT_RUNTIME_STALE_AFTER_MS);
+    const cleanup = await repository.cleanupStaleRuntimeState(staleBefore);
+    const workerInstanceId = `worker-${role}-${process.pid}-${humanId({ separator: "-",capitalize:false})}`;
     await repository.upsertWorkerInstance({
       id: workerInstanceId,
       role,
@@ -741,6 +769,17 @@ async function processWorkerRole(
         controlPlaneBackend: resolveControlPlaneBackend(options),
       },
     });
+    if (cleanup.expiredLeaseCount > 0 || cleanup.removedWorkerInstanceCount > 0) {
+      await logger.info("stale runtime state cleaned before polling", {
+        workerInstanceId,
+        role,
+        properties: {
+          expiredLeaseCount: cleanup.expiredLeaseCount,
+          removedWorkerInstanceCount: cleanup.removedWorkerInstanceCount,
+          controlPlaneBackend: resolveControlPlaneBackend(options),
+        },
+      });
+    }
     await logger.info("worker polling for work", {
       workerInstanceId,
       role,

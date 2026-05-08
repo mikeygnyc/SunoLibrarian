@@ -21,6 +21,7 @@
     "build:orchestrator": "npm run build",
     "build:worker": "npm run build",
     "build:librarian": "npm run build",
+    "build:supervisor": "npm run build",
     "test": "node --test -r ts-node/register test/**/*.test.ts",
     "install:local": "scripts/install.sh",
     "install:global": "scripts/install-global.sh",
@@ -30,12 +31,14 @@
     "start:orchestrator": "node dist/apps/orchestrator/main.js",
     "start:worker": "node dist/apps/worker/main.js",
     "start:librarian": "node dist/apps/librarian/main.js",
+    "start:supervisor": "node dist/apps/supervisor/main.js",
     "dev": "ts-node src/index.ts",
     "dev:api": "ts-node src/apps/api/main.ts",
     "dev:operator": "ts-node src/apps/operator-cli/main.ts",
     "dev:orchestrator": "ts-node src/apps/orchestrator/main.ts",
     "dev:worker": "ts-node src/apps/worker/main.ts",
     "dev:librarian": "ts-node src/apps/librarian/main.ts",
+    "dev:supervisor": "ts-node src/apps/supervisor/main.ts",
     "postinstall": "node scripts/install-manpage.js",
     "preuninstall": "node scripts/uninstall-manpage.js"
   },
@@ -43,6 +46,7 @@
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "commander": "^11.1.0",
+    "human-id": "^4.1.3",
     "node-fetch": "^2.7.0",
     "pg": "^8.20.0",
     "puppeteer": "^24.37.2"

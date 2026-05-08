@@ -24,6 +24,7 @@ export class SunoClient {
     browserUrl?: string,
     browserUserDataDir?: string,
     browserProfileDirectory?: string,
+    cacheDir?: string,
     abortSignal?: AbortSignal,
   ) {
     this.authToken = authToken;
@@ -31,7 +32,7 @@ export class SunoClient {
     this.browserUserDataDir = browserUserDataDir;
     this.browserProfileDirectory = browserProfileDirectory;
     this.abortSignal = abortSignal;
-    this.storage = new Storage();
+    this.storage = new Storage({ cacheDir });
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
       this.storage.setDeviceId(this.deviceId);
