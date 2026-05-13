@@ -17,7 +17,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
     assertNotCancelled: options.assertNotCancelled,
     abortSignal: options.abortSignal,
     metadataDatabaseType: metadataStoreConfig.type,
-    metadataDatabasePath: metadataStoreConfig.sqlitePath,
+    metadataDatabasePath: metadataStoreConfig.sqlitePath ?? metadataStoreConfig.jsonFilePath,
     metadataPostgresUrl: metadataStoreConfig.postgresUrl,
     metadataFilePath: options.metadataFile
       ? path.resolve(options.metadataFile)
@@ -49,7 +49,7 @@ export async function runConverter(options: IConverterRunOptions): Promise<void>
   logger.log("===================");
   logger.log(`Input:  ${config.inputRoot}`);
   logger.log(`Output: ${config.outputRoot}`);
-  logger.log(`Metadata database: ${describeMetadataStoreConfig(metadataStoreConfig)}`);
+  logger.log(`Metadata store: ${describeMetadataStoreConfig(metadataStoreConfig)}`);
   logger.log(`Formats: ${config.formats.join(", ")}`);
   logger.log(`MP3 Bitrate: ${config.mp3Bitrate}kbps`);
   logger.log(`Embed Images: ${config.embedImages}`);

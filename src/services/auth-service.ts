@@ -1,5 +1,9 @@
-import * as path from "path";
-import { extractTokenFromBrowser } from "../auth";
+import {
+  extractTokenFromBrowser,
+  resolveBrowserEndpoint,
+  resolveBrowserProfileDirectory,
+  resolveBrowserUserDataDir,
+} from "../lib/auth/auth";
 import { SunoClient } from "../client";
 import { Storage } from "../storage";
 
@@ -9,8 +13,8 @@ export interface CliOptions {
   browser?: string | boolean;
   browserProfile?: string;
   cacheDir?: string;
+  config?: string;
   controlPlane?: string;
-  controlPlaneDir?: string;
   database?: string;
   databaseType?: string;
   delay?: string | number;
@@ -27,6 +31,7 @@ export interface CliOptions {
   limit?: string | number;
   list?: string;
   logFile?: string;
+  localRoot?: string;
   once?: boolean;
   output?: string;
   payload?: string;
@@ -38,10 +43,8 @@ export interface CliOptions {
   profileDirectory?: string;
   reason?: string;
   role?: string;
-  runtimeMode?: string;
   startTime?: string;
   stageId?: string;
-  submitOnly?: boolean;
   token?: string;
   workerInstanceId?: string;
   workflowType?: string;
@@ -54,8 +57,6 @@ export interface CliOptions {
   };
   onTrackDownloaded?: (params: { clipId: string; outputDir: string }) => void;
 }
-
-const DEFAULT_BROWSER_ENDPOINT = "http://localhost:9222";
 
 export type AuthStorage = Pick<Storage, "getAuthToken" | "setAuthToken">;
 
@@ -173,29 +174,6 @@ function createClient(
     cacheDir,
     abortSignal,
   );
-}
-
-function resolveBrowserEndpoint(options: CliOptions): string | undefined {
-  const browser = options.browser;
-  if (browser == null || browser === false) return undefined;
-  if (browser === true) return DEFAULT_BROWSER_ENDPOINT;
-  if (typeof browser === "string") {
-    const trimmed = browser.trim();
-    return trimmed.length > 0 ? trimmed : DEFAULT_BROWSER_ENDPOINT;
-  }
-  return DEFAULT_BROWSER_ENDPOINT;
-}
-
-function resolveBrowserUserDataDir(options: CliOptions): string | undefined {
-  if (typeof options.browserProfile !== "string") return undefined;
-  const trimmed = options.browserProfile.trim();
-  return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
-}
-
-function resolveBrowserProfileDirectory(options: CliOptions): string | undefined {
-  if (typeof options.profileDirectory !== "string") return undefined;
-  const trimmed = options.profileDirectory.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function isAuthFailure(error: any): boolean {

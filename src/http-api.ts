@@ -4,7 +4,7 @@ import { URL } from "url";
 import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 import { renderDashboardHtml } from "./http-dashboard";
 import { HttpApiServerLogger } from "./http-api-server-logger";
-import type { ApiServerConfig, WorkflowSubmissionOptions } from "./app-config";
+import type { ApiServerConfig, ApiServerMode, ApiServerStorageConfig, WorkflowSubmissionOptions } from "./app-config";
 import type {
   IHttpApiAuthStatusResponse,
   IHttpApiCancelJobRequest,
@@ -41,20 +41,18 @@ type ApiWorkflowDefaults = Pick<
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
 export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<void> {
-  // The API process is intentionally server-only. Keep worker/orchestrator/
-  // librarian runtime loops out of this bootstrap while the app split is in
-  // progress.
+  // The API process is intentionally server-only. Keep worker and librarian
+  // runtime loops out of this bootstrap.
   const host = typeof options.host === "string" && options.host.trim().length > 0
     ? options.host.trim()
     : "127.0.0.1";
   const port = parseIntegerOption(options.port, 3000, "--port");
-  const defaultControlPlane = {
-    controlPlane: typeof options.controlPlane === "string" ? options.controlPlane : "local",
-    postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
-  };
+  const apiMode = resolveApiServerMode(options);
+  const defaultControlPlane = resolveApiControlPlaneOptions(options, apiMode);
   const workflowDefaults = resolveApiWorkflowDefaults({
     ...options,
-    ...defaultControlPlane,
+    mode: apiMode,
+    postgresUrl: defaultControlPlane.postgresUrl,
   });
   const serverLogger = new HttpApiServerLogger({
     logFilePath: resolveServerLogPath(options.logFile),
@@ -64,6 +62,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
   serverLogger.info("serve-api starting", {
     host,
     port,
+    apiMode,
     controlPlane: defaultControlPlane.controlPlane,
     workflowDatabaseType: workflowDefaults.databaseType,
     workflowDatabasePath: workflowDefaults.database,
@@ -197,8 +196,6 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
           ...defaultControlPlane,
           ...workflowDefaults,
           ...validatedOptions,
-          runtimeMode: "distributed",
-          submitOnly: true,
         };
         const jobId = await submitWorkflowJob(workflowType, submitOptions);
         serverLogger.info("workflow submitted via api", {
@@ -312,6 +309,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
   });
 
   console.log(`HTTP API listening on http://${host}:${port}`);
+  console.log(`HTTP API mode: ${apiMode}`);
   console.log(`HTTP API local log file: ${serverLogger.logFilePath}`);
 
   await new Promise<void>((resolve, reject) => {
@@ -328,6 +326,31 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   });
+}
+
+function resolveApiServerMode(options: ApiServerConfig): ApiServerMode {
+  if ((options as { mode?: string }).mode === "standalone") {
+    throw createHttpError(400, "serve-api no longer supports standalone mode; provide --postgres-url");
+  }
+  if (typeof options.postgresUrl === "string" && options.postgresUrl.trim().length > 0) {
+    return "postgres";
+  }
+  throw createHttpError(400, "serve-api requires --postgres-url");
+}
+
+function resolveApiControlPlaneOptions(
+  options: ApiServerConfig,
+  apiMode: ApiServerMode,
+): Pick<CliOptions, "controlPlane" | "postgresUrl"> {
+  void apiMode;
+  const postgresUrl = typeof options.postgresUrl === "string" ? options.postgresUrl.trim() : "";
+  if (!postgresUrl) {
+    throw createHttpError(400, "serve-api requires --postgres-url");
+  }
+  return {
+    controlPlane: "postgres",
+    postgresUrl,
+  };
 }
 
 function buildLogFilter(url: URL): ILogQueryFilter {
@@ -384,7 +407,6 @@ function normalizeWorkflowType(value: unknown): WorkflowType | undefined {
 
 function normalizeWorkerRole(value: string | null): ILogQueryFilter["role"] | undefined {
   switch (value?.trim()) {
-    case "orchestrator":
     case "auth":
     case "metadata":
     case "asset":
@@ -452,10 +474,11 @@ function sendHtml(res: http.ServerResponse, statusCode: number, body: string): v
   res.end(body);
 }
 
-function resolveApiWorkflowDefaults(options: ApiServerConfig): ApiWorkflowDefaults {
+function resolveApiWorkflowDefaults(options: ApiServerStorageConfig): ApiWorkflowDefaults {
+  const apiMode = resolveApiServerMode(options);
   const databaseType = typeof options.databaseType === "string"
     ? options.databaseType
-    : options.controlPlane === "postgres"
+    : apiMode === "postgres"
       ? "postgres"
       : "sqlite";
   const downloadRoot = resolveDirectoryOption(options.output, DEFAULT_DOWNLOAD_ROOT);

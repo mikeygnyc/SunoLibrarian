@@ -62,8 +62,8 @@ export class AssetAcquisitionService {
     const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
     await importMetadataJsonIfRequested(options, storeConfig);
     const metadataStore = await createMetadataStore(storeConfig);
-    console.log(`Metadata database: ${describeMetadataStoreConfig(storeConfig)}`);
-    console.log("Using targeted metadata lookups from the database");
+    console.log(`Metadata store: ${describeMetadataStoreConfig(storeConfig)}`);
+    console.log("Using targeted metadata lookups from the metadata store");
 
     try {
       console.log("Fetching workspaces...");
@@ -322,7 +322,7 @@ export class AssetAcquisitionService {
       inputRoot: rootDir,
       outputRoot: rootDir,
       metadataDatabaseType: storeConfig?.type,
-      metadataDatabasePath: storeConfig?.sqlitePath,
+      metadataDatabasePath: storeConfig?.sqlitePath ?? storeConfig?.jsonFilePath,
       metadataPostgresUrl: storeConfig?.postgresUrl,
       formats: ["flac", "mp3", "alac"] as AudioFormat[],
       mp3Bitrate: 320,

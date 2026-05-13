@@ -5,7 +5,7 @@ import type { Page } from 'puppeteer';
 import type { IRateLimitConfig, ITrack, IWorkspace, ITrackMetadata } from './lib/interfaces';
 import { CancellationError } from './cancellation';
 import { Storage } from './storage';
-import { attachBrowserAbortHandlers, connectOrLaunchBrowser } from './auth';
+import { attachBrowserAbortHandlers, connectOrLaunchBrowser } from './lib/auth/auth';
 
 export class SunoClient {
   private authToken: string;

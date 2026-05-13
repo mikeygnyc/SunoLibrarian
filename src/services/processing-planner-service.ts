@@ -18,7 +18,7 @@ export class ProcessingPlannerService {
       assertNotCancelled: options.__assertNotCancelled,
       abortSignal: options.__abortSignal,
       metadataDatabaseType: storeConfig.type,
-      metadataDatabase: storeConfig.sqlitePath,
+      metadataDatabase: storeConfig.sqlitePath ?? storeConfig.jsonFilePath,
       metadataPostgresUrl: storeConfig.postgresUrl,
       metadataFile: this.resolveMetadataFilePath(outputDir, options),
       copySongsMetadataToOutput: options.copySongsMetadataToOutput === true,

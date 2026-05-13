@@ -5,7 +5,7 @@ export interface IProcessorConfig {
   outputRoot: string;
   assertNotCancelled?: () => Promise<void> | void;
   abortSignal?: AbortSignal;
-  metadataDatabaseType?: "sqlite" | "postgres";
+  metadataDatabaseType?: "sqlite" | "postgres" | "file";
   metadataDatabasePath?: string;
   metadataPostgresUrl?: string;
   metadataFilePath?: string;
