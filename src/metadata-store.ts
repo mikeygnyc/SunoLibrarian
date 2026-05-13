@@ -224,12 +224,13 @@ CREATE INDEX IF NOT EXISTS idx_song_workspaces_workspace_id
 ON song_workspaces(workspace_id);
 `;
 
-export type MetadataDatabaseType = "sqlite" | "postgres";
+export type MetadataDatabaseType = "sqlite" | "postgres" | "file";
 
 export interface MetadataStoreConfig {
   type: MetadataDatabaseType;
   sqlitePath?: string;
   postgresUrl?: string;
+  jsonFilePath?: string;
 }
 
 export interface MetadataStoreConfigInput {
@@ -364,6 +365,12 @@ export function writeMetadataJsonFile(filePath: string, songs: ISongData[]): voi
   fs.renameSync(tmp, filePath);
 }
 
+export function resolveMetadataJsonPath(filePath?: string): string {
+  return filePath && filePath.trim().length > 0
+    ? path.resolve(filePath.trim())
+    : path.resolve("songs_metadata.json");
+}
+
 export function resolveDatabasePath(databasePath?: string): string {
   return databasePath && databasePath.trim().length > 0
     ? path.resolve(databasePath.trim())
@@ -376,8 +383,8 @@ export function resolveMetadataStoreConfig(input?: MetadataStoreConfigInput | st
   }
 
   const requestedType = input?.databaseType?.trim().toLowerCase() || "sqlite";
-  if (requestedType !== "sqlite" && requestedType !== "postgres") {
-    throw new Error("--database-type must be either sqlite or postgres");
+  if (requestedType !== "sqlite" && requestedType !== "postgres" && requestedType !== "file") {
+    throw new Error("--database-type must be sqlite, postgres, or file");
   }
 
   if (requestedType === "postgres") {
@@ -388,13 +395,21 @@ export function resolveMetadataStoreConfig(input?: MetadataStoreConfigInput | st
     return { type: "postgres", postgresUrl };
   }
 
+  if (requestedType === "file") {
+    return { type: "file", jsonFilePath: resolveMetadataJsonPath(input?.database) };
+  }
+
   return { type: "sqlite", sqlitePath: resolveDatabasePath(input?.database) };
 }
 
 export function describeMetadataStoreConfig(config: MetadataStoreConfig): string {
-  return config.type === "postgres"
-    ? describePostgresConnection(config.postgresUrl ?? "")
-    : resolveDatabasePath(config.sqlitePath);
+  if (config.type === "postgres") {
+    return describePostgresConnection(config.postgresUrl ?? "");
+  }
+  if (config.type === "file") {
+    return resolveMetadataJsonPath(config.jsonFilePath);
+  }
+  return resolveDatabasePath(config.sqlitePath);
 }
 
 export async function createMetadataStore(
@@ -415,7 +430,78 @@ export async function createMetadataStore(
     return store;
   }
 
+  if (resolvedConfig.type === "file") {
+    return new JsonMetadataStore(resolveMetadataJsonPath(resolvedConfig.jsonFilePath), storeOptions);
+  }
+
   return new SqliteMetadataStore(resolveDatabasePath(resolvedConfig.sqlitePath), storeOptions);
+}
+
+export class JsonMetadataStore implements MetadataStore {
+  readonly location: string;
+  private readonly existedBeforeOpen: boolean;
+  private readonly log?: MetadataStoreLogger;
+
+  constructor(jsonFilePath: string, options: MetadataStoreOptions = {}) {
+    this.location = path.resolve(jsonFilePath);
+    this.existedBeforeOpen = fs.existsSync(this.location);
+    this.log = options.log ?? logMetadataDatabaseStatus;
+    this.log?.(`Opening file-backed metadata store: ${this.location}`);
+  }
+
+  async exists(): Promise<boolean> {
+    return this.existedBeforeOpen;
+  }
+
+  async loadAll(): Promise<ISongData[]> {
+    if (!fs.existsSync(this.location)) {
+      this.log?.("File-backed metadata store not found; returning empty dataset");
+      return [];
+    }
+    const songs = readJsonArray(this.location);
+    this.log?.(`Loaded ${songs.length} metadata entr${songs.length === 1 ? "y" : "ies"} from ${this.location}`);
+    return songs;
+  }
+
+  async loadByClipIds(clipIds: string[]): Promise<ISongData[]> {
+    const clipIdSet = new Set(clipIds);
+    const songs = await this.loadAll();
+    return songs.filter((song) => clipIdSet.has(song.clipId));
+  }
+
+  async getByClipId(clipId: string): Promise<ISongData | undefined> {
+    const songs = await this.loadAll();
+    return songs.find((song) => song.clipId === clipId);
+  }
+
+  async saveAll(songs: ISongData[]): Promise<void> {
+    writeMetadataJsonFile(this.location, songs);
+    this.log?.(`Saved ${songs.length} metadata entr${songs.length === 1 ? "y" : "ies"} to ${this.location}`);
+  }
+
+  async upsert(song: ISongData): Promise<void> {
+    const songs = await this.loadAll();
+    const normalizedSong = normalizeMetadata(song);
+    const existingIndex = songs.findIndex((entry) => entry.clipId === normalizedSong.clipId);
+    if (existingIndex >= 0) {
+      songs[existingIndex] = normalizedSong;
+    } else {
+      songs.push(normalizedSong);
+    }
+    await this.saveAll(songs);
+  }
+
+  async upsertWorkspaces(_workspaces: IWorkspace[]): Promise<void> {
+    // The file-backed local workflow does not need a separate workspace table.
+  }
+
+  async upsertSongWorkspace(_clipId: string, _workspace: IWorkspace, _source: string = "metadata"): Promise<void> {
+    // The file-backed local workflow persists song metadata only.
+  }
+
+  async close(): Promise<void> {
+    this.log?.(`Closed file-backed metadata store: ${this.location}`);
+  }
 }
 
 async function withPostgresAdvisoryLock<T>(

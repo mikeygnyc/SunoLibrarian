@@ -13,6 +13,113 @@ export type BrowserLaunchOptions = {
   abortSignal?: AbortSignal;
 };
 
+/** Default Chrome DevTools Protocol endpoint when `--browser` is enabled without a URL. */
+export const DEFAULT_BROWSER_DEBUG_ENDPOINT = "http://localhost:9222";
+
+/**
+ * CLI-shaped fields used for Suno auth: cached token override, browser capture, and remote workflow auth payloads.
+ */
+export type CliAuthTokenOptions = {
+  token?: string;
+  browser?: string | boolean;
+  browserProfile?: string;
+  profileDirectory?: string;
+  ignoreCachedToken?: boolean;
+  saveLocal?: boolean;
+  json?: boolean;
+  __abortSignal?: AbortSignal;
+};
+
+export function resolveBrowserEndpoint(options: CliAuthTokenOptions): string | undefined {
+  const browser = options.browser;
+  if (browser == null || browser === false) return undefined;
+  if (browser === true) return DEFAULT_BROWSER_DEBUG_ENDPOINT;
+  if (typeof browser === "string") {
+    const trimmed = browser.trim();
+    return trimmed.length > 0 ? trimmed : DEFAULT_BROWSER_DEBUG_ENDPOINT;
+  }
+  return DEFAULT_BROWSER_DEBUG_ENDPOINT;
+}
+
+export function resolveBrowserUserDataDir(options: CliAuthTokenOptions): string | undefined {
+  if (typeof options.browserProfile !== "string") return undefined;
+  const trimmed = options.browserProfile.trim();
+  return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
+}
+
+export function resolveBrowserProfileDirectory(options: CliAuthTokenOptions): string | undefined {
+  if (typeof options.profileDirectory !== "string") return undefined;
+  const trimmed = options.profileDirectory.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function buildAuthConfig(
+  options: CliAuthTokenOptions,
+): Record<string, unknown> | undefined {
+  const auth: Record<string, unknown> = {};
+  if (typeof options.token === "string" && options.token.trim().length > 0) {
+    auth.token = options.token.trim();
+  }
+  if (typeof options.browser === "string" && options.browser.trim().length > 0) {
+    auth.browserUrl = options.browser.trim();
+  }
+  if (options.ignoreCachedToken === true) {
+    auth.ignoreCachedToken = true;
+  }
+  if (typeof options.browserProfile === "string" && options.browserProfile.trim().length > 0) {
+    auth.browserProfile = options.browserProfile.trim();
+  }
+  if (typeof options.profileDirectory === "string" && options.profileDirectory.trim().length > 0) {
+    auth.profileDirectory = options.profileDirectory.trim();
+  }
+  return Object.keys(auth).length > 0 ? auth : undefined;
+}
+
+export type CaptureAuthTokenDeps = {
+  extractTokenFromBrowser: (
+    browserUrl?: string,
+    options?: {
+      userDataDir?: string;
+      profileDirectory?: string;
+      abortSignal?: AbortSignal;
+    },
+  ) => Promise<string>;
+  storage: {
+    setAuthToken(token: string): void;
+  };
+  log: Pick<Console, "log">;
+};
+
+export async function captureAuthTokenWithDeps(
+  options: CliAuthTokenOptions,
+  deps: CaptureAuthTokenDeps,
+): Promise<string> {
+  const browserUrl = resolveBrowserEndpoint(options);
+  if (!browserUrl) {
+    throw new Error("Browser authentication is required: provide --browser [url] to capture a token");
+  }
+
+  const token = await deps.extractTokenFromBrowser(browserUrl, {
+    userDataDir: resolveBrowserUserDataDir(options),
+    profileDirectory: resolveBrowserProfileDirectory(options),
+    abortSignal: options.__abortSignal,
+  });
+
+  if (options.saveLocal === true) {
+    deps.storage.setAuthToken(token);
+    deps.log.log("Saved captured token to the local cache.");
+  }
+
+  if (options.json === true) {
+    deps.log.log(JSON.stringify({ token }, null, 2));
+  } else {
+    deps.log.log("Captured token:");
+    deps.log.log(token);
+  }
+
+  return token;
+}
+
 type BrowserProfileLaunchPaths = {
   userDataDir: string;
   profileDirectory?: string;
@@ -24,36 +131,6 @@ type ChromeVersionInfo = {
   profilePath?: string;
 };
 
-function registerBrowserForProcessExit(browser: Browser): void {
-  browsersToCloseOnExit.add(browser);
-
-  if (browserExitHooksRegistered) return;
-  browserExitHooksRegistered = true;
-
-  const closeTrackedBrowsers = async () => {
-    const browsers = Array.from(browsersToCloseOnExit);
-    browsersToCloseOnExit.clear();
-    await Promise.allSettled(
-      browsers.map(async (b) => {
-        try {
-          await b.close();
-        } catch {
-          // best-effort shutdown
-        }
-      }),
-    );
-  };
-
-  process.once("beforeExit", () => {
-    void closeTrackedBrowsers();
-  });
-  process.once("SIGINT", () => {
-    void closeTrackedBrowsers().finally(() => process.exit(130));
-  });
-  process.once("SIGTERM", () => {
-    void closeTrackedBrowsers().finally(() => process.exit(143));
-  });
-}
 
 function getBrowserDebugPort(browserUrl?: string): number {
   if (!browserUrl) return 9222;
@@ -286,17 +363,7 @@ async function warnIfChromeProfilePathDiffers(
   }
 }
 
-async function logVisibleCookieNames(page: any, url: string): Promise<void> {
-  try {
-    const cookies = await page.cookies(url);
-    const names = cookies.map((cookie: { name: string }) => cookie.name).sort();
-    console.log(
-      `Chrome sees ${cookies.length} cookies for ${url}: ${names.join(", ") || "(none)"}`,
-    );
-  } catch {
-    // Cookie diagnostics should not block auth.
-  }
-}
+
 
 function extractBearerTokenFromHeaders(
   headers: Record<string, unknown>,
@@ -330,7 +397,6 @@ async function visitSunoRoutesUntilToken(
   const routes = [
     "https://suno.com",
     "https://suno.com/create",
-    "https://suno.com/library",
     "https://suno.com/me",
   ];
 
@@ -338,10 +404,6 @@ async function visitSunoRoutesUntilToken(
     if (getCapturedToken() || page.isClosed()) return;
     console.log(`Opening ${route}...`);
     await page.goto(route, { waitUntil: "networkidle2" });
-    if (route === "https://suno.com") {
-      await logVisibleCookieNames(page, "https://suno.com");
-      await logVisibleCookieNames(page, "https://auth.suno.com");
-    }
     await sleep(3000);
   }
 }
@@ -494,25 +556,20 @@ export async function extractTokenFromBrowser(
   });
 
   let capturedToken: string | null = null;
-  let loggedApiRequestCount = 0;
 
   const captureTokenFromHeaders = (
     url: string,
     headers: Record<string, unknown>,
     source: string,
   ): void => {
+    if (capturedToken) return;
     if (!isSunoUrl(url)) return;
-
     const token = extractBearerTokenFromHeaders(headers);
+
     if (token) {
       capturedToken = token;
       console.log(`Token captured from ${source}!`);
       return;
-    }
-
-    if (loggedApiRequestCount < 12 && url.includes("api")) {
-      loggedApiRequestCount += 1;
-      console.log(`Saw Suno API request without bearer token: ${url}`);
     }
   };
 
@@ -520,6 +577,10 @@ export async function extractTokenFromBrowser(
 
   page.on("request", (request: HTTPRequest) => {
     const url = request.url();
+    if (capturedToken) {
+      request.continue();
+      return;
+    }
     captureTokenFromHeaders(url, request.headers(), "request interception");
 
     request.continue();
@@ -528,6 +589,7 @@ export async function extractTokenFromBrowser(
   const cdpSession = await page.target().createCDPSession();
   await cdpSession.send("Network.enable");
   cdpSession.on("Network.requestWillBeSent", (event) => {
+    if (capturedToken) return;
     captureTokenFromHeaders(
       event.request.url,
       event.request.headers as Record<string, unknown>,
@@ -549,14 +611,13 @@ export async function extractTokenFromBrowser(
     }
   }
 
-  console.log("Authentication complete! You can continue using the browser.");
+  await browser.close();
+  console.log("Authentication complete!");
   abortCleanup();
 
   if (isRemoteBrowser) {
     await browser.disconnect();
-  } else {
-    registerBrowserForProcessExit(browser);
-  }
+        }
 
   if (!capturedToken) {
     throw new Error("Failed to capture authentication token");

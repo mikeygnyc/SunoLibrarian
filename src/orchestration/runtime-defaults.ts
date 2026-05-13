@@ -1,7 +1,7 @@
 import type { IRuntimeConfig } from "../core/contracts";
 
 export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
-  mode: "local",
+  mode: "distributed",
   controlPlane: {},
   leases: {
     heartbeatIntervalMs: 5_000,

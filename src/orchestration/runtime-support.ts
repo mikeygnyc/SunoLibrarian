@@ -10,7 +10,6 @@ import type {
   WorkflowType,
 } from "../core/contracts";
 import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
-import { LocalControlPlaneRepository, resolveLocalControlPlaneDir } from "./local-control-plane";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";
 import type { CliOptions } from "../core/services";
 
@@ -26,7 +25,7 @@ export type WorkflowStagePlanItem = {
     OrchestrationStageType,
     "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"
   >;
-  workerRole: Extract<WorkerRole, "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion">;
+  workerRole: WorkerRole;
 };
 
 export const SUPPORTED_WORKFLOW_TYPES: WorkflowType[] = [
@@ -46,22 +45,20 @@ export function createRuntimeLogger(repository: ControlPlaneRepository): Central
 }
 
 export function createControlPlaneRepository(options: CliOptions = {}): ControlPlaneRepository {
-  if (resolveControlPlaneBackend(options) === "postgres") {
-    return new PostgresControlPlaneRepository({
-      postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
-    });
-  }
-  return new LocalControlPlaneRepository(resolveLocalControlPlaneDir(options.controlPlaneDir));
+  return new PostgresControlPlaneRepository({
+    postgresUrl: resolveRequiredPostgresUrl(options),
+  });
 }
 
-export function resolveControlPlaneBackend(options: CliOptions = {}): "local" | "postgres" {
-  if (typeof options.controlPlane === "string" && options.controlPlane.trim() === "postgres") {
-    return "postgres";
+export function resolveControlPlaneBackend(_options: CliOptions = {}): "postgres" {
+  return "postgres";
+}
+
+function resolveRequiredPostgresUrl(options: CliOptions): string {
+  if (typeof options.postgresUrl === "string" && options.postgresUrl.trim().length > 0) {
+    return options.postgresUrl.trim();
   }
-  if (process.env.SUNO_EXPORT_CONTROL_PLANE_BACKEND?.trim() === "postgres") {
-    return "postgres";
-  }
-  return "local";
+  throw new Error("Postgres control-plane requires --postgres-url");
 }
 
 export function serializeJobPayload(options: CliOptions): Record<string, unknown> {
@@ -115,13 +112,13 @@ export function getWorkflowStagePlan(workflowType: WorkflowType): WorkflowStageP
       return [
         { type: "authorization", workerRole: "auth" },
         { type: "asset-acquisition", workerRole: "asset" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "asset" },
       ];
     case "process":
       return [
         { type: "processing", workerRole: "processing" },
         { type: "conversion", workerRole: "conversion" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "conversion" },
       ];
     case "sync":
       return [
@@ -129,25 +126,25 @@ export function getWorkflowStagePlan(workflowType: WorkflowType): WorkflowStageP
         { type: "asset-acquisition", workerRole: "asset" },
         { type: "processing", workerRole: "processing" },
         { type: "conversion", workerRole: "conversion" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "conversion" },
       ];
     case "download-images":
       return [
         { type: "authorization", workerRole: "auth" },
         { type: "asset-acquisition", workerRole: "asset" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "asset" },
       ];
     case "fetch-metadata":
       return [
         { type: "authorization", workerRole: "auth" },
         { type: "metadata-acquisition", workerRole: "metadata" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "metadata" },
       ];
     case "refresh":
       return [
         { type: "authorization", workerRole: "auth" },
         { type: "metadata-acquisition", workerRole: "metadata" },
-        { type: "finalization", workerRole: "orchestrator" },
+        { type: "finalization", workerRole: "metadata" },
       ];
   }
 }
@@ -205,7 +202,6 @@ export async function submitWorkflowJob(
     await logger.info("workflow job submitted", {
       jobId,
       workflowType,
-      role: "orchestrator",
       properties: {
         runtimeMode: "distributed",
         stageCount: stagePlan.length,
@@ -266,7 +262,6 @@ export async function cancelWorkflowJob(
       await logger.info("workflow job cancelled", {
         jobId,
         workflowType: job.workflowType,
-        role: "orchestrator",
         properties: {
           reason: reason?.trim() || null,
           controlPlaneBackend: resolveControlPlaneBackend(options),
@@ -354,8 +349,6 @@ function isRestartableAuthFailure(snapshot: IJobSnapshot): boolean {
 function buildRestartPayload(payload: Record<string, unknown>): CliOptions {
   const restartedPayload: Record<string, unknown> = {
     ...payload,
-    submitOnly: true,
-    runtimeMode: "distributed",
   };
 
   delete restartedPayload.token;

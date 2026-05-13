@@ -2,12 +2,24 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import {humanId, poolSize, minLength, maxLength} from 'human-id'
-import { extractTokenFromBrowser } from "./auth";
+import { buildAuthConfig, captureAuthTokenWithDeps, extractTokenFromBrowser } from "./lib/auth/auth";
 import { createCancellationMonitor, isCancellationError } from "./cancellation";
 import { HttpApiClient } from "./http-api-client";
-import type { LibrarianConfig, OrchestratorConfig, SupervisorConfig, WorkerConfig } from "./app-config";
-import type { IClaimedWorkItem, IJobSnapshot, ILogQueryResult, WorkflowType } from "./core/contracts";
-import { DEFAULT_RUNTIME_CONFIG, LeaseManager, LocalJobOrchestrator, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository, type LocalWorkflowContext, type WorkflowStagePlanItem } from "./core/orchestration";
+import type { LibrarianConfig, WorkerConfig } from "./app-config";
+import type {
+  IClaimedWorkItem,
+  IHttpApiDownloadImagesWorkflowRequest,
+  IHttpApiDownloadWorkflowRequest,
+  IHttpApiFetchMetadataWorkflowRequest,
+  IHttpApiProcessWorkflowRequest,
+  IHttpApiRefreshWorkflowRequest,
+  IHttpApiSyncWorkflowRequest,
+  IJobSnapshot,
+  ILogQueryResult,
+  WorkerRole,
+  WorkflowType,
+} from "./core/contracts";
+import { DEFAULT_RUNTIME_CONFIG, LeaseManager, classifyAuthFailure, createControlPlaneRepository, createJobCancellationAssertion, createRuntimeLogger, getJobSnapshot, resolveControlPlaneBackend, serializeJobPayload, submitWorkflowJob, type ControlPlaneRepository } from "./core/orchestration";
 import {
   AssetAcquisitionService,
   AuthService,
@@ -25,7 +37,6 @@ import {
   type DownloadFlowResult,
 } from "./core/services";
 import { Storage } from "./storage";
-import { runSupervisor } from "./supervisor/local-supervisor";
 import { startRuntimeHealthServer } from "./supervisor/runtime-health";
 import {
   describeMetadataStoreConfig,
@@ -34,6 +45,7 @@ import {
   MetadataStoreConfig,
   resolveMetadataStoreConfig,
 } from "./metadata-store";
+import { resolveWorkflowTarget } from "./workflow-target-config";
 
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 const DEFAULT_WATCH_INTERVAL_MS = 1000;
@@ -41,11 +53,8 @@ const DEFAULT_WORKER_POLL_INTERVAL_MS = 500;
 const DEFAULT_RUNTIME_STALE_AFTER_MS = 60_000;
 
 export type { AuthClient, AuthDeps, AuthStorage };
-export type CaptureAuthTokenDeps = {
-  extractTokenFromBrowser: typeof extractTokenFromBrowser;
-  storage: Pick<Storage, "setAuthToken">;
-  log: Pick<Console, "log">;
-};
+export type { CaptureAuthTokenDeps } from "./lib/auth/auth";
+export { captureAuthTokenWithDeps };
 
 function resolveMetadataFilePath(rootDir: string, options: CliOptions): string {
   return typeof options.metadataFile === "string" && options.metadataFile.trim().length > 0
@@ -60,11 +69,72 @@ function resolveMetadataJsonExportPath(rootDir: string, options: CliOptions): st
 }
 
 function resolveMetadataStoreOptions(options: CliOptions): MetadataStoreConfig {
+  const workflowTarget = resolveWorkflowTarget(options);
+  if (workflowTarget?.kind === "local") {
+    const metadataRoot = resolveLocalMetadataRoot(options, workflowTarget.localRoot);
+    return {
+      type: "file",
+      jsonFilePath: resolveMetadataFilePath(metadataRoot, options),
+    };
+  }
+
   return resolveMetadataStoreConfig({
     databaseType: options.databaseType,
     database: typeof options.database === "string" ? options.database : undefined,
     postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
   });
+}
+
+function resolveLocalMetadataRoot(options: CliOptions, defaultRoot: string): string {
+  if (typeof options.input === "string" && options.input.trim().length > 0) {
+    return path.resolve(options.input.trim());
+  }
+  if (typeof options.output === "string" && options.output.trim().length > 0) {
+    return path.resolve(options.output.trim());
+  }
+  return path.resolve(defaultRoot);
+}
+
+function resolveLocalDownloadOptions(options: CliOptions, localRoot: string): CliOptions {
+  return {
+    ...options,
+    localRoot,
+    output: typeof options.output === "string" && options.output.trim().length > 0
+      ? options.output
+      : localRoot,
+  };
+}
+
+function resolveLocalProcessOptions(options: CliOptions, localRoot: string): CliOptions {
+  const input = typeof options.input === "string" && options.input.trim().length > 0
+    ? options.input
+    : localRoot;
+  const output = typeof options.output === "string" && options.output.trim().length > 0
+    ? options.output
+    : localRoot;
+
+  return {
+    ...options,
+    localRoot,
+    input,
+    output,
+  };
+}
+
+function resolveLocalSyncOptions(options: CliOptions, localRoot: string): CliOptions {
+  const output = typeof options.output === "string" && options.output.trim().length > 0
+    ? options.output
+    : localRoot;
+  const library = typeof options.library === "string" && options.library.trim().length > 0
+    ? options.library
+    : output;
+
+  return {
+    ...options,
+    localRoot,
+    output,
+    library,
+  };
 }
 
 const authService = new AuthService();
@@ -122,10 +192,6 @@ function shouldCopySongsMetadataToOutput(options: CliOptions): boolean {
   return options.copySongsMetadataToOutput === true;
 }
 
-function shouldSubmitOnly(options: CliOptions): boolean {
-  return options.runtimeMode === "distributed" || options.submitOnly === true;
-}
-
 async function runDownloadWorkflow(options: CliOptions): Promise<DownloadFlowResult> {
   const client = await authService.getAuthenticatedClient(options);
   return assetAcquisitionService.downloadTracks(
@@ -164,37 +230,8 @@ export async function runClearAuthTokenFlow(options: CliOptions = {}): Promise<v
   console.log("Cached authentication token cleared.");
 }
 
-export async function captureAuthTokenWithDeps(
-  options: CliOptions,
-  deps: CaptureAuthTokenDeps,
-): Promise<string> {
-  const browserUrl = resolveBrowserEndpoint(options);
-  if (!browserUrl) {
-    throw new Error("Browser authentication is required: provide --browser [url] to capture a token");
-  }
-
-  const token = await deps.extractTokenFromBrowser(browserUrl, {
-    userDataDir: resolveBrowserUserDataDir(options),
-    profileDirectory: resolveBrowserProfileDirectory(options),
-    abortSignal: options.__abortSignal,
-  });
-
-  if (options.saveLocal === true) {
-    deps.storage.setAuthToken(token);
-    deps.log.log("Saved captured token to the local cache.");
-  }
-
-  if (options.json === true) {
-    deps.log.log(JSON.stringify({ token }, null, 2));
-  } else {
-    deps.log.log("Captured token:");
-    deps.log.log(token);
-  }
-
-  return token;
-}
-
 export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise<void> {
+  options = { ...options, saveLocal: true };
   await captureAuthTokenWithDeps(options, {
     extractTokenFromBrowser,
     storage: new Storage({ cacheDir: options.cacheDir }),
@@ -205,7 +242,7 @@ export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise
 export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
   const storeConfig = resolveMetadataStoreOptions(options);
   logMetadataImportStatus(`Starting import from ${path.resolve(String(options.input))}`);
-  logMetadataImportStatus(`Target database: ${describeMetadataStoreConfig(storeConfig)}`);
+  logMetadataImportStatus(`Target metadata store: ${describeMetadataStoreConfig(storeConfig)}`);
   const result = await importMetadataJsonToDatabase(String(options.input), storeConfig, {
     log: logMetadataImportStatus,
   });
@@ -215,7 +252,7 @@ export async function runImportMetadataJsonFlow(options: CliOptions): Promise<vo
 export async function runExportMetadataJsonFlow(options: CliOptions): Promise<void> {
   const storeConfig = resolveMetadataStoreOptions(options);
   logMetadataImportStatus(`Starting export to ${path.resolve(String(options.output))}`);
-  logMetadataImportStatus(`Source database: ${describeMetadataStoreConfig(storeConfig)}`);
+  logMetadataImportStatus(`Source metadata store: ${describeMetadataStoreConfig(storeConfig)}`);
   const result = await exportMetadataDatabaseToJson(String(options.output), storeConfig, {
     log: logMetadataImportStatus,
   });
@@ -295,192 +332,89 @@ async function runRefreshWorkflow(options: CliOptions): Promise<void> {
 }
 
 export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlowResult> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("download", options);
-    console.log(`Job submitted: ${jobId}`);
-      return {
-      outputDir: path.resolve(String(options.output)),
-      downloaded: 0,
-      skipped: 0,
-    };
+  const workflowTarget = resolveWorkflowTarget(options);
+  if (workflowTarget?.kind === "local") {
+    return runDownloadWorkflow(resolveLocalDownloadOptions(options, workflowTarget.localRoot));
   }
 
-  const { result } = await runLocalWorkflowCommand("download", options, [
-    { type: "authorization", workerRole: "auth" },
-    { type: "asset-acquisition", workerRole: "asset" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    const downloadResult = await runStage("asset-acquisition", async () => {
-      return runDownloadWorkflow({ ...options, __authenticatedClient: client });
-    });
-    await runStage("finalization", async () => undefined);
-    return downloadResult;
-  });
-
-  return result;
+  if (workflowTarget?.kind === "api") {
+    options = { ...options, apiUrl: workflowTarget.apiUrl };
+  } else {
+    throw new Error("download requires either --api-url or a config file with target.apiUrl or target.localRoot");
+  }
+  const result = await submitCliWorkflow("download", buildDownloadWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
+  return {
+    outputDir: path.resolve(String(options.output ?? ".")),
+    downloaded: 0,
+    skipped: 0,
+  };
 }
 
 export async function runProcessFlow(options: CliOptions): Promise<void> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("process", options);
-    console.log(`Job submitted: ${jobId}`);
+  const workflowTarget = resolveWorkflowTarget(options);
+  if (workflowTarget?.kind === "local") {
+    await runProcessWorkflow(resolveLocalProcessOptions(options, workflowTarget.localRoot));
     return;
   }
 
-  await runLocalWorkflowCommand("process", options, [
-    { type: "processing", workerRole: "processing" },
-    { type: "conversion", workerRole: "conversion" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    await runStage("processing", async () => undefined);
-    await runStage("conversion", async () => runProcessWorkflow(options));
-    await runStage("finalization", async () => undefined);
-  });
+  if (workflowTarget?.kind === "api") {
+    options = { ...options, apiUrl: workflowTarget.apiUrl };
+  } else {
+    throw new Error("process requires either --api-url or a config file with target.apiUrl or target.localRoot");
+  }
+  const result = await submitCliWorkflow("process", buildProcessWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
 }
 
 export async function runSyncFlow(options: CliOptions): Promise<void> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("sync", options);
-    console.log(`Job submitted: ${jobId}`);
+  const workflowTarget = resolveWorkflowTarget(options);
+  if (workflowTarget?.kind === "local") {
+    const localOptions = resolveLocalSyncOptions(options, workflowTarget.localRoot);
+    await runDownloadWorkflow({
+      ...localOptions,
+      exportMetadataJson: undefined,
+      copySongsMetadataToOutput: false,
+    });
+    await runProcessWorkflow({
+      ...localOptions,
+      input: String(localOptions.output),
+      output: String(localOptions.library ?? localOptions.output),
+      copySongsMetadataToOutput: false,
+    });
+    await exportMetadataJsonIfRequested(
+      localOptions,
+      resolveMetadataStoreOptions(localOptions),
+      resolveMetadataJsonExportPath(path.resolve(String(localOptions.output)), localOptions),
+    );
     return;
   }
 
-  await runLocalWorkflowCommand("sync", options, [
-    { type: "authorization", workerRole: "auth" },
-    { type: "asset-acquisition", workerRole: "asset" },
-    { type: "processing", workerRole: "processing" },
-    { type: "conversion", workerRole: "conversion" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    const outputDir = path.resolve(String(options.output));
-    const conversionOutput = options.library || outputDir;
-    const storeConfig = resolveMetadataStoreOptions(options);
-    const metadataJsonPath = resolveMetadataJsonExportPath(outputDir, options);
-    const processExistingMetadata = options.processExistingMetadata === true;
-    const downloadedClipIds = new Set<string>();
-    let conversionChain: Promise<void> = Promise.resolve();
-    let conversionFailed: Error | null = null;
-
-    const queueConversion = (): void => {
-      conversionChain = conversionChain.then(async () => {
-        if (conversionFailed) return;
-        await runProcessWorkflow({
-          input: outputDir,
-          output: conversionOutput,
-          databaseType: storeConfig.type,
-          database: storeConfig.sqlitePath,
-          postgresUrl: storeConfig.postgresUrl,
-          copySongsMetadataToOutput: false,
-          processFormats: options.processFormats,
-          processBitrate: options.processBitrate,
-          processConcurrency: options.processConcurrency,
-          processUpdateConcurrency: options.processUpdateConcurrency,
-          images: options.images,
-          lyrics: options.lyrics,
-          exitOnError: options.exitOnError,
-          processClipIds: processExistingMetadata ? undefined : Array.from(downloadedClipIds),
-        });
-      }).catch((err: any) => {
-        const wrapped = err instanceof Error ? err : new Error(String(err));
-        conversionFailed = wrapped;
-        if (!options.exitOnError) {
-          console.error(`Conversion run failed during sync: ${wrapped.message}`);
-        }
-      });
-    };
-
-    await runStage("asset-acquisition", async () => {
-      await runDownloadWorkflow({
-        ...options,
-        __authenticatedClient: client,
-        output: outputDir,
-        databaseType: storeConfig.type,
-        database: storeConfig.sqlitePath,
-        postgresUrl: storeConfig.postgresUrl,
-        exportMetadataJson: undefined,
-        copySongsMetadataToOutput: false,
-        onTrackDownloaded: ({ clipId }: { clipId: string }) => {
-          downloadedClipIds.add(clipId);
-          if (!processExistingMetadata) {
-            queueConversion();
-          }
-        },
-      });
-    });
-
-    await runStage("processing", async () => {
-      if (processExistingMetadata) {
-        queueConversion();
-      }
-    });
-
-    await runStage("conversion", async () => {
-      await conversionChain;
-      if (conversionFailed) {
-        throw conversionFailed;
-      }
-    });
-
-    await runStage("finalization", async () => {
-      await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
-    });
-  });
+  if (workflowTarget?.kind === "api") {
+    options = { ...options, apiUrl: workflowTarget.apiUrl };
+  } else {
+    throw new Error("sync requires either --api-url or a config file with target.apiUrl or target.localRoot");
+  }
+  const result = await submitCliWorkflow("sync", buildSyncWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
 }
 
 export async function runDownloadImagesFlow(options: CliOptions): Promise<void> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("download-images", options);
-    console.log(`Job submitted: ${jobId}`);
-    return;
-  }
-
-  await runLocalWorkflowCommand("download-images", options, [
-    { type: "authorization", workerRole: "auth" },
-    { type: "asset-acquisition", workerRole: "asset" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    await runStage("asset-acquisition", async () => runDownloadImagesWorkflow({ ...options, __authenticatedClient: client }));
-    await runStage("finalization", async () => undefined);
-  });
+  options = withResolvedApiTarget(options, "download-images");
+  const result = await submitCliWorkflow("download-images", buildDownloadImagesWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
 }
 
 export async function runFetchMetadataFlow(options: CliOptions): Promise<void> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("fetch-metadata", options);
-    console.log(`Job submitted: ${jobId}`);
-    return;
-  }
-
-  await runLocalWorkflowCommand("fetch-metadata", options, [
-    { type: "authorization", workerRole: "auth" },
-    { type: "metadata-acquisition", workerRole: "metadata" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    await runStage("metadata-acquisition", async () => runFetchMetadataWorkflow({ ...options, __authenticatedClient: client }));
-    await runStage("finalization", async () => undefined);
-  });
+  options = withResolvedApiTarget(options, "fetch-metadata");
+  const result = await submitCliWorkflow("fetch-metadata", buildFetchMetadataWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
 }
 
 export async function runRefreshFlow(options: CliOptions): Promise<void> {
-  if (shouldSubmitOnly(options)) {
-    const jobId = await submitWorkflowJob("refresh", options);
-    console.log(`Job submitted: ${jobId}`);
-    return;
-  }
-
-  await runLocalWorkflowCommand("refresh", options, [
-    { type: "authorization", workerRole: "auth" },
-    { type: "metadata-acquisition", workerRole: "metadata" },
-    { type: "finalization", workerRole: "orchestrator" },
-  ], async ({ runStage }) => {
-    const client = await runStage("authorization", async () => authService.getAuthenticatedClient(options));
-    await runStage("metadata-acquisition", async () => runRefreshWorkflow({ ...options, __authenticatedClient: client }));
-    await runStage("finalization", async () => undefined);
-  });
+  options = withResolvedApiTarget(options, "refresh");
+  const result = await submitCliWorkflow("refresh", buildRefreshWorkflowRequest(options), options);
+  console.log(`Job submitted: ${result.jobId}`);
 }
 
 export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> {
@@ -500,101 +434,14 @@ export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> 
   }
 }
 
-export async function runSupervisorFlow(options: SupervisorConfig): Promise<void> {
-  await runSupervisor(options);
-}
-
 export async function runJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
-  const repository = createControlPlaneRepository(options);
-  try {
-    await repository.initialize();
-    const snapshot = await getJobSnapshot(repository, jobId);
-    if (!snapshot.job) {
-      throw new Error(`Job not found: ${jobId}`);
-    }
-
-    printJobSnapshot(snapshot, options.json === true);
-  } finally {
-    await repository.close();
-  }
-}
-
-export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
-  const intervalMs = parseInt(String(options.interval ?? DEFAULT_WATCH_INTERVAL_MS), 10);
-  while (true) {
-    const repository = createControlPlaneRepository(options);
-    await repository.initialize();
-    const snapshot = await getJobSnapshot(repository, jobId);
-    await repository.close();
-    if (!snapshot.job) {
-      throw new Error(`Job not found: ${jobId}`);
-    }
-
-    console.clear();
-    await runJobStatusFlow(jobId, options);
-
-    if (["completed", "failed", "cancelled"].includes(snapshot.job.status)) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-}
-
-export async function runLogsFlow(options: CliOptions = {}): Promise<void> {
-  const repository = createControlPlaneRepository(options);
-  try {
-    await repository.initialize();
-    const result = await repository.query({
-      jobId: typeof options.jobId === "string" ? options.jobId : undefined,
-      stageId: typeof options.stageId === "string" ? options.stageId : undefined,
-      workItemId: typeof options.workItemId === "string" ? options.workItemId : undefined,
-      workflowType: typeof options.workflowType === "string" ? options.workflowType as any : undefined,
-      workerInstanceId: typeof options.workerInstanceId === "string" ? options.workerInstanceId : undefined,
-      role: typeof options.role === "string" ? options.role as any : undefined,
-      clipId: typeof options.clipId === "string" ? options.clipId : undefined,
-      level: typeof options.level === "string" ? options.level as any : undefined,
-      startTime: parseOptionalDate(options.startTime, "--start-time"),
-      endTime: parseOptionalDate(options.endTime, "--end-time"),
-      limit: options.limit ? parseInt(String(options.limit), 10) : 100,
-    });
-
-    printLogsResult(result, options.json === true);
-  } finally {
-    await repository.close();
-  }
-}
-
-export async function runApiHealthFlow(options: CliOptions = {}): Promise<void> {
-  const result = await createApiClient(options).getHealth();
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  console.log(result.ok ? "API is healthy." : "API is unhealthy.");
-}
-
-export async function runApiSubmitWorkflowFlow(workflow: string, options: CliOptions = {}): Promise<void> {
-  const workflowType = normalizeWorkflowTypeInput(workflow);
-  const payload = await readApiWorkflowPayload(options.payload);
-  const result = await createApiClient(options).submitWorkflow(workflowType, payload as any);
-
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  console.log(`Job submitted: ${result.jobId}`);
-  console.log(`  Workflow: ${result.workflowType}`);
-  console.log(`  Status: ${result.status}`);
-}
-
-export async function runApiJobStatusFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "job-status");
   const snapshot = await createApiClient(options).getJob(jobId);
   printJobSnapshot(snapshot, options.json === true);
 }
 
-export async function runApiWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+export async function runWatchJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "watch-job");
   const intervalMs = parseInt(String(options.interval ?? DEFAULT_WATCH_INTERVAL_MS), 10);
   while (true) {
     const snapshot = await createApiClient(options).getJob(jobId);
@@ -609,21 +456,8 @@ export async function runApiWatchJobFlow(jobId: string, options: CliOptions = {}
   }
 }
 
-export async function runApiCancelJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
-  const result = await createApiClient(options).cancelJob(
-    jobId,
-    typeof options.reason === "string" ? options.reason : undefined,
-  );
-
-  if (options.json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  console.log(`Job ${result.jobId} cancelled.`);
-}
-
-export async function runApiLogsFlow(options: CliOptions = {}): Promise<void> {
+export async function runLogsFlow(options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "logs");
   const result = await createApiClient(options).queryLogs({
     jobId: typeof options.jobId === "string" ? options.jobId : undefined,
     stageId: typeof options.stageId === "string" ? options.stageId : undefined,
@@ -640,40 +474,45 @@ export async function runApiLogsFlow(options: CliOptions = {}): Promise<void> {
   printLogsResult(result, options.json === true);
 }
 
-export async function runOrchestratorFlow(options: OrchestratorConfig = {}): Promise<void> {
-  const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
-  const once = options.once === true;
-  const healthServer = await startRuntimeHealthServer({
-    service: "orchestrator",
-    role: "orchestrator",
-    host: options.healthHost,
-    port: options.healthPort,
-  });
-  const loggerRepository = createControlPlaneRepository(options);
-
-  try {
-    await loggerRepository.initialize();
-    const logger = createRuntimeLogger(loggerRepository);
-
-    healthServer?.markReady();
-    do {
-      const processed = await processWorkerRole("orchestrator", { ...options, once: true });
-
-      if (once || processed === 0) {
-        if (processed === 0) {
-          await logger.debug("orchestrator poll found no runnable work", {
-            role: "orchestrator",
-            properties: { pollIntervalMs },
-          });
-        }
-        if (once) return;
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      }
-    } while (true);
-  } finally {
-    await healthServer?.close();
-    await loggerRepository.close();
+export async function runApiHealthFlow(options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "api-health");
+  const result = await createApiClient(options).getHealth();
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
   }
+  console.log(result.ok ? "API is healthy." : "API is unhealthy.");
+}
+
+export async function runApiSubmitWorkflowFlow(workflow: string, options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "api-submit");
+  const workflowType = normalizeWorkflowTypeInput(workflow);
+  const payload = await readApiWorkflowPayload(options.payload);
+  const result = await createApiClient(options).submitWorkflow(workflowType, payload as any);
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`Job submitted: ${result.jobId}`);
+  console.log(`  Workflow: ${result.workflowType}`);
+  console.log(`  Status: ${result.status}`);
+}
+
+export async function runApiCancelJobFlow(jobId: string, options: CliOptions = {}): Promise<void> {
+  options = withResolvedApiTarget(options, "api-cancel-job");
+  const result = await createApiClient(options).cancelJob(
+    jobId,
+    typeof options.reason === "string" ? options.reason : undefined,
+  );
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(`Job ${result.jobId} cancelled.`);
 }
 
 export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
@@ -710,43 +549,8 @@ export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
   }
 }
 
-function createLocalJobOrchestrator(options: CliOptions = {}): LocalJobOrchestrator {
-  return new LocalJobOrchestrator(createControlPlaneRepository(options), {
-    ...DEFAULT_RUNTIME_CONFIG,
-    mode: options.runtimeMode === "distributed" ? "distributed" : "local",
-    controlPlane: {
-      ...DEFAULT_RUNTIME_CONFIG.controlPlane,
-      postgresUrl: typeof options.postgresUrl === "string" ? options.postgresUrl : undefined,
-    },
-  });
-}
-
-async function runLocalWorkflowCommand<TResult>(
-  workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
-  options: CliOptions,
-  stagePlan: WorkflowStagePlanItem[],
-  runner: (context: LocalWorkflowContext) => Promise<TResult>,
-): Promise<{ jobId: string; result: TResult }> {
-  const orchestrator = createLocalJobOrchestrator(options);
-  return orchestrator.runWorkflow(
-    {
-      workflowType,
-      payload: serializeJobPayload(options),
-      stagePlan,
-      onJobCreated: (jobId) => {
-        console.log(`Job submitted: ${jobId}`);
-      },
-    },
-    async (context) => {
-      const result = await runner(context);
-      console.log(`Job completed: ${context.job.id}`);
-      return result;
-    },
-  );
-}
-
 async function processWorkerRole(
-  role: "orchestrator" | "auth" | "metadata" | "asset" | "processing" | "conversion",
+  role: WorkerRole,
   options: CliOptions = {},
 ): Promise<number> {
   const repository = createControlPlaneRepository(options);
@@ -1168,6 +972,123 @@ function createApiClient(options: CliOptions): HttpApiClient {
   });
 }
 
+function withResolvedApiTarget(options: CliOptions, commandName: string): CliOptions {
+  if (options.__apiClient) {
+    return options;
+  }
+  const workflowTarget = resolveWorkflowTarget(options);
+  if (workflowTarget?.kind === "local") {
+    throw new Error(`${commandName} requires an API target; the current config points at localRoot`);
+  }
+  if (workflowTarget?.kind === "api") {
+    return { ...options, apiUrl: workflowTarget.apiUrl };
+  }
+  if (typeof options.apiUrl === "string" && options.apiUrl.trim().length > 0) {
+    return options;
+  }
+  throw new Error(`${commandName} requires either --api-url or a config file with target.apiUrl`);
+}
+
+async function submitCliWorkflow<TWorkflowType extends WorkflowType>(
+  workflowType: TWorkflowType,
+  payload: (
+    TWorkflowType extends "download" ? IHttpApiDownloadWorkflowRequest :
+    TWorkflowType extends "process" ? IHttpApiProcessWorkflowRequest :
+    TWorkflowType extends "sync" ? IHttpApiSyncWorkflowRequest :
+    TWorkflowType extends "download-images" ? IHttpApiDownloadImagesWorkflowRequest :
+    TWorkflowType extends "fetch-metadata" ? IHttpApiFetchMetadataWorkflowRequest :
+    IHttpApiRefreshWorkflowRequest
+  ),
+  options: CliOptions,
+) {
+  return createApiClient(options).submitWorkflow(workflowType, payload);
+}
+
+function parseCsvList(value: unknown): string[] | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return items.length > 0 ? items : undefined;
+}
+
+function parsePositiveInteger(value: unknown, label: string): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const parsed = parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function buildDownloadWorkflowRequest(options: CliOptions): IHttpApiDownloadWorkflowRequest {
+  return {
+    auth: buildAuthConfig(options),
+    workspaceId: typeof options.workspace === "string" ? options.workspace : undefined,
+    format: options.format === "mp3" || options.format === "wav" ? options.format : undefined,
+    createdAfter: typeof options.createdAfter === "string" ? options.createdAfter : undefined,
+    createdBefore: typeof options.createdBefore === "string" ? options.createdBefore : undefined,
+    flushCache: options.flushCache === true ? true : undefined,
+  };
+}
+
+function buildProcessWorkflowRequest(options: CliOptions): IHttpApiProcessWorkflowRequest {
+  return {
+    auth: buildAuthConfig(options),
+    formats: parseCsvList(options.processFormats),
+    bitrateKbps: parsePositiveInteger(options.processBitrate, "--process-bitrate"),
+    embedImages: options.images === true ? true : undefined,
+    embedLyrics: options.lyrics === true ? true : undefined,
+    exitOnError: options.exitOnError === true ? true : undefined,
+    reconvertBefore: typeof options.reconvertBefore === "string" ? options.reconvertBefore : undefined,
+    reconvertAfter: typeof options.reconvertAfter === "string" ? options.reconvertAfter : undefined,
+    reconvertMissing: options.reconvertMissing === true ? true : undefined,
+    clipIds: Array.isArray(options.processClipIds) ? options.processClipIds : parseCsvList(options.processClipIds),
+  };
+}
+
+function buildSyncWorkflowRequest(options: CliOptions): IHttpApiSyncWorkflowRequest {
+  return {
+    ...buildProcessWorkflowRequest(options),
+    workspaceId: typeof options.workspace === "string" ? options.workspace : undefined,
+    format: options.format === "mp3" || options.format === "wav" ? options.format : undefined,
+    createdAfter: typeof options.createdAfter === "string" ? options.createdAfter : undefined,
+    createdBefore: typeof options.createdBefore === "string" ? options.createdBefore : undefined,
+    flushCache: options.flushCache === true ? true : undefined,
+    processExistingMetadata: options.processExistingMetadata === true ? true : undefined,
+  };
+}
+
+function buildDownloadImagesWorkflowRequest(options: CliOptions): IHttpApiDownloadImagesWorkflowRequest {
+  return {
+    auth: buildAuthConfig(options),
+    listPath: typeof options.list === "string" ? options.list : undefined,
+    fetchImageListPath: typeof options.fetchImageList === "string" ? options.fetchImageList : undefined,
+    fetchMissing: options.fetchMissing === true ? true : undefined,
+  };
+}
+
+function buildFetchMetadataWorkflowRequest(options: CliOptions): IHttpApiFetchMetadataWorkflowRequest {
+  return {
+    auth: buildAuthConfig(options),
+    workspaceId: typeof options.workspace === "string" ? options.workspace : undefined,
+    trackIds: parseCsvList(options.ids),
+    createdAfter: typeof options.createdAfter === "string" ? options.createdAfter : undefined,
+    createdBefore: typeof options.createdBefore === "string" ? options.createdBefore : undefined,
+  };
+}
+
+function buildRefreshWorkflowRequest(options: CliOptions): IHttpApiRefreshWorkflowRequest {
+  return {
+    auth: buildAuthConfig(options),
+  };
+}
+
 function normalizeWorkflowTypeInput(value: string): WorkflowType {
   const trimmed = value.trim();
   switch (trimmed) {
@@ -1229,11 +1150,13 @@ function printJobSnapshot(snapshot: IJobSnapshot, asJson: boolean): void {
   console.log(`Job ${snapshot.job.id}`);
   console.log(`  Workflow: ${snapshot.job.workflowType}`);
   console.log(`  Status: ${snapshot.job.status}`);
-  if (snapshot.job.startedAt) {
-    console.log(`  Started: ${snapshot.job.startedAt.toISOString()}`);
+  const startedAt = formatTimestamp(snapshot.job.startedAt);
+  if (startedAt) {
+    console.log(`  Started: ${startedAt}`);
   }
-  if (snapshot.job.completedAt) {
-    console.log(`  Completed: ${snapshot.job.completedAt.toISOString()}`);
+  const completedAt = formatTimestamp(snapshot.job.completedAt);
+  if (completedAt) {
+    console.log(`  Completed: ${completedAt}`);
   }
   if (snapshot.stages.length > 0) {
     console.log("\nStages:");
@@ -1241,29 +1164,6 @@ function printJobSnapshot(snapshot: IJobSnapshot, asJson: boolean): void {
       console.log(`  ${stage.sequence}. ${stage.stageType} [${stage.status}]`);
     });
   }
-}
-
-function resolveBrowserEndpoint(options: CliOptions): string | undefined {
-  const browser = options.browser;
-  if (browser == null || browser === false) return undefined;
-  if (browser === true) return "http://localhost:9222";
-  if (typeof browser === "string") {
-    const trimmed = browser.trim();
-    return trimmed.length > 0 ? trimmed : "http://localhost:9222";
-  }
-  return "http://localhost:9222";
-}
-
-function resolveBrowserUserDataDir(options: CliOptions): string | undefined {
-  if (typeof options.browserProfile !== "string") return undefined;
-  const trimmed = options.browserProfile.trim();
-  return trimmed.length > 0 ? path.resolve(trimmed) : undefined;
-}
-
-function resolveBrowserProfileDirectory(options: CliOptions): string | undefined {
-  if (typeof options.profileDirectory !== "string") return undefined;
-  const trimmed = options.profileDirectory.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function printLogsResult(result: ILogQueryResult, asJson: boolean): void {
@@ -1279,7 +1179,7 @@ function printLogsResult(result: ILogQueryResult, asJson: boolean): void {
 
   result.entries.forEach((entry) => {
     const segments = [
-      entry.timestamp.toISOString(),
+      formatTimestamp(entry.timestamp) ?? String(entry.timestamp),
       entry.level.toUpperCase(),
       entry.context?.workflowType,
       entry.context?.role,
@@ -1290,4 +1190,15 @@ function printLogsResult(result: ILogQueryResult, asJson: boolean): void {
     ].filter((segment): segment is string => Boolean(segment));
     console.log(segments.join(" | "));
   });
+}
+
+function formatTimestamp(value: unknown): string | undefined {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+  return undefined;
 }

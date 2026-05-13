@@ -34,7 +34,6 @@ export type WorkItemStatus =
 export type WorkerLeaseStatus = "active" | "expired" | "released";
 
 export type WorkerRole =
-  | "orchestrator"
   | "auth"
   | "metadata"
   | "asset"
@@ -54,4 +53,3 @@ export type OrchestrationStageType =
 export type StatusEventScope = "job" | "stage" | "work-item" | "lease" | "worker";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
-

@@ -4,21 +4,15 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug CLI",
+      "name": "Debug CLI - Download",
       "preLaunchTask": "tsc: build - tsconfig.json",
       "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "download",
-        "--browser",
-        "http://localhost:9222",
-        "--browser-profile",
-        "/Users/mikegales/.suno-export/chrome-user-data",
-        "--profile-directory",
-        "Profile 2",
-        "-f",
-        "wav"
+        "--config",
+        "${workspaceFolder}/local-config.json"
       ],
       "console": "internalConsole",
       "outFiles": [

@@ -624,20 +624,20 @@ export class Processor {
     let songs: ISongData[];
     try {
       if (targetClipIds) {
-        logger.log(`Loading ${targetClipIds.size} targeted metadata entr${targetClipIds.size === 1 ? "y" : "ies"} from database`);
+        logger.log(`Loading ${targetClipIds.size} targeted metadata entr${targetClipIds.size === 1 ? "y" : "ies"} from store`);
         songs = await store.loadByClipIds(Array.from(targetClipIds));
       } else {
         songs = await store.loadAll();
       }
     } catch (err: any) {
-      logger.error(`Failed to read metadata database: ${err.message || err}`);
+      logger.error(`Failed to read metadata store: ${err.message || err}`);
       await store.close();
       throw err;
     }
     await store.close();
 
     if (!this.metadataDatabaseExisted) {
-      logger.warn(`Metadata database not found; created empty database: ${store.location}`);
+      logger.warn(`Metadata store not found; using empty metadata set: ${store.location}`);
       return [];
     }
 
@@ -651,7 +651,7 @@ export class Processor {
   private async saveMetadata(): Promise<void> {
     await assertNotCancelled(this.config);
     if (this.dirtyClipIds.size === 0) {
-      logger.log("Skipping metadata database write: no changed songs");
+      logger.log("Skipping metadata store write: no changed songs");
       return;
     }
 
@@ -660,21 +660,21 @@ export class Processor {
       .filter((song) => dirtyClipIds.has(song.clipId))
       .map((song) => normalizeMetadata(song));
     if (dirtySongs.length === 0) {
-      logger.warn("Skipping metadata database write: changed songs were not loaded");
+      logger.warn("Skipping metadata store write: changed songs were not loaded");
       dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
       return;
     }
 
     const store = await createMetadataStore(this.getMetadataStoreConfig());
     try {
-      logger.log(`Writing ${dirtySongs.length} changed metadata entr${dirtySongs.length === 1 ? "y" : "ies"} to database`);
+      logger.log(`Writing ${dirtySongs.length} changed metadata entr${dirtySongs.length === 1 ? "y" : "ies"} to store`);
       for (const song of dirtySongs) {
         await assertNotCancelled(this.config);
         await store.upsert(song);
       }
       dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
     } catch (err: any) {
-      logger.warn(`Failed to update metadata database: ${err.message || err}`);
+      logger.warn(`Failed to update metadata store: ${err.message || err}`);
     } finally {
       await store.close();
     }
