@@ -155,6 +155,12 @@ CREATE INDEX IF NOT EXISTS idx_log_entries_context_job_id ON log_entries((contex
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_role ON log_entries((context_json->>'role'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_worker_instance_id ON log_entries((context_json->>'workerInstanceId'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_clip_id ON log_entries((context_json->>'clipId'));
+
+CREATE TABLE IF NOT EXISTS runtime_settings (
+  key TEXT PRIMARY KEY,
+  value_json JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `;
 
 export type ControlPlaneOptions = {
@@ -278,6 +284,22 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
       WHERE id = $1
       `,
       [jobId, status, toDate(details.startedAt), toDate(details.completedAt), details.errorCode ?? null, details.errorMessage ?? null],
+    );
+  }
+
+  async updateJobPayload(
+    jobId: string,
+    payload: IOrchestrationJob["payload"],
+  ): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+      UPDATE orchestration_jobs
+      SET payload_json = $2::jsonb,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      `,
+      [jobId, toJson(payload)],
     );
   }
 
@@ -443,106 +465,105 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
 
   async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<IClaimedWorkItem | null> {
     await this.initialize();
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const candidateResult = await client.query(
-        `
-        SELECT
-          w.*,
-          s.id AS stage_record_id,
-          s.job_id AS stage_job_id,
-          s.stage_type AS stage_record_type,
-          s.status AS stage_record_status,
-          s.sequence AS stage_record_sequence,
-          s.payload_json AS stage_payload_json,
-          s.depends_on_stage_ids AS stage_depends_on_stage_ids,
-          s.resource_key AS stage_resource_key,
-          s.blocked_by_stage_id AS stage_blocked_by_stage_id,
-          s.last_known_job_status AS stage_last_known_job_status,
-          s.created_at AS stage_created_at,
-          s.updated_at AS stage_updated_at,
-          s.started_at AS stage_started_at,
-          s.completed_at AS stage_completed_at,
-          s.error_code AS stage_error_code,
-          s.error_message AS stage_error_message,
-          j.id AS job_record_id,
-          j.workflow_type AS job_workflow_type,
-          j.status AS job_record_status,
-          j.runtime_mode AS job_runtime_mode,
-          j.queue_name AS job_queue_name,
-          j.priority AS job_priority,
-          j.payload_json AS job_payload_json,
-          j.created_at AS job_created_at,
-          j.updated_at AS job_updated_at,
-          j.started_at AS job_started_at,
-          j.completed_at AS job_completed_at,
-          j.error_code AS job_error_code,
-          j.error_message AS job_error_message
-        FROM work_items w
-        INNER JOIN orchestration_stages s ON s.id = w.stage_id
-        INNER JOIN orchestration_jobs j ON j.id = w.job_id
-        WHERE j.status IN ('queued', 'running')
-          AND w.worker_role = $1
-          AND w.status IN ('pending', 'blocked')
-          AND NOT EXISTS (
-            SELECT 1
-            FROM orchestration_stages prior
-            WHERE prior.job_id = s.job_id
-              AND prior.sequence < s.sequence
-              AND prior.status <> 'succeeded'
-          )
-        ORDER BY w.created_at ASC
-        FOR UPDATE OF w SKIP LOCKED
-        LIMIT 1
-        `,
-        [workerRole],
-      );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const candidateResult = await client.query(
+          `
+          SELECT
+            w.*,
+            s.id AS stage_record_id,
+            s.job_id AS stage_job_id,
+            s.stage_type AS stage_record_type,
+            s.status AS stage_record_status,
+            s.sequence AS stage_record_sequence,
+            s.payload_json AS stage_payload_json,
+            s.depends_on_stage_ids AS stage_depends_on_stage_ids,
+            s.resource_key AS stage_resource_key,
+            s.blocked_by_stage_id AS stage_blocked_by_stage_id,
+            s.last_known_job_status AS stage_last_known_job_status,
+            s.created_at AS stage_created_at,
+            s.updated_at AS stage_updated_at,
+            s.started_at AS stage_started_at,
+            s.completed_at AS stage_completed_at,
+            s.error_code AS stage_error_code,
+            s.error_message AS stage_error_message,
+            j.id AS job_record_id,
+            j.workflow_type AS job_workflow_type,
+            j.status AS job_record_status,
+            j.runtime_mode AS job_runtime_mode,
+            j.queue_name AS job_queue_name,
+            j.priority AS job_priority,
+            j.payload_json AS job_payload_json,
+            j.created_at AS job_created_at,
+            j.updated_at AS job_updated_at,
+            j.started_at AS job_started_at,
+            j.completed_at AS job_completed_at,
+            j.error_code AS job_error_code,
+            j.error_message AS job_error_message
+          FROM work_items w
+          INNER JOIN orchestration_stages s ON s.id = w.stage_id
+          INNER JOIN orchestration_jobs j ON j.id = w.job_id
+          WHERE j.status IN ('queued', 'running')
+            AND w.worker_role = $1
+            AND w.status IN ('pending', 'blocked')
+            AND NOT EXISTS (
+              SELECT 1
+              FROM orchestration_stages prior
+              WHERE prior.job_id = s.job_id
+                AND prior.sequence < s.sequence
+                AND prior.status <> 'succeeded'
+            )
+          ORDER BY COALESCE(j.priority, 0) DESC, w.created_at ASC
+          FOR UPDATE OF w SKIP LOCKED
+          LIMIT 1
+          `,
+          [workerRole],
+        );
 
-      if (candidateResult.rows.length === 0) {
+        if (candidateResult.rows.length === 0) {
+          await client.query("COMMIT");
+          return null;
+        }
+
+        const row = candidateResult.rows[0];
+        const claimedAt = new Date();
+        await client.query(
+          `
+          UPDATE work_items
+          SET status = 'leased',
+              lease_owner_id = $2,
+              updated_at = $3
+          WHERE id = $1
+          `,
+          [row.id, workerInstanceId, claimedAt],
+        );
         await client.query("COMMIT");
-        return null;
+
+        return {
+          job: mapClaimedJobRow(row),
+          stage: mapClaimedStageRow(row),
+          workItem: {
+            ...mapWorkItemRow(row),
+            status: "leased",
+            leaseOwnerId: workerInstanceId,
+            updatedAt: claimedAt,
+          },
+        };
+      } catch (error) {
+        await client.query("ROLLBACK");
+        if (isRetryablePostgresDeadlock(error) && attempt < 2) {
+          await sleep(25 * (attempt + 1));
+          continue;
+        }
+        throw error;
+      } finally {
+        client.release();
       }
-
-      const row = candidateResult.rows[0];
-      const claimedAt = new Date();
-      await client.query(
-        `
-        UPDATE work_items
-        SET status = 'leased',
-            lease_owner_id = $2,
-            updated_at = $3
-        WHERE id = $1
-        `,
-        [row.id, workerInstanceId, claimedAt],
-      );
-      await client.query(
-        `
-        UPDATE orchestration_stages
-        SET status = 'queued',
-            updated_at = $2
-        WHERE id = $1
-        `,
-        [row.stage_record_id, claimedAt],
-      );
-      await client.query("COMMIT");
-
-      return {
-        job: mapClaimedJobRow(row),
-        stage: mapClaimedStageRow(row),
-        workItem: {
-          ...mapWorkItemRow(row),
-          status: "leased",
-          leaseOwnerId: workerInstanceId,
-          updatedAt: claimedAt,
-        },
-      };
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
     }
+
+    return null;
   }
 
   async updateWorkItemStatus(
@@ -887,6 +908,34 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     };
   }
 
+  async getRuntimeSetting(key: string): Promise<unknown | undefined> {
+    await this.initialize();
+    const result = await this.pool.query(
+      `SELECT value_json FROM runtime_settings WHERE key = $1`,
+      [key],
+    );
+    return result.rows[0]?.value_json;
+  }
+
+  async setRuntimeSetting(key: string, value: unknown): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+      INSERT INTO runtime_settings (key, value_json, updated_at)
+      VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [key, toJson(value)],
+    );
+  }
+
+  async deleteRuntimeSetting(key: string): Promise<void> {
+    await this.initialize();
+    await this.pool.query(`DELETE FROM runtime_settings WHERE key = $1`, [key]);
+  }
+
   private async applySchema(client: PoolClient): Promise<void> {
     if (this.options.schema?.trim()) {
       const schemaName = this.options.schema.trim();
@@ -1114,6 +1163,19 @@ function mapClaimedStageRow(row: any): IOrchestrationStage {
     errorCode: row.stage_error_code ?? undefined,
     errorMessage: row.stage_error_message ?? undefined,
   };
+}
+
+function isRetryablePostgresDeadlock(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  return code === "40P01";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function randomLeaseId(): string {

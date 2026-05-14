@@ -1,130 +1,135 @@
 # Orchestration Migration Notes
 
-These notes are for operators and developers moving from the original
-single-process CLI behavior toward the queued orchestration runtime.
+These notes describe the current architecture after the simplification work.
 
-## What Stayed the Same
+## Current Model
 
-- existing workflow commands still exist: `download`, `sync`, `process`,
-  `download-images`, `fetch-metadata`, and `refresh`
-- existing authentication options still work
-- metadata import and export behavior still works
-- the existing processing concurrency flags are still accepted
+The project now has two normal user targets:
 
-If you were running direct local commands before, the default experience is
-still close to that original behavior because `--runtime-mode` defaults to
-`local`.
+- `target.localRoot`
+- `target.apiUrl`
 
-## What Changed
+Normal local usage is no longer a queued local control-plane model. It is
+direct filesystem work plus `songs_metadata.json`.
 
-Workflow commands now submit durable jobs before work runs. That enables:
+Remote-style usage goes through the HTTP API and Postgres-backed orchestration.
 
-- job status inspection from another process
-- durable centralized orchestration logs
-- separate orchestrator and worker processes
-- later migration to a Postgres-backed multi-machine control plane
+## User-Facing Commands
 
-New operational commands:
+The main user-facing command surface is:
 
-- `run-orchestrator`
-- `run-worker --role ...`
+- `capture-auth-token`
+- `clear-auth-token`
+- `download`
+- `sync`
+- `process`
+- `download-images`
+- `fetch-metadata`
+- `refresh`
 - `job-status`
 - `watch-job`
 - `logs`
+- `api-health`
+- `api-submit`
+- `api-cancel-job`
 
-## Single-Machine Usage
+The commands resolve target configuration from `--config` first, with
+`--api-url` available as an override for API-targeted flows.
 
-For a one-machine setup, the simplest option is to keep using the workflow
-commands directly:
+## Local Workflow Mode
 
-```bash
-suno-export sync --browser http://localhost:9222 --output ./downloads
+When config contains:
+
+```json
+{
+  "target": {
+    "localRoot": "/absolute/path/to/library-root"
+  }
+}
 ```
 
-That still submits a job, but the current process also executes it.
+the normal local workflow is:
 
-If you want the same machine to behave more like a distributed runtime, submit
-and execute separately:
+- `download` writes directly to the configured root
+- `process` reads and writes directly against the configured root
+- `sync` performs local download plus local processing
+- metadata is stored in `songs_metadata.json`
 
-```bash
-suno-export sync --runtime-mode distributed --submit-only --output ./downloads
-suno-export run-orchestrator
+There is no local API mode and no local control-plane runtime involved in this
+path.
+
+## API Workflow Mode
+
+When config contains:
+
+```json
+{
+  "target": {
+    "apiUrl": "http://127.0.0.1:3000"
+  }
+}
 ```
 
-Inspect progress:
+the workflow and inspection path is:
 
-```bash
-suno-export watch-job <job-id>
-suno-export logs --job-id <job-id>
-```
+1. CLI submits work to the HTTP API
+2. the API writes orchestration state to Postgres
+3. runtime workers claim and execute work items
+4. CLI uses `job-status`, `watch-job`, and `logs` for inspection
 
-## Shared Storage Expectations
+## Runtime/Internal Commands
 
-The orchestration model assumes downloaded and processed files live on paths
-that all participating workers can access.
+The remaining runtime/internal commands are:
 
-Current practical setups:
+- `serve-api`
+- `run-worker`
+- `run-librarian`
 
-- plain local directories on one machine
-- a network share mounted at the same or well-known path on each machine or
-  container
+These are deployment or backend-development commands, not the normal end-user
+workflow.
 
-The file layout should remain stable even as the control plane moves from local
-storage to Postgres.
+## Removed Concepts
 
-## Concurrency Compatibility
+The following are no longer part of the active architecture:
 
-The original processing flags remain available:
+- `run-orchestrator`
+- `run-supervisor`
+- `--runtime-mode`
+- `--submit-only`
+- `--control-plane local`
+- `SUNO_EXPORT_CONTROL_PLANE_DIR`
+- local control-plane backends
+- local orchestrator and supervisor layers
+- a standalone local API as the normal local workflow
 
-- `--process-concurrency`
-- `--process-update-concurrency`
+## Postgres Role
 
-During the transition, treat them as compatibility flags that feed the newer
-orchestration model:
+Postgres is now the only supported orchestration control-plane backend for the
+HTTP API and worker runtime.
 
-- `--process-concurrency`: processing-stage parallelism
-- `--process-update-concurrency`: conversion/update parallelism
+That means:
 
-That preserves current CLI workflows while keeping room for clearer role-level
-settings later.
+- `serve-api` requires `--postgres-url`
+- `run-worker` requires `--postgres-url`
+- worker roles are `auth`, `metadata`, `asset`, `processing`, and
+  `conversion`
+- the old dedicated orchestrator runtime role no longer exists
 
-## Current Local Runtime Limitations
+## Librarian Status
 
-The current queued runtime can use separate local processes, but the shared
-state is still file-backed. That means it is useful for:
+`run-librarian` remains as a runtime/internal command for workspace-scoped
+metadata synchronization.
 
-- local development
-- one-machine automation
-- proving out orchestration behavior
+It still uses metadata store options directly and is intentionally separate
+from the simpler `localRoot` user workflow.
 
-It is not the final multi-machine deployment model yet.
+## How To Validate
 
-## Preparing for Postgres and Multi-Worker Deployment
+Use [testing-guide.md](/Users/mikegales/Projects/SunoTrackExporter/docs/testing-guide.md:1)
+for the current validation steps.
 
-When moving beyond a single machine, plan for:
+The main remaining verification work is operational rather than architectural:
 
-- Postgres as the authoritative control plane
-- shared mounted paths for downloads and processed assets
-- separate processes or containers for orchestrator and workers
-- log collection and filtering through the centralized structured log store
-
-The intended deployment shape is:
-
-1. submit jobs from any CLI instance
-2. let orchestrator and worker processes claim work through Postgres
-3. keep files on shared mounts
-4. surface operational state through `job-status`, `watch-job`, and the log
-   query layer
-
-## Kubernetes Direction
-
-Kubernetes remains a deployment concern rather than a code dependency.
-
-The refactor is intentionally structured so later k8s work can focus on:
-
-- how orchestrator and worker containers are launched
-- how shared paths are mounted
-- how Postgres credentials are supplied
-- how logs are surfaced through an external viewer
-
-without changing the command or worker model again.
+- submit a real API-backed workflow
+- confirm worker processing end to end
+- confirm librarian behavior in the runtime model

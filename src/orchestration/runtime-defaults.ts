@@ -11,7 +11,6 @@ export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
   concurrency: {
     metadataAcquisitionMaxActive: 1,
     assetAcquisitionMaxActive: 1,
-    processingSongConcurrency: 4,
     conversionConcurrency: 4,
     metadataUpdateConcurrency: 8,
   },

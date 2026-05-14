@@ -1,11 +1,14 @@
 import type { WorkerRole } from "./core/contracts";
 import type { CliOptions } from "./core/services";
+import { resolveRequiredControlPlaneMqttUrl } from "./orchestration/mqtt-control-plane-notifier";
 
 type ControlPlaneBackend = "postgres";
 export type ApiServerMode = "postgres";
 
 export interface ControlPlaneConfig {
   controlPlane?: ControlPlaneBackend;
+  mqttTopicPrefix?: string;
+  mqttUrl?: string;
   postgresUrl?: string;
 }
 
@@ -76,6 +79,8 @@ export type WorkerConfig = CliOptions & ControlPlaneConfig & {
 };
 
 export type LibrarianConfig = CliOptions & BrowserAuthConfig & MetadataStoreConfigInput & {
+  mqttTopicPrefix?: string;
+  mqttUrl?: string;
   postgresUrl?: string;
   workspace: string;
   enabledWorkspaces?: string[];
@@ -94,6 +99,8 @@ export function normalizeApiServerConfig(options: Record<string, unknown>): ApiS
     mode: "postgres",
     controlPlane: "postgres",
     postgresUrl: optionalString(options.postgresUrl),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
     databaseType: optionalString(options.databaseType),
     database: optionalString(options.database),
     output: optionalString(options.output),
@@ -120,6 +127,8 @@ export function normalizeWorkerConfig(options: Record<string, unknown>): WorkerC
     cacheDir: optionalString(options.cacheDir),
     role,
     controlPlane: inferRuntimeControlPlane(postgresUrl, options.controlPlane),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
     postgresUrl,
     once: optionalBoolean(options.once),
     pollInterval: optionalStringOrNumber(options.pollInterval),
@@ -151,6 +160,8 @@ export function normalizeLibrarianConfig(options: Record<string, unknown>): Libr
     databaseType: optionalString(options.databaseType),
     database: optionalString(options.database),
     postgresUrl: optionalString(options.postgresUrl),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
   };
 }
 
@@ -195,7 +206,6 @@ function optionalWorkerRole(value: unknown): WorkerRole | undefined {
     case "auth":
     case "metadata":
     case "asset":
-    case "processing":
     case "conversion":
       return value;
     default:
@@ -204,6 +214,19 @@ function optionalWorkerRole(value: unknown): WorkerRole | undefined {
 }
 
 function parseWorkspaceListOption(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const workspaces = Array.from(
+      new Set(
+        value
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      ),
+    );
+
+    return workspaces.length > 0 ? workspaces : undefined;
+  }
+
   if (typeof value !== "string" || value.trim().length === 0) {
     return undefined;
   }

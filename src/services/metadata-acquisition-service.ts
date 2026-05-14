@@ -88,8 +88,10 @@ export class MetadataAcquisitionService {
     const filteredTrackIds = tracks
       .filter((track) => isTrackInDateWindow(track, effectiveCreatedAfter, effectiveCreatedBefore))
       .map((track) => track.id);
+    const batchSize = parsePositiveInteger(options.batchSize, "--batch-size");
+    const batchedTrackIds = batchSize ? filteredTrackIds.slice(0, batchSize) : filteredTrackIds;
 
-    if (filteredTrackIds.length === 0) {
+    if (batchedTrackIds.length === 0) {
       console.log(`[metadata] Workspace ${workspace.name} has no tracks matching the current selection criteria.`);
       return {
         discoveredTrackCount: tracks.length,
@@ -97,12 +99,12 @@ export class MetadataAcquisitionService {
       };
     }
 
-    console.log(`[metadata] Fetching metadata for ${filteredTrackIds.length} track(s) in workspace ${workspace.name}...`);
-    await client.fetchAllTracksMetadata(filteredTrackIds, writeFetchProgress, async () => assertNotCancelled(options));
+    console.log(`[metadata] Fetching metadata for ${batchedTrackIds.length} track(s) in workspace ${workspace.name}...`);
+    await client.fetchAllTracksMetadata(batchedTrackIds, writeFetchProgress, async () => assertNotCancelled(options));
     console.log("");
     return {
       discoveredTrackCount: tracks.length,
-      fetchedMetadataCount: filteredTrackIds.length,
+      fetchedMetadataCount: batchedTrackIds.length,
     };
   }
 }
@@ -170,6 +172,17 @@ export function parseTrackIdsOption(value: string | undefined): string[] {
         .filter((id) => id.length > 0),
     ),
   );
+}
+
+function parsePositiveInteger(value: unknown, label: string): number | undefined {
+  if (value == null || value === "") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return parsed;
 }
 
 export function filterWorkspaces(workspaces: IWorkspace[], workspaceId?: string): IWorkspace[] {
