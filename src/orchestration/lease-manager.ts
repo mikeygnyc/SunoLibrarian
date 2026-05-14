@@ -28,11 +28,6 @@ export class LeaseManager {
           maxActive: this.runtimeConfig.concurrency.assetAcquisitionMaxActive,
           conflictResourceKeys: ["acquisition-global"],
         };
-      case "processing":
-        return {
-          resourceKey: "processing-global",
-          maxActive: this.runtimeConfig.concurrency.processingSongConcurrency,
-        };
       case "conversion":
         return {
           resourceKey: "conversion-global",

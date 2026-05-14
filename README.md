@@ -2,6 +2,61 @@
 
 Unified TypeScript CLI for downloading, processing, and syncing Suno tracks to a local filesystem.
 
+## Config-First Usage
+
+The CLI now prefers loading settings from `suno-export.config.json` in the current working directory. Every flag is optional at launch time; if a value is present both in config and on the CLI, the CLI flag wins for that run.
+
+Example:
+
+```json
+{
+  "target": {
+    "localRoot": "./downloads"
+  },
+  "runtime": {
+    "postgresUrl": "postgres://user:pass@localhost:5432/suno_export",
+    "mqttUrl": "mqtt://mqtt.example.net:1883",
+    "mqttTopicPrefix": "suno-export/control-plane"
+  },
+  "defaults": {
+    "workspace": "your-workspace-id",
+    "format": "wav",
+    "processFormats": "flac,mp3,alac",
+    "processBitrate": "320",
+    "cacheDir": "./data"
+  },
+  "commands": {
+    "sync": {
+      "library": "./library"
+    },
+    "serve-api": {
+      "output": "./downloads",
+      "library": "./library"
+    }
+  }
+}
+```
+
+With that file in place, a normal run can be as short as:
+
+```bash
+npm start -- sync
+```
+
+And one-off overrides still work:
+
+```bash
+npm start -- sync --workspace another-workspace --format mp3
+```
+
+Use `runtime` for shared process-level settings such as `postgresUrl`, `mqttUrl`,
+`mqttTopicPrefix`, `host`, `port`, or common runtime paths. Keep per-command
+overrides under `commands`.
+
+For distributed operation, `mqttUrl` is required. MQTT is the live control-plane
+transport for librarian/worker coordination, while Postgres remains the durable
+workflow and metadata store.
+
 ## Install
 
 ```bash
@@ -404,13 +459,36 @@ Capture a fresh Suno bearer token locally for pasting into the dashboard or API.
 suno-export capture-auth-token --browser http://localhost:9222
 ```
 
+To capture and immediately push the token into the API:
+
+```text
+suno-export capture-auth-token --browser http://localhost:9222 --send-to-api --api-url http://127.0.0.1:3000
+```
+
 Options:
 
 - `-b, --browser [url]`: connect to an existing Chrome debug session. Required for token capture.
 - `--browser-profile <dir>`: Chrome user data directory for launched browser.
 - `--profile-directory <name>`: Chrome profile directory inside `--browser-profile`.
 - `--save-local`: save the captured token to the local cache after printing it.
+- `--send-to-api`: post the captured token to the configured HTTP API after saving it locally.
+- `--api-url <url>`: override the HTTP API base URL used by `--send-to-api`. You can also set `target.apiUrl` in the config file instead.
 - `--json`: emit `{ "token": "..." }` JSON instead of plain text output.
+
+Config example:
+
+```json
+{
+  "target": {
+    "apiUrl": "http://127.0.0.1:3000"
+  },
+  "commands": {
+    "capture-auth-token": {
+      "sendToApi": true
+    }
+  }
+}
+```
 
 #### `import-metadata-json`
 
@@ -506,7 +584,7 @@ Options:
 - `--library <dir>`: final converted library output. Default: same as `--output`.
 - `--process-formats <formats>`: output formats CSV for processor. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate for processor. Default: `320`.
-- `--process-concurrency <n>`: legacy compatibility flag for processing worker
+- `--process-concurrency <n>`: legacy compatibility flag for conversion worker
   concurrency. Default: `4`.
 - `--process-update-concurrency <n>`: legacy compatibility flag for
   conversion/update concurrency. Default: `8`.
@@ -544,7 +622,7 @@ Options:
 - `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output root on completion.
 - `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
 - `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
-- `--process-concurrency <n>`: legacy compatibility flag for processing worker
+- `--process-concurrency <n>`: legacy compatibility flag for conversion worker
   concurrency. Default: `4`.
 - `--process-update-concurrency <n>`: legacy compatibility flag for
   conversion/update concurrency. Default: `8`.
@@ -679,7 +757,7 @@ suno-export run-worker --role <role> [options]
 
 Options:
 
-- `--role <role>`: `auth`, `metadata`, `asset`, `processing`, or `conversion`.
+- `--role <role>`: `auth`, `metadata`, `asset`, or `conversion`.
 - `--once`: process at most one work item and exit.
 - `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
 

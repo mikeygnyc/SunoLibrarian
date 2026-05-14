@@ -4,6 +4,7 @@ import {
   resolveBrowserProfileDirectory,
   resolveBrowserUserDataDir,
 } from "../lib/auth/auth";
+import { getSharedAuthToken, setSharedAuthToken } from "../orchestration/auth-token-store";
 import { SunoClient } from "../client";
 import { Storage } from "../storage";
 
@@ -19,6 +20,7 @@ export interface CliOptions {
   databaseType?: string;
   delay?: string | number;
   disabledWorkspaces?: string[];
+  downloadClipIds?: string[];
   host?: string;
   enabledWorkspaces?: string[];
   ignoreCachedToken?: boolean;
@@ -31,6 +33,8 @@ export interface CliOptions {
   limit?: string | number;
   list?: string;
   logFile?: string;
+  mqttTopicPrefix?: string;
+  mqttUrl?: string;
   localRoot?: string;
   once?: boolean;
   output?: string;
@@ -38,11 +42,14 @@ export interface CliOptions {
   pollInterval?: string | number;
   port?: string | number;
   postgresUrl?: string;
+  priority?: string | number;
   processConcurrency?: string | number;
   processUpdateConcurrency?: string | number;
+  batchSize?: string | number;
   profileDirectory?: string;
   reason?: string;
   role?: string;
+  sendToApi?: boolean;
   startTime?: string;
   stageId?: string;
   token?: string;
@@ -50,12 +57,15 @@ export interface CliOptions {
   workflowType?: string;
   workItemId?: string;
   workspace?: string;
+  librarianManagedSync?: boolean;
+  __jobId?: string;
+  __requireResolvedAuth?: boolean;
   __abortSignal?: AbortSignal;
   __authenticatedClient?: SunoClient;
   __storage?: {
     clearCache?: () => void;
   };
-  onTrackDownloaded?: (params: { clipId: string; outputDir: string }) => void;
+  onTrackDownloaded?: (params: { clipId: string; outputDir: string }) => void | Promise<void>;
 }
 
 export type AuthStorage = Pick<Storage, "getAuthToken" | "setAuthToken">;
@@ -100,6 +110,33 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
   const browserEndpoint = resolveBrowserEndpoint(options);
   const browserUserDataDir = resolveBrowserUserDataDir(options);
   const browserProfileDirectory = resolveBrowserProfileDirectory(options);
+  const requireResolvedAuth = options.__requireResolvedAuth === true;
+
+  if (requireResolvedAuth) {
+    const resolvedToken = typeof options.token === "string" && options.token.trim().length > 0
+      ? options.token.trim()
+      : undefined;
+
+    if (!resolvedToken) {
+      throw new Error(
+        [
+          "Distributed auth handoff missing resolved token.",
+          "This worker is not allowed to resolve auth locally.",
+          "Run the authorization stage first and pass its resolved auth to downstream stages.",
+        ].join("\n"),
+      );
+    }
+
+    return deps.createClient(
+      resolvedToken,
+      browserEndpoint,
+      browserUserDataDir,
+      browserProfileDirectory,
+      options.cacheDir,
+      options.__abortSignal,
+    );
+  }
+
   const ignoreCachedToken = options.ignoreCachedToken === true;
   if (!ignoreCachedToken) {
     const cachedToken = deps.storage.getAuthToken();
@@ -124,6 +161,30 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
         deps.log.warn("Cached authentication token was rejected. Falling back to configured auth method.");
       }
     }
+
+    const sharedToken = await getSharedAuthToken({ postgresUrl: options.postgresUrl });
+    if (sharedToken && sharedToken !== cachedToken) {
+      const sharedClient = deps.createClient(
+        sharedToken,
+        browserEndpoint,
+        browserUserDataDir,
+        browserProfileDirectory,
+        options.cacheDir,
+        options.__abortSignal,
+      );
+
+      try {
+        await sharedClient.fetchWorkspacesPage(1);
+        deps.storage.setAuthToken(sharedToken);
+        deps.log.log("Using shared authentication token from control plane.");
+        return sharedClient;
+      } catch (error: any) {
+        if (!isAuthFailure(error)) {
+          throw error;
+        }
+        deps.log.warn("Shared authentication token from control plane was rejected. Falling back to configured auth method.");
+      }
+    }
   }
 
   if (!options.token && !browserEndpoint) {
@@ -136,6 +197,31 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
   }
 
   let token = options.token;
+  if (token) {
+    const explicitClient = deps.createClient(
+      token,
+      browserEndpoint,
+      browserUserDataDir,
+      browserProfileDirectory,
+      options.cacheDir,
+      options.__abortSignal,
+    );
+
+    try {
+      await explicitClient.fetchWorkspacesPage(1);
+      deps.log.log("Using explicit authentication token.");
+      deps.storage.setAuthToken(token);
+      await setSharedAuthToken({ postgresUrl: options.postgresUrl }, token);
+      return explicitClient;
+    } catch (error: any) {
+      if (!isAuthFailure(error)) {
+        throw error;
+      }
+      deps.log.warn("Explicit authentication token was rejected by Suno.");
+      token = undefined;
+    }
+  }
+
   if (!token) {
     deps.log.log("No token provided. Launching browser to extract token...");
     token = await deps.extractTokenFromBrowser(browserEndpoint, {
@@ -146,8 +232,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     deps.log.log("Token extracted successfully!");
   }
 
-  deps.storage.setAuthToken(token);
-  return deps.createClient(
+  const extractedClient = deps.createClient(
     token,
     browserEndpoint,
     browserUserDataDir,
@@ -155,6 +240,10 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     options.cacheDir,
     options.__abortSignal,
   );
+  await extractedClient.fetchWorkspacesPage(1);
+  deps.storage.setAuthToken(token);
+  await setSharedAuthToken({ postgresUrl: options.postgresUrl }, token);
+  return extractedClient;
 }
 
 function createClient(

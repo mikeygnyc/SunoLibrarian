@@ -28,7 +28,8 @@ import {
   runWorkerFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
-import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
+import { DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
+import { resolveCliCommandOptions } from "./cli-config";
 import { runServeApiFlow } from "./http-api";
 
 export function createCliProgram(): Command {
@@ -63,7 +64,9 @@ export function createApiProgram(): Command {
     (program) => program
       .option("--host <host>", "Host interface to bind", "127.0.0.1")
       .option("--port <port>", "Port to listen on", "3000")
-      .requiredOption("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+      .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
       .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
       .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
       .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
@@ -78,12 +81,14 @@ export function createWorkerProgram(): Command {
     "Runtime/internal worker process for a single Suno export worker role",
     async (options) => runWorkerFlow(normalizeWorkerConfig(options)),
     (program) => program
-      .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
-      .requiredOption("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--role <role>", "Worker role: auth, metadata, asset, or conversion")
+      .option("--postgres-url <url>", "Postgres control-plane connection URL")
+      .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+      .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
       .option("--health-host <host>", "Host interface for worker health endpoint")
       .option("--health-port <port>", "Port for worker health endpoint")
       .option("--once", "Process at most one work item and exit")
-      .option("--poll-interval <ms>", "Polling interval in ms", "500"),
+      .option("--poll-interval <ms>", "Deprecated compatibility flag; MQTT-dispatched workers do not poll", "500"),
   );
 }
 
@@ -101,12 +106,14 @@ export function createLibrarianProgram(): Command {
       .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
       .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
       .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-      .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
+      .option("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
       .option("--enabled-workspaces <ids>", "Comma-separated workspace allowlist for librarian traffic")
       .option("--disabled-workspaces <ids>", "Comma-separated workspace denylist for librarian traffic")
       .option("--health-host <host>", "Host interface for librarian health endpoint")
       .option("--health-port <port>", "Port for librarian health endpoint")
-      .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
+      .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "21600000")
+      .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+      .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
       .option("--once", "Sync the configured workspace and exit"),
   );
 }
@@ -127,7 +134,7 @@ function createAppRuntimeProgram(
   const program = createBaseProgram(name, description);
   addCacheDirOption(program);
   configure(program);
-  program.action(withCliError(handler));
+  program.action(withResolvedCommandOptions(name, handler));
   return program;
 }
 
@@ -144,40 +151,101 @@ function withCliError<TArgs extends unknown[], TResult>(
   };
 }
 
-function withOperatorCliConfig<TArgs extends unknown[], TResult>(
+function withResolvedCommandOptions<TArgs extends unknown[], TResult>(
+  commandName: string,
   handler: (...args: TArgs) => Promise<TResult>,
+  normalizeOptions?: (options: Record<string, unknown>) => Record<string, unknown>,
 ) {
   return async (...args: TArgs): Promise<void> => {
-    const lastArg = args[args.length - 1];
-    if (lastArg && typeof lastArg === "object") {
-      normalizeOperatorCliConfig(lastArg as Record<string, unknown>);
-    }
-    await withCliError(handler)(...args);
+    const resolvedArgs = injectResolvedOptions(commandName, args, normalizeOptions);
+    await withCliError(handler)(...(resolvedArgs as TArgs));
   };
 }
 
+function injectResolvedOptions<TArgs extends unknown[]>(
+  commandName: string,
+  args: TArgs,
+  normalizeOptions?: (options: Record<string, unknown>) => Record<string, unknown>,
+): unknown[] {
+  const nextArgs = [...args];
+  const lastArg = nextArgs[nextArgs.length - 1];
+  const command = lastArg instanceof Command ? lastArg : undefined;
+  const rawOptions = command
+    ? command.optsWithGlobals()
+    : findOptionsObject(nextArgs) ?? {};
+  const resolvedOptions = resolveCliCommandOptions(commandName, rawOptions, command);
+  const normalizedOptions = normalizeOptions
+    ? normalizeOptions(resolvedOptions)
+    : resolvedOptions;
+
+  if (command) {
+    const optionsIndex = findOptionsIndexBeforeCommand(nextArgs);
+    if (optionsIndex >= 0) {
+      nextArgs[optionsIndex] = normalizedOptions;
+      return nextArgs;
+    }
+    nextArgs.splice(nextArgs.length - 1, 0, normalizedOptions);
+    return nextArgs;
+  }
+
+  const optionsIndex = findOptionsIndex(nextArgs);
+  if (optionsIndex >= 0) {
+    nextArgs[optionsIndex] = normalizedOptions;
+    return nextArgs;
+  }
+
+  nextArgs.push(normalizedOptions);
+  return nextArgs;
+}
+
+function findOptionsObject(args: unknown[]): Record<string, unknown> | undefined {
+  const optionsIndex = findOptionsIndex(args);
+  return optionsIndex >= 0 ? args[optionsIndex] as Record<string, unknown> : undefined;
+}
+
+function findOptionsIndex(args: unknown[]): number {
+  for (let index = args.length - 1; index >= 0; index -= 1) {
+    const value = args[index];
+    if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Command)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findOptionsIndexBeforeCommand(args: unknown[]): number {
+  if (args.length < 2) {
+    return -1;
+  }
+  const candidate = args[args.length - 2];
+  return candidate && typeof candidate === "object" && !Array.isArray(candidate) && !(candidate instanceof Command)
+    ? args.length - 2
+    : -1;
+}
+
 function addMetadataDatabaseOptions(command: Command): Command {
-  return command
+  return addConfigOption(command)
     .option("--cache-dir <path>", "Local cache root directory")
-    .option("--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite")
-    .option("--database <path>", "SQLite metadata database path when --database-type is sqlite", DEFAULT_DATABASE_PATH)
+    .option("--database-type <type>", "Metadata database backend: sqlite or postgres")
+    .option("--database <path>", "SQLite metadata database path when --database-type is sqlite")
     .option("--postgres-url <url>", "Postgres connection URL when --database-type is postgres");
 }
 
 function addPostgresControlPlaneOptions(command: Command): Command {
-  return command
-    .requiredOption("--postgres-url <url>", "Postgres control-plane connection URL");
+  return addConfigOption(command)
+    .option("--postgres-url <url>", "Postgres control-plane connection URL")
+    .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+    .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging");
 }
 
 function addApiUrlOption(command: Command): Command {
-  return command
+  return addConfigOption(command)
     .option("--cache-dir <path>", "Local cache root directory")
     .option("--api-url <url>", "HTTP API base URL override");
 }
 
 function addWorkflowConfigOption(command: Command): Command {
-  return command
-    .option("--config <path>", "Workflow target config file");
+  return addConfigOption(command);
 }
 
 function addApiTargetOptions(command: Command): Command {
@@ -185,8 +253,16 @@ function addApiTargetOptions(command: Command): Command {
 }
 
 function addCacheDirOption(command: Command): Command {
-  return command
+  return addConfigOption(command)
     .option("--cache-dir <path>", "Local cache root directory");
+}
+
+function addConfigOption(command: Command): Command {
+  const hasConfigOption = command.options.some((option) => option.attributeName() === "config");
+  if (!hasConfigOption) {
+    command.option("--config <path>", "CLI config file");
+  }
+  return command;
 }
 
 function addHiddenOption(
@@ -218,19 +294,18 @@ function addHiddenAuthOptions(command: Command): Command {
 
 function addHiddenMetadataStoreOptions(command: Command): Command {
   addHiddenOption(command, "--cache-dir <path>", "Local cache root directory");
-  addHiddenOption(command, "--database-type <type>", "Metadata database backend: sqlite or postgres", "sqlite");
+  addHiddenOption(command, "--database-type <type>", "Metadata database backend: sqlite or postgres");
   addHiddenOption(
     command,
     "--database <path>",
     "SQLite metadata database path when --database-type is sqlite",
-    DEFAULT_DATABASE_PATH,
   );
   addHiddenOption(command, "--postgres-url <url>", "Postgres connection URL when --database-type is postgres");
   return command;
 }
 
 function registerOperatorCliCommands(program: Command): void {
-  addCacheDirOption(program
+  addApiUrlOption(program
     .command("capture-auth-token")
     .description("Capture a fresh Suno auth token locally for pasting into the dashboard or API")
     .option(
@@ -240,25 +315,26 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("--save-local", "Save the captured token to the local cache after printing it")
+    .option("--send-to-api", "Post the captured token to the configured HTTP API after saving it locally")
     .option("--json", "Output the captured token as JSON"))
-    .action(withOperatorCliConfig(runCaptureAuthTokenFlow));
+    .action(withResolvedCommandOptions("capture-auth-token", runCaptureAuthTokenFlow, normalizeOperatorCliConfig));
 
   addCacheDirOption(program
     .command("clear-auth-token")
     .description("Clear the cached Suno authentication token"))
-    .action(withOperatorCliConfig(runClearAuthTokenFlow));
+    .action(withResolvedCommandOptions("clear-auth-token", runClearAuthTokenFlow, normalizeOperatorCliConfig));
 
   addWorkflowConfigOption(addMetadataDatabaseOptions(program
     .command("import-metadata-json")
     .description("Import existing songs_metadata.json data into the selected metadata store")
-    .requiredOption("-i, --input <path>", "Current-format metadata JSON file")))
-    .action(withOperatorCliConfig(runImportMetadataJsonFlow));
+    .option("-i, --input <path>", "Current-format metadata JSON file")))
+    .action(withResolvedCommandOptions("import-metadata-json", runImportMetadataJsonFlow, normalizeOperatorCliConfig));
 
   addWorkflowConfigOption(addMetadataDatabaseOptions(program
     .command("export-metadata-json")
     .description("Export selected metadata store data as current-format JSON")
-    .requiredOption("-o, --output <path>", "Output metadata JSON file")))
-    .action(withOperatorCliConfig(runExportMetadataJsonFlow));
+    .option("-o, --output <path>", "Output metadata JSON file")))
+    .action(withResolvedCommandOptions("export-metadata-json", runExportMetadataJsonFlow, normalizeOperatorCliConfig));
 
   const downloadCommand = addWorkflowConfigOption(addHiddenAuthOptions(program
     .command("download")
@@ -272,7 +348,7 @@ function registerOperatorCliCommands(program: Command): void {
   ));
   addHiddenOption(downloadCommand, "--delay <ms>", "Delay between downloads in ms", "1000");
   addHiddenOption(downloadCommand, "--flush-cache", "Clear cache before starting");
-  downloadCommand.action(withOperatorCliConfig(runDownloadFlow));
+  downloadCommand.action(withResolvedCommandOptions("download", runDownloadFlow, normalizeOperatorCliConfig));
 
   const syncCommand = addWorkflowConfigOption(addHiddenAuthOptions(program
     .command("sync")
@@ -289,7 +365,7 @@ function registerOperatorCliCommands(program: Command): void {
   addHiddenOption(syncCommand, "--flush-cache", "Clear cache before starting");
   addHiddenOption(syncCommand, "--process-formats <formats>", "Converter formats", "flac,mp3,alac");
   addHiddenOption(syncCommand, "--process-bitrate <kbps>", "Converter MP3 bitrate", "320");
-  syncCommand.action(withOperatorCliConfig(runSyncFlow));
+  syncCommand.action(withResolvedCommandOptions("sync", runSyncFlow, normalizeOperatorCliConfig));
 
   const processCommand = addWorkflowConfigOption(program
     .command("process")
@@ -303,7 +379,7 @@ function registerOperatorCliCommands(program: Command): void {
   addHiddenOption(processCommand, "--reconvert-before <iso>", "Only reconvert on/before date");
   addHiddenOption(processCommand, "--reconvert-after <iso>", "Only reconvert on/after date");
   addHiddenOption(processCommand, "--reconvert-missing", "Only process missing formats");
-  processCommand.action(withOperatorCliConfig(runProcessFlow));
+  processCommand.action(withResolvedCommandOptions("process", runProcessFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("download-images")
@@ -319,7 +395,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("--fetch-image-list <file>", "Find missing images and write list to JSON file")
     .option("--fetch-missing", "Find missing images and download them directly"))
-    .action(withOperatorCliConfig(runDownloadImagesFlow));
+    .action(withResolvedCommandOptions("download-images", runDownloadImagesFlow, normalizeOperatorCliConfig));
 
   addWorkflowConfigOption(addCacheDirOption(program
     .command("list")
@@ -334,7 +410,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
     .option("--json", "Output as JSON")))
-    .action(withOperatorCliConfig(runListFlow));
+    .action(withResolvedCommandOptions("list", runListFlow, normalizeOperatorCliConfig));
 
   addWorkflowConfigOption(addCacheDirOption(program
     .command("workspaces")
@@ -348,7 +424,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
     .option("--json", "Output as JSON")))
-    .action(withOperatorCliConfig(runWorkspacesFlow));
+    .action(withResolvedCommandOptions("workspaces", runWorkspacesFlow, normalizeOperatorCliConfig));
 
   addCacheDirOption(program
     .command("metadata <trackId>")
@@ -361,7 +437,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile"))
-    .action(withOperatorCliConfig(runMetadataFlow));
+    .action(withResolvedCommandOptions("metadata", runMetadataFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("fetch-metadata")
@@ -378,7 +454,7 @@ function registerOperatorCliCommands(program: Command): void {
     .option("-w, --workspace <id>", "Workspace ID (default: all workspaces)")
     .option("--created-after <date>", "Only include tracks created on/after date (ISO or YYYY-MM-DD)")
     .option("--created-before <date>", "Only include tracks created on/before date (ISO or YYYY-MM-DD)"))
-    .action(withOperatorCliConfig(runFetchMetadataFlow));
+    .action(withResolvedCommandOptions("fetch-metadata", runFetchMetadataFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("refresh")
@@ -391,20 +467,20 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile"))
-    .action(withOperatorCliConfig(runRefreshFlow));
+    .action(withResolvedCommandOptions("refresh", runRefreshFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("job-status <jobId>")
     .description("Show workflow job status")
     .option("--json", "Output job status as JSON"))
-    .action(withOperatorCliConfig(runJobStatusFlow));
+    .action(withResolvedCommandOptions("job-status", runJobStatusFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("watch-job <jobId>")
     .description("Watch workflow job status until completion")
     .option("--json", "Output job status as JSON on each refresh")
     .option("--interval <ms>", "Polling interval in ms", "1000"))
-    .action(withOperatorCliConfig(runWatchJobFlow));
+    .action(withResolvedCommandOptions("watch-job", runWatchJobFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("logs")
@@ -421,27 +497,27 @@ function registerOperatorCliCommands(program: Command): void {
     .option("--end-time <iso>", "Only include logs on/before ISO timestamp")
     .option("--limit <n>", "Maximum logs to return", "100")
     .option("--json", "Output logs as JSON"))
-    .action(withOperatorCliConfig(runLogsFlow));
+    .action(withResolvedCommandOptions("logs", runLogsFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("api-health")
     .description("Check HTTP API health")
     .option("--json", "Output response as JSON"))
-    .action(withOperatorCliConfig(runApiHealthFlow));
+    .action(withResolvedCommandOptions("api-health", runApiHealthFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("api-submit <workflow>")
     .description("Submit a workflow using a validated JSON payload")
-    .requiredOption("--payload <path>", "JSON payload file path, or - to read from stdin")
+    .option("--payload <path>", "JSON payload file path, or - to read from stdin")
     .option("--json", "Output response as JSON"))
-    .action(withOperatorCliConfig(runApiSubmitWorkflowFlow));
+    .action(withResolvedCommandOptions("api-submit", runApiSubmitWorkflowFlow, normalizeOperatorCliConfig));
 
   addApiTargetOptions(program
     .command("api-cancel-job <jobId>")
     .description("Cancel a queued or running job through the HTTP API")
     .option("--reason <text>", "Optional cancellation reason")
     .option("--json", "Output response as JSON"))
-    .action(withOperatorCliConfig(runApiCancelJobFlow));
+    .action(withResolvedCommandOptions("api-cancel-job", runApiCancelJobFlow, normalizeOperatorCliConfig));
 }
 
 function registerLibrarianCommand(program: Command): void {
@@ -456,35 +532,40 @@ function registerLibrarianCommand(program: Command): void {
     .option("--ignore-cached-token", "Skip cached authentication token and use --token or --browser")
     .option("--browser-profile <dir>", "Chrome user data directory for launched browser")
     .option("--profile-directory <name>", "Chrome profile directory inside --browser-profile")
-    .requiredOption("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
+    .option("-w, --workspace <id>", "Pinned workspace ID for librarian sync")
     .option("--enabled-workspaces <ids>", "Comma-separated workspace allowlist for librarian traffic")
     .option("--disabled-workspaces <ids>", "Comma-separated workspace denylist for librarian traffic")
-    .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "300000")
+    .option("--librarian-interval <ms>", "Delay between workspace sync cycles in ms", "21600000")
+    .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+    .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
     .option("--once", "Sync the configured workspace and exit"))
-    .action(withCliError(async (options) => runLibrarianFlow(normalizeLibrarianConfig(options))));
+    .action(withResolvedCommandOptions("run-librarian", async (options) => runLibrarianFlow(normalizeLibrarianConfig(options))));
 }
 
 function registerWorkerCommand(program: Command): void {
   addPostgresControlPlaneOptions(program
     .command("run-worker")
     .description("Run the runtime/internal worker loop for a specific role")
-    .requiredOption("--role <role>", "Worker role: auth, metadata, asset, processing, or conversion")
+    .option("--role <role>", "Worker role: auth, metadata, asset, or conversion")
     .option("--once", "Process at most one work item and exit")
-    .option("--poll-interval <ms>", "Polling interval in ms", "500"))
-    .action(withCliError(async (options) => runWorkerFlow(normalizeWorkerConfig(options))));
+    .option("--poll-interval <ms>", "Deprecated compatibility flag; MQTT-dispatched workers do not poll", "500"))
+    .action(withResolvedCommandOptions("run-worker", async (options) => runWorkerFlow(normalizeWorkerConfig(options))));
 }
 
 function registerServeApiCommand(program: Command): void {
   program
     .command("serve-api")
     .description("Run the HTTP API server and orchestration entrypoint")
+    .option("--config <path>", "CLI config file")
     .option("--host <host>", "Host interface to bind", "127.0.0.1")
     .option("--port <port>", "Port to listen on", "3000")
-    .requiredOption("--postgres-url <url>", "Postgres control-plane connection URL")
+    .option("--postgres-url <url>", "Postgres control-plane connection URL")
+    .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
+    .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
     .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
     .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
     .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
     .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
     .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log")
-    .action(withCliError(async (options) => runServeApiFlow(normalizeApiServerConfig(options))));
+    .action(withResolvedCommandOptions("serve-api", async (options) => runServeApiFlow(normalizeApiServerConfig(options))));
 }

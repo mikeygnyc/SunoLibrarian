@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import {humanId, poolSize, minLength, maxLength} from 'human-id'
 import { buildAuthConfig, captureAuthTokenWithDeps, extractTokenFromBrowser } from "./lib/auth/auth";
-import { createCancellationMonitor, isCancellationError } from "./cancellation";
+import { assertNotCancelled, createCancellationMonitor, isCancellationError } from "./cancellation";
 import { HttpApiClient } from "./http-api-client";
 import type { LibrarianConfig, WorkerConfig } from "./app-config";
 import type {
@@ -39,6 +39,7 @@ import {
 import { Storage } from "./storage";
 import { startRuntimeHealthServer } from "./supervisor/runtime-health";
 import {
+  createMetadataStore,
   describeMetadataStoreConfig,
   exportMetadataDatabaseToJson,
   importMetadataJsonToDatabase,
@@ -46,11 +47,18 @@ import {
   resolveMetadataStoreConfig,
 } from "./metadata-store";
 import { resolveWorkflowTarget } from "./workflow-target-config";
+import { clearSharedAuthToken } from "./orchestration/auth-token-store";
+import {
+  getLibrarianSyncRequest,
+  upsertManualLibrarianSyncRequest,
+} from "./orchestration/librarian-sync-store";
+import { MqttControlPlaneNotifier } from "./orchestration/mqtt-control-plane-notifier";
 
 const DEFAULT_METADATA_FILENAME = "songs_metadata.json";
 const DEFAULT_WATCH_INTERVAL_MS = 1000;
 const DEFAULT_WORKER_POLL_INTERVAL_MS = 500;
 const DEFAULT_RUNTIME_STALE_AFTER_MS = 60_000;
+const DEFAULT_SYNC_BATCH_SIZE = 25;
 
 export type { AuthClient, AuthDeps, AuthStorage };
 export type { CaptureAuthTokenDeps } from "./lib/auth/auth";
@@ -142,7 +150,7 @@ const metadataAcquisitionService = new MetadataAcquisitionService();
 const assetAcquisitionService = new AssetAcquisitionService();
 const processingPlannerService = new ProcessingPlannerService();
 const conversionService = new ConversionService();
-const librarianService = new LibrarianService(authService, metadataAcquisitionService);
+const librarianService = new LibrarianService();
 
 configureMetadataAcquisitionService({
   resolveMetadataStoreOptions,
@@ -224,22 +232,220 @@ async function runProcessWorkflow(options: CliOptions): Promise<void> {
   );
 }
 
+function buildSyncProcessOptions(options: CliOptions, clipIds?: string[]): CliOptions {
+  const outputDir = path.resolve(String(options.output));
+  const conversionOutput = options.library || outputDir;
+  const storeConfig = resolveMetadataStoreOptions(options);
+
+  return {
+    ...options,
+    input: outputDir,
+    output: conversionOutput,
+    databaseType: storeConfig.type,
+    database: storeConfig.sqlitePath,
+    postgresUrl: storeConfig.postgresUrl,
+    copySongsMetadataToOutput: false,
+    processFormats: options.processFormats,
+    processBitrate: options.processBitrate,
+    processConcurrency: options.processConcurrency,
+    processUpdateConcurrency: options.processUpdateConcurrency,
+    images: options.images,
+    lyrics: options.lyrics,
+    exitOnError: options.exitOnError,
+    processClipIds: clipIds,
+  };
+}
+
+async function submitDistributedSyncClipProcessJob(
+  parentOptions: CliOptions,
+  clipId: string,
+): Promise<string> {
+  const childOptions = buildSyncProcessOptions(parentOptions, [clipId]);
+  return submitWorkflowJob("process", childOptions);
+}
+
+async function waitForWorkflowJobs(jobIds: string[], options: CliOptions): Promise<void> {
+  if (jobIds.length === 0) {
+    return;
+  }
+
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const pendingJobIds = new Set(jobIds);
+
+    while (pendingJobIds.size > 0) {
+      await assertNotCancelled(options);
+      for (const jobId of Array.from(pendingJobIds)) {
+        const job = await repository.getJob(jobId);
+        if (!job) {
+          throw new Error(`Queued child process job not found: ${jobId}`);
+        }
+        if (job.status === "failed") {
+          throw new Error(`Queued child process job failed: ${jobId}${job.errorMessage ? ` (${job.errorMessage})` : ""}`);
+        }
+        if (job.status === "cancelled") {
+          throw new Error(`Queued child process job was cancelled: ${jobId}${job.errorMessage ? ` (${job.errorMessage})` : ""}`);
+        }
+        if (job.status === "completed") {
+          pendingJobIds.delete(jobId);
+        }
+      }
+
+      if (pendingJobIds.size > 0) {
+        await sleep(DEFAULT_WATCH_INTERVAL_MS);
+      }
+    }
+  } finally {
+    await repository.close();
+  }
+}
+
+async function listKnownWorkspaces(options: CliOptions): Promise<Array<{ id: string; name: string }>> {
+  const store = await createMetadataStore(resolveMetadataStoreOptions(options));
+  try {
+    const workspaces = await store.listWorkspaces();
+    return workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name }));
+  } finally {
+    await store.close();
+  }
+}
+
+async function listPendingAssetClipIds(
+  options: CliOptions,
+  workspaceId: string,
+): Promise<string[]> {
+  const store = await createMetadataStore(resolveMetadataStoreOptions(options));
+  try {
+    const format = options.format === "mp3" ? "mp3" : "wav";
+    return await store.listPendingAssetClipIds(workspaceId, format, resolveSyncBatchSize(options));
+  } finally {
+    await store.close();
+  }
+}
+
+function resolveSyncBatchSize(options: CliOptions): number {
+  const parsed = parsePositiveInteger(options.batchSize, "--batch-size");
+  return parsed ?? DEFAULT_SYNC_BATCH_SIZE;
+}
+
+async function submitLibrarianSyncRequests(
+  options: CliOptions,
+  workspaces: Array<{ id: string; name: string }>,
+): Promise<Array<{ workspaceId: string; requestId: string }>> {
+  const repository = createControlPlaneRepository(options);
+  const wakeNotifier = new MqttControlPlaneNotifier({
+    mqttUrl: options.mqttUrl,
+    mqttTopicPrefix: options.mqttTopicPrefix,
+  });
+  try {
+    await repository.initialize();
+    await wakeNotifier.start();
+    const requests: Array<{ workspaceId: string; requestId: string }> = [];
+    for (const workspace of workspaces) {
+      const request = await upsertManualLibrarianSyncRequest(
+        repository,
+        workspace.id,
+        typeof options.__jobId === "string" ? options.__jobId : undefined,
+      );
+      await wakeNotifier.publishLibrarianWakeup(workspace.id, request.requestId);
+      requests.push({ workspaceId: workspace.id, requestId: request.requestId });
+    }
+    return requests;
+  } finally {
+    await wakeNotifier.close();
+    await repository.close();
+  }
+}
+
+async function waitForLibrarianSyncRequests(
+  requests: Array<{ workspaceId: string; requestId: string }>,
+  options: CliOptions,
+): Promise<void> {
+  if (requests.length === 0) {
+    return;
+  }
+
+  const repository = createControlPlaneRepository(options);
+  try {
+    await repository.initialize();
+    const pendingRequests = new Map(requests.map((request) => [request.workspaceId, request.requestId]));
+
+    while (pendingRequests.size > 0) {
+      await assertNotCancelled(options);
+      for (const [workspaceId, requestId] of Array.from(pendingRequests.entries())) {
+        const request = await getLibrarianSyncRequest(repository, workspaceId);
+        if (!request || request.requestId !== requestId) {
+          throw new Error(`Librarian sync request was replaced before completion for workspace ${workspaceId}`);
+        }
+        if (request.status === "failed") {
+          throw new Error(request.errorMessage || `Librarian sync request failed for workspace ${workspaceId}`);
+        }
+        if (request.status === "completed") {
+          pendingRequests.delete(workspaceId);
+        }
+      }
+
+      if (pendingRequests.size > 0) {
+        await sleep(DEFAULT_WATCH_INTERVAL_MS);
+      }
+    }
+  } finally {
+    await repository.close();
+  }
+}
+
 export async function runClearAuthTokenFlow(options: CliOptions = {}): Promise<void> {
   const storage = new Storage({ cacheDir: options.cacheDir });
   storage.clearAuthToken();
+  await clearSharedAuthToken({ postgresUrl: options.postgresUrl });
   console.log("Cached authentication token cleared.");
 }
 
 export async function runCaptureAuthTokenFlow(options: CliOptions = {}): Promise<void> {
-  options = { ...options, saveLocal: true };
-  await captureAuthTokenWithDeps(options, {
+  const shouldSendToApi = options.sendToApi === true;
+  let apiUrl: string | undefined;
+  const token = await captureAuthTokenWithDeps({ ...options, saveLocal: true }, {
     extractTokenFromBrowser,
     storage: new Storage({ cacheDir: options.cacheDir }),
-    log: console,
+    log: { log: () => undefined },
   });
+
+  let apiUpdateResult: Awaited<ReturnType<HttpApiClient["setAuthToken"]>> | undefined;
+  if (shouldSendToApi) {
+    const apiOptions = withResolvedApiTarget(options, "capture-auth-token");
+    apiUrl = apiOptions.apiUrl;
+    apiUpdateResult = await createApiClient(apiOptions).setAuthToken(token);
+  }
+
+  if (options.json === true) {
+    console.log(JSON.stringify({
+      token,
+      saveLocal: true,
+      sentToApi: shouldSendToApi,
+      restartedJobIds: apiUpdateResult?.restartedJobIds ?? [],
+      restartedJobCount: apiUpdateResult?.restartedJobCount ?? 0,
+      restartError: apiUpdateResult?.restartError,
+    }, null, 2));
+    return;
+  }
+
+  console.log("Saved captured token to the local cache.");
+  if (shouldSendToApi) {
+    console.log(`Posted captured token to API at ${apiUrl}.`);
+    console.log(`Restarted ${apiUpdateResult?.restartedJobCount ?? 0} auth-blocked job(s).`);
+    if (apiUpdateResult?.restartError) {
+      console.log(`Warning: failed to restart auth-blocked jobs automatically: ${apiUpdateResult.restartError}`);
+    }
+  }
+  console.log("Captured token:");
+  console.log(token);
 }
 
 export async function runImportMetadataJsonFlow(options: CliOptions): Promise<void> {
+  if (typeof options.input !== "string" || options.input.trim().length === 0) {
+    throw new Error("import-metadata-json requires --input or config.input");
+  }
   const storeConfig = resolveMetadataStoreOptions(options);
   logMetadataImportStatus(`Starting import from ${path.resolve(String(options.input))}`);
   logMetadataImportStatus(`Target metadata store: ${describeMetadataStoreConfig(storeConfig)}`);
@@ -250,6 +456,9 @@ export async function runImportMetadataJsonFlow(options: CliOptions): Promise<vo
 }
 
 export async function runExportMetadataJsonFlow(options: CliOptions): Promise<void> {
+  if (typeof options.output !== "string" || options.output.trim().length === 0) {
+    throw new Error("export-metadata-json requires --output or config.output");
+  }
   const storeConfig = resolveMetadataStoreOptions(options);
   logMetadataImportStatus(`Starting export to ${path.resolve(String(options.output))}`);
   logMetadataImportStatus(`Source metadata store: ${describeMetadataStoreConfig(storeConfig)}`);
@@ -348,6 +557,7 @@ export async function runDownloadFlow(options: CliOptions): Promise<DownloadFlow
     outputDir: path.resolve(String(options.output ?? ".")),
     downloaded: 0,
     skipped: 0,
+    downloadedClipIds: [],
   };
 }
 
@@ -371,17 +581,36 @@ export async function runSyncFlow(options: CliOptions): Promise<void> {
   const workflowTarget = resolveWorkflowTarget(options);
   if (workflowTarget?.kind === "local") {
     const localOptions = resolveLocalSyncOptions(options, workflowTarget.localRoot);
-    await runDownloadWorkflow({
-      ...localOptions,
-      exportMetadataJson: undefined,
-      copySongsMetadataToOutput: false,
-    });
-    await runProcessWorkflow({
-      ...localOptions,
-      input: String(localOptions.output),
-      output: String(localOptions.library ?? localOptions.output),
-      copySongsMetadataToOutput: false,
-    });
+    if (localOptions.processExistingMetadata === true) {
+      await runDownloadWorkflow({
+        ...localOptions,
+        exportMetadataJson: undefined,
+        copySongsMetadataToOutput: false,
+      });
+      await runProcessWorkflow(buildSyncProcessOptions(localOptions));
+    } else {
+      let conversionChain = Promise.resolve();
+      const downloadedClipIds = new Set<string>();
+      const queueConversion = (clipId: string) => {
+        if (downloadedClipIds.has(clipId)) {
+          return;
+        }
+        downloadedClipIds.add(clipId);
+        conversionChain = conversionChain.then(() =>
+          runProcessWorkflow(buildSyncProcessOptions(localOptions, [clipId]))
+        );
+      };
+
+      await runDownloadWorkflow({
+        ...localOptions,
+        exportMetadataJson: undefined,
+        copySongsMetadataToOutput: false,
+        onTrackDownloaded: ({ clipId }) => {
+          queueConversion(clipId);
+        },
+      });
+      await conversionChain;
+    }
     await exportMetadataJsonIfRequested(
       localOptions,
       resolveMetadataStoreOptions(localOptions),
@@ -517,7 +746,6 @@ export async function runApiCancelJobFlow(jobId: string, options: CliOptions = {
 
 export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
   const role = options.role;
-  const pollIntervalMs = parseInt(String(options.pollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS), 10);
   const once = options.once === true;
   const healthServer = await startRuntimeHealthServer({
     service: "worker",
@@ -526,31 +754,62 @@ export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
     port: options.healthPort,
   });
   const loggerRepository = createControlPlaneRepository(options);
+  const notifier = new MqttControlPlaneNotifier({
+    mqttUrl: options.mqttUrl,
+    mqttTopicPrefix: options.mqttTopicPrefix,
+  });
+  const workerInstanceId = `worker-${role}-${process.pid}-${humanId({ separator: "-",capitalize:false})}`;
 
   try {
     await loggerRepository.initialize();
+    await notifier.start();
     const logger = createRuntimeLogger(loggerRepository);
 
     healthServer?.markReady();
+    await drainWorkerRole(role, workerInstanceId, options);
+    if (once) return;
+
     do {
-      const processed = await processWorkerRole(role, { ...options, once: true });
       if (once) return;
-      if (processed === 0) {
-        await logger.debug("worker poll found no runnable work", {
-          role,
-          properties: { pollIntervalMs },
-        });
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      await logger.debug("worker waiting for MQTT work notification", {
+        workerInstanceId,
+        role,
+        properties: {
+          runtimeMode: "distributed",
+          controlPlaneBackend: resolveControlPlaneBackend(options),
+        },
+      });
+      const woke = await notifier.waitForWorkerWork(role, undefined, options.__abortSignal);
+      if (!woke && options.__abortSignal?.aborted) {
+        return;
       }
+      await drainWorkerRole(role, workerInstanceId, options);
     } while (true);
   } finally {
+    await notifier.close();
     await healthServer?.close();
     await loggerRepository.close();
   }
 }
 
+async function drainWorkerRole(
+  role: WorkerRole,
+  workerInstanceId: string,
+  options: CliOptions = {},
+): Promise<number> {
+  let processed = 0;
+  while (true) {
+    const count = await processWorkerRole(role, workerInstanceId, options);
+    processed += count;
+    if (count === 0) {
+      return processed;
+    }
+  }
+}
+
 async function processWorkerRole(
   role: WorkerRole,
+  workerInstanceId: string,
   options: CliOptions = {},
 ): Promise<number> {
   const repository = createControlPlaneRepository(options);
@@ -559,7 +818,6 @@ async function processWorkerRole(
     const logger = createRuntimeLogger(repository);
     const staleBefore = new Date(Date.now() - DEFAULT_RUNTIME_STALE_AFTER_MS);
     const cleanup = await repository.cleanupStaleRuntimeState(staleBefore);
-    const workerInstanceId = `worker-${role}-${process.pid}-${humanId({ separator: "-",capitalize:false})}`;
     await repository.upsertWorkerInstance({
       id: workerInstanceId,
       role,
@@ -584,7 +842,7 @@ async function processWorkerRole(
         },
       });
     }
-    await logger.info("worker polling for work", {
+    await logger.info("worker checking for runnable work", {
       workerInstanceId,
       role,
       properties: {
@@ -595,7 +853,7 @@ async function processWorkerRole(
 
     const claimed = await repository.claimNextRunnableWorkItem(role, workerInstanceId);
     if (!claimed) {
-      await logger.debug("no runnable work claimed", {
+      await logger.debug("no runnable work claimed after notification/startup scan", {
         workerInstanceId,
         role,
       });
@@ -628,6 +886,10 @@ async function executeClaimedWorkItem(
 ): Promise<void> {
   const leaseManager = new LeaseManager(repository, DEFAULT_RUNTIME_CONFIG);
   const logger = createRuntimeLogger(repository);
+  const notifier = new MqttControlPlaneNotifier({
+    mqttUrl: (claimed.job.payload as CliOptions).mqttUrl,
+    mqttTopicPrefix: (claimed.job.payload as CliOptions).mqttTopicPrefix,
+  });
   const cancellationMessage = claimed.job.errorMessage || "Job cancelled by operator request";
   const cancellationAssertion = createJobCancellationAssertion(claimed.job.id, claimed.job.payload as CliOptions);
   const cancellationMonitor = createCancellationMonitor(cancellationAssertion);
@@ -730,10 +992,15 @@ async function executeClaimedWorkItem(
 
     const workflowOptions = {
       ...(claimed.job.payload as CliOptions),
+      __jobId: claimed.job.id,
       __assertNotCancelled: cancellationAssertion,
       __abortSignal: cancellationMonitor.signal,
+      __requireResolvedAuth: claimed.stage.stageType !== "authorization",
     } as CliOptions;
-    await executeStageHandler(claimed.job.workflowType, claimed.stage.stageType, workflowOptions);
+    const updatedWorkflowOptions = await executeStageHandler(claimed.job.workflowType, claimed.stage.stageType, workflowOptions);
+    if (updatedWorkflowOptions) {
+      await repository.updateJobPayload(claimed.job.id, serializeJobPayload(updatedWorkflowOptions));
+    }
     const jobAfterExecution = await repository.getJob(claimed.job.id);
     if (jobAfterExecution?.status === "cancelled") {
       await repository.updateStageStatus(claimed.stage.id, "cancelled", {
@@ -776,6 +1043,7 @@ async function executeClaimedWorkItem(
     });
 
     const stages = await repository.listStages(claimed.job.id);
+    await notifyNextRunnableStage(repository, claimed, stages, notifier);
     if (stages.every((stage) => stage.status === "succeeded")) {
       await repository.updateJobStatus(claimed.job.id, "completed", { completedAt: new Date() });
       await logger.info("job completed in worker runtime", {
@@ -790,6 +1058,8 @@ async function executeClaimedWorkItem(
     const authFailureCode = claimed.stage.stageType === "authorization"
       ? classifyAuthFailure(message)
       : undefined;
+    const shouldContinuePollingAfterError = claimed.stage.stageType === "authorization"
+      && Boolean(authFailureCode);
     if (isCancellationError(error)) {
       await repository.cancelJob(claimed.job.id, {
         completedAt: new Date(),
@@ -868,21 +1138,73 @@ async function executeClaimedWorkItem(
         leaseId: lease?.id,
       },
     });
+    if (shouldContinuePollingAfterError) {
+      await logger.info("authorization failure recorded; worker will continue listening for future work", {
+        workerInstanceId,
+        role: claimed.workItem.workerRole,
+        jobId: claimed.job.id,
+        workflowType: claimed.job.workflowType,
+        stageId: claimed.stage.id,
+        workItemId: claimed.workItem.id,
+        properties: {
+          stageType: claimed.stage.stageType,
+          errorCode: authFailureCode,
+        },
+      });
+      return;
+    }
     throw error;
   } finally {
     cancellationMonitor.stop();
+    await notifier.close();
   }
+}
+
+async function notifyNextRunnableStage(
+  repository: ControlPlaneRepository,
+  claimed: IClaimedWorkItem,
+  stages: Awaited<ReturnType<ControlPlaneRepository["listStages"]>>,
+  notifier: MqttControlPlaneNotifier,
+): Promise<void> {
+  const nextStage = stages
+    .filter((stage) => stage.sequence > claimed.stage.sequence && stage.status === "pending")
+    .sort((left, right) => left.sequence - right.sequence)[0];
+  if (!nextStage) {
+    return;
+  }
+
+  const previousStagesSucceeded = stages
+    .filter((stage) => stage.sequence < nextStage.sequence)
+    .every((stage) => stage.status === "succeeded");
+  if (!previousStagesSucceeded) {
+    return;
+  }
+
+  const workItems = await repository.listWorkItems(claimed.job.id);
+  const nextWorkItem = workItems.find((item) => item.stageId === nextStage.id && item.status === "pending");
+  if (!nextWorkItem) {
+    return;
+  }
+
+  await notifier.start();
+  await notifier.publishWorkerWorkAvailable(nextWorkItem.workerRole, {
+    jobId: claimed.job.id,
+    stageId: nextStage.id,
+    workItemId: nextWorkItem.id,
+    workflowType: claimed.job.workflowType,
+    stageType: nextStage.stageType,
+  });
 }
 
 async function executeStageHandler(
   workflowType: "download" | "process" | "sync" | "download-images" | "fetch-metadata" | "refresh",
-  stageType: "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization",
+  stageType: "authorization" | "metadata-acquisition" | "asset-acquisition" | "conversion" | "finalization",
   options: CliOptions,
-): Promise<void> {
+): Promise<CliOptions | void> {
   switch (workflowType) {
     case "download":
       if (stageType === "authorization") {
-        await authService.getAuthenticatedClient(options);
+        return resolveDistributedAuthOptions(options);
       } else if (stageType === "asset-acquisition") {
         await runDownloadWorkflow(options);
       }
@@ -894,54 +1216,119 @@ async function executeStageHandler(
       return;
     case "download-images":
       if (stageType === "authorization") {
-        await authService.getAuthenticatedClient(options);
+        return resolveDistributedAuthOptions(options);
       } else if (stageType === "asset-acquisition") {
         await runDownloadImagesWorkflow(options);
       }
       return;
     case "fetch-metadata":
       if (stageType === "authorization") {
-        await authService.getAuthenticatedClient(options);
+        return resolveDistributedAuthOptions(options);
       } else if (stageType === "metadata-acquisition") {
         await runFetchMetadataWorkflow(options);
       }
       return;
     case "refresh":
       if (stageType === "authorization") {
-        await authService.getAuthenticatedClient(options);
+        return resolveDistributedAuthOptions(options);
       } else if (stageType === "metadata-acquisition") {
         await runRefreshWorkflow(options);
       }
       return;
     case "sync":
       if (stageType === "authorization") {
-        await authService.getAuthenticatedClient(options);
+        return resolveDistributedAuthOptions(options);
+      } else if (stageType === "metadata-acquisition") {
+        if (options.librarianManagedSync === true) {
+          if (typeof options.workspace !== "string" || options.workspace.trim().length === 0) {
+            throw new Error("librarian-managed sync requires a workspace");
+          }
+          await runFetchMetadataWorkflow({
+            ...options,
+            batchSize: resolveSyncBatchSize(options),
+          });
+        } else if (typeof options.workspace === "string" && options.workspace.trim().length > 0) {
+          const librarianSyncRequests = await submitLibrarianSyncRequests(options, [{ id: options.workspace.trim(), name: options.workspace.trim() }]);
+          return {
+            ...options,
+            librarianSyncRequests,
+          };
+        } else {
+          const knownWorkspaces = await listKnownWorkspaces(options);
+          if (knownWorkspaces.length === 0) {
+            throw new Error("sync requires at least one known workspace in the metadata store when --workspace is not specified");
+          }
+          const librarianSyncRequests = await submitLibrarianSyncRequests(options, knownWorkspaces);
+          return {
+            ...options,
+            librarianSyncRequests,
+          };
+        }
       } else if (stageType === "asset-acquisition") {
-        await runDownloadWorkflow({
-          ...options,
-          exportMetadataJson: undefined,
-          copySongsMetadataToOutput: false,
-        });
+        if (options.librarianManagedSync !== true) {
+          return;
+        }
+
+        if (typeof options.workspace !== "string" || options.workspace.trim().length === 0) {
+          return;
+        }
+
+        const queuedProcessJobIds: string[] = Array.isArray(options.queuedProcessJobIds)
+          ? options.queuedProcessJobIds.filter((jobId): jobId is string => typeof jobId === "string" && jobId.trim().length > 0)
+          : [];
+        const downloadClipIds = await listPendingAssetClipIds(options, options.workspace.trim());
+
+        if (downloadClipIds.length === 0) {
+          return {
+            ...options,
+            queuedProcessJobIds,
+          };
+        }
+
+        if (options.processExistingMetadata === true) {
+          await runDownloadWorkflow({
+            ...options,
+            exportMetadataJson: undefined,
+            copySongsMetadataToOutput: false,
+            downloadClipIds,
+          });
+        } else {
+          await runDownloadWorkflow({
+            ...options,
+            exportMetadataJson: undefined,
+            copySongsMetadataToOutput: false,
+            downloadClipIds,
+            onTrackDownloaded: async ({ clipId }) => {
+              const childJobId = await submitDistributedSyncClipProcessJob(options, clipId);
+              queuedProcessJobIds.push(childJobId);
+            },
+          });
+          return {
+            ...options,
+            queuedProcessJobIds,
+          };
+        }
       } else if (stageType === "conversion") {
-        const outputDir = path.resolve(String(options.output));
-        const conversionOutput = options.library || outputDir;
-        const storeConfig = resolveMetadataStoreOptions(options);
-        await runProcessWorkflow({
-          input: outputDir,
-          output: conversionOutput,
-          databaseType: storeConfig.type,
-          database: storeConfig.sqlitePath,
-          postgresUrl: storeConfig.postgresUrl,
-          copySongsMetadataToOutput: false,
-          processFormats: options.processFormats,
-          processBitrate: options.processBitrate,
-          processConcurrency: options.processConcurrency,
-          processUpdateConcurrency: options.processUpdateConcurrency,
-          images: options.images,
-          lyrics: options.lyrics,
-          exitOnError: options.exitOnError,
-          processClipIds: undefined,
-        });
+        if (options.librarianManagedSync === true) {
+          if (options.processExistingMetadata === true) {
+            await runProcessWorkflow(buildSyncProcessOptions(options));
+          } else {
+            const queuedProcessJobIds = Array.isArray(options.queuedProcessJobIds)
+              ? options.queuedProcessJobIds.filter((jobId): jobId is string => typeof jobId === "string" && jobId.trim().length > 0)
+              : [];
+            await waitForWorkflowJobs(queuedProcessJobIds, options);
+          }
+        } else if (Array.isArray(options.librarianSyncRequests) && options.librarianSyncRequests.length > 0) {
+          await waitForLibrarianSyncRequests(
+            options.librarianSyncRequests.filter((request): request is { workspaceId: string; requestId: string } =>
+              typeof request?.workspaceId === "string"
+              && request.workspaceId.trim().length > 0
+              && typeof request.requestId === "string"
+              && request.requestId.trim().length > 0,
+            ),
+            options,
+          );
+        }
       } else if (stageType === "finalization") {
         const outputDir = path.resolve(String(options.output));
         const storeConfig = resolveMetadataStoreOptions(options);
@@ -949,6 +1336,15 @@ async function executeStageHandler(
       }
       return;
   }
+}
+
+async function resolveDistributedAuthOptions(options: CliOptions): Promise<CliOptions> {
+  const client = await authService.getAuthenticatedClient(options);
+  return {
+    ...options,
+    token: client.getAuthToken(),
+    ignoreCachedToken: true,
+  };
 }
 
 function parseOptionalDate(value: unknown, label: string): Date | undefined {
@@ -1134,6 +1530,10 @@ async function readStdinText(): Promise<string> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function printJobSnapshot(snapshot: IJobSnapshot, asJson: boolean): void {

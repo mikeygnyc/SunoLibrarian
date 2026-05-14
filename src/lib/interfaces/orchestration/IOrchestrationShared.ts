@@ -37,7 +37,6 @@ export type WorkerRole =
   | "auth"
   | "metadata"
   | "asset"
-  | "processing"
   | "conversion";
 
 export type RuntimeMode = "local" | "distributed";
@@ -46,7 +45,6 @@ export type OrchestrationStageType =
   | "authorization"
   | "metadata-acquisition"
   | "asset-acquisition"
-  | "processing"
   | "conversion"
   | "finalization";
 

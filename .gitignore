@@ -21,3 +21,9 @@ data/*
 .env
 .DS_Store
 .tmp
+api-remote-config.json
+api-local-config.json
+downloads
+library
+dist
+tmp

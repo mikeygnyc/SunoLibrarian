@@ -13,12 +13,13 @@ export type DownloadFlowResult = {
   outputDir: string;
   downloaded: number;
   skipped: number;
+  downloadedClipIds: string[];
 };
 
 export type DownloadedTrackHook = (params: {
   clipId: string;
   outputDir: string;
-}) => void;
+}) => void | Promise<void>;
 
 type ResolveMetadataStoreOptions = (options: CliOptions) => MetadataStoreConfig;
 type ImportMetadataJsonIfRequested = (options: CliOptions, storeConfig: MetadataStoreConfig) => Promise<void>;
@@ -84,8 +85,17 @@ export class AssetAcquisitionService {
 
       let totalDownloaded = 0;
       let totalSkipped = 0;
+      const downloadedClipIds: string[] = [];
       const onTrackDownloaded: DownloadedTrackHook | undefined =
         typeof options.onTrackDownloaded === "function" ? options.onTrackDownloaded : undefined;
+      const requestedClipIds = Array.isArray(options.downloadClipIds)
+        ? new Set(
+          options.downloadClipIds
+            .filter((clipId): clipId is string => typeof clipId === "string")
+            .map((clipId) => clipId.trim())
+            .filter((clipId) => clipId.length > 0),
+        )
+        : null;
 
       for (const workspace of targetWorkspaces) {
         await assertNotCancelled(options);
@@ -94,11 +104,16 @@ export class AssetAcquisitionService {
         for (const track of tracks) {
           await metadataStore.upsertSongWorkspace(track.id, workspace, "discovery");
         }
-        console.log(`Found ${tracks.length} track(s)`);
+        const candidateTracks = requestedClipIds
+          ? tracks.filter((track) => requestedClipIds.has(track.id))
+          : tracks;
+        console.log(`Found ${candidateTracks.length} track(s)`);
 
-        for (let i = 0; i < tracks.length; i++) {
+        for (let i = 0; i < candidateTracks.length; i++) {
           await assertNotCancelled(options);
-          const track = tracks[i];
+          const track = candidateTracks[i];
+          const targetStatusKey = options.format === "wav" ? "wavStatus" : "mp3Status";
+          const targetTimestampKey = options.format === "wav" ? "wavTimestamp" : "mp3Timestamp";
 
           if (!isTrackInDateWindow(track, createdAfter, createdBefore)) {
             console.log(`Skipping out-of-range track: ${track.title || track.id}`);
@@ -124,17 +139,19 @@ export class AssetAcquisitionService {
                 JSON.stringify(normalizeMetadata(existingEntry), null, 2),
               );
               await sleep(delay);
-            } else {
-              console.log(`Already downloaded: ${(track.title ?? "-")} : ${track.id}`);
             }
-            totalSkipped++;
-            continue;
+
+            if (existingEntry[targetStatusKey] === "DOWNLOADED") {
+              console.log(`Already downloaded: ${(track.title ?? "-")} : ${track.id}`);
+              totalSkipped++;
+              continue;
+            }
           }
 
           const audioDir = options.format === "wav" ? wavDir : mp3Dir;
           const filename = `${track.id}.${options.format}`;
           const filepath = path.join(audioDir, filename);
-          console.log(`Downloading (${i + 1}/${tracks.length}): ${(track.title ?? "-")} : ${track.id}`);
+          console.log(`Downloading (${i + 1}/${candidateTracks.length}): ${(track.title ?? "-")} : ${track.id}`);
 
           try {
             await assertNotCancelled(options);
@@ -160,33 +177,41 @@ export class AssetAcquisitionService {
               }
             }
 
-            const songEntry: ISongData = {
-              title: track.title || "Untitled",
-              clipId: track.id,
-              songUrl: `https://suno.com/song/${track.id}`,
-              style: null,
-              thumbnail: null,
-              model: null,
-              duration: null,
-              liked: false,
-              mp3Status: options.format === "mp3" ? "DOWNLOADED" : "PENDING",
-              wavStatus: options.format === "wav" ? "DOWNLOADED" : "PENDING",
-              alacStatus: "PENDING",
-              flacStatus: "PENDING",
-              artistName: null,
-              lyrics: metadata.lyrics || undefined,
-              creationDate: null,
-              weirdness: null,
-              styleStrength: null,
-              audioStrength: null,
-              remixParent: undefined,
-              tags: [],
-              rawApiResponse: metadata.fullData as ISunoTrackResponse,
-              mp3Timestamp: options.format === "mp3" ? new Date() : null,
-              wavTimestamp: options.format === "wav" ? new Date() : null,
-              alacTimestamp: null,
-              flacTimestamp: null,
-            };
+            const updatedAt = new Date();
+            const songEntry: ISongData = existingEntry
+              ? {
+                  ...existingEntry,
+                  rawApiResponse: metadata.fullData as ISunoTrackResponse,
+                  [targetStatusKey]: "DOWNLOADED",
+                  [targetTimestampKey]: updatedAt,
+                }
+              : {
+                  title: track.title || "Untitled",
+                  clipId: track.id,
+                  songUrl: `https://suno.com/song/${track.id}`,
+                  style: null,
+                  thumbnail: null,
+                  model: null,
+                  duration: null,
+                  liked: false,
+                  mp3Status: options.format === "mp3" ? "DOWNLOADED" : "PENDING",
+                  wavStatus: options.format === "wav" ? "DOWNLOADED" : "PENDING",
+                  alacStatus: "PENDING",
+                  flacStatus: "PENDING",
+                  artistName: null,
+                  lyrics: metadata.lyrics || undefined,
+                  creationDate: null,
+                  weirdness: null,
+                  styleStrength: null,
+                  audioStrength: null,
+                  remixParent: undefined,
+                  tags: [],
+                  rawApiResponse: metadata.fullData as ISunoTrackResponse,
+                  mp3Timestamp: options.format === "mp3" ? updatedAt : null,
+                  wavTimestamp: options.format === "wav" ? updatedAt : null,
+                  alacTimestamp: null,
+                  flacTimestamp: null,
+                };
 
             const normalizedEntry = normalizeMetadata(songEntry);
             await metadataStore.upsert(normalizedEntry);
@@ -197,9 +222,10 @@ export class AssetAcquisitionService {
 
             console.log(`Saved: ${filename}`);
             totalDownloaded++;
+            downloadedClipIds.push(track.id);
             if (onTrackDownloaded) {
               try {
-                onTrackDownloaded({ clipId: track.id, outputDir });
+                await onTrackDownloaded({ clipId: track.id, outputDir });
               } catch (hookError) {
                 console.warn(`Download hook failed for ${track.id}: ${hookError}`);
               }
@@ -212,7 +238,7 @@ export class AssetAcquisitionService {
             totalSkipped++;
           }
 
-          if (i < tracks.length - 1) {
+          if (i < candidateTracks.length - 1) {
             await assertNotCancelled(options);
             await sleep(delay);
           }
@@ -222,7 +248,7 @@ export class AssetAcquisitionService {
       console.log(`\nDownload complete! Downloaded: ${totalDownloaded}, Skipped: ${totalSkipped}`);
       await assertNotCancelled(options);
       await exportMetadataJsonIfRequested(options, storeConfig, metadataJsonPath);
-      return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped };
+      return { outputDir, downloaded: totalDownloaded, skipped: totalSkipped, downloadedClipIds };
     } finally {
       await metadataStore.close();
     }

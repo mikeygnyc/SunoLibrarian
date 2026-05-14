@@ -10,6 +10,7 @@ import type {
   WorkflowType,
 } from "../core/contracts";
 import { CentralLogger, ConsoleLogSink, DatabaseLogSink } from "../logging";
+import { MqttControlPlaneNotifier } from "./mqtt-control-plane-notifier";
 import { PostgresControlPlaneRepository } from "./postgres-control-plane";
 import type { CliOptions } from "../core/services";
 
@@ -23,7 +24,7 @@ export type ControlPlaneRepository = IOrchestrationRepository & ICentralLogRepos
 export type WorkflowStagePlanItem = {
   type: Extract<
     OrchestrationStageType,
-    "authorization" | "metadata-acquisition" | "asset-acquisition" | "processing" | "conversion" | "finalization"
+    "authorization" | "metadata-acquisition" | "asset-acquisition" | "conversion" | "finalization"
   >;
   workerRole: WorkerRole;
 };
@@ -116,15 +117,14 @@ export function getWorkflowStagePlan(workflowType: WorkflowType): WorkflowStageP
       ];
     case "process":
       return [
-        { type: "processing", workerRole: "processing" },
         { type: "conversion", workerRole: "conversion" },
         { type: "finalization", workerRole: "conversion" },
       ];
     case "sync":
       return [
         { type: "authorization", workerRole: "auth" },
+        { type: "metadata-acquisition", workerRole: "metadata" },
         { type: "asset-acquisition", workerRole: "asset" },
-        { type: "processing", workerRole: "processing" },
         { type: "conversion", workerRole: "conversion" },
         { type: "finalization", workerRole: "conversion" },
       ];
@@ -154,8 +154,13 @@ export async function submitWorkflowJob(
   options: CliOptions,
 ): Promise<string> {
   const repository = createControlPlaneRepository(options);
+  const notifier = new MqttControlPlaneNotifier({
+    mqttUrl: options.mqttUrl,
+    mqttTopicPrefix: options.mqttTopicPrefix,
+  });
   try {
     await repository.initialize();
+    await notifier.start();
     const logger = createRuntimeLogger(repository);
     const stagePlan = getWorkflowStagePlan(workflowType);
     const now = new Date();
@@ -165,6 +170,7 @@ export async function submitWorkflowJob(
       workflowType,
       status: "queued",
       runtimeMode: "distributed",
+      priority: resolveJobPriority(options),
       payload: serializeJobPayload(options),
       createdAt: now,
       updatedAt: now,
@@ -199,6 +205,17 @@ export async function submitWorkflowJob(
       });
     }
 
+    const initialStagePlanItem = stagePlan[0];
+    if (initialStagePlanItem) {
+      await notifier.publishWorkerWorkAvailable(initialStagePlanItem.workerRole, {
+        jobId,
+        stageId: `${jobId}-stage-1`,
+        workItemId: `${jobId}-work-1`,
+        workflowType,
+        stageType: initialStagePlanItem.type,
+      });
+    }
+
     await logger.info("workflow job submitted", {
       jobId,
       workflowType,
@@ -211,8 +228,18 @@ export async function submitWorkflowJob(
 
     return jobId;
   } finally {
+    await notifier.close();
     await repository.close();
   }
+}
+
+function resolveJobPriority(options: CliOptions): number | undefined {
+  const value = options.priority;
+  if (value == null || value === "") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 export async function getJobSnapshot(
@@ -269,7 +296,7 @@ export async function cancelWorkflowJob(
       });
     }
 
-    return getJobSnapshot(repository, jobId);
+    return await getJobSnapshot(repository, jobId);
   } finally {
     await repository.close();
   }
@@ -301,7 +328,7 @@ export async function restartRecentlyFailedAuthJobs(
         continue;
       }
 
-      const payload = buildRestartPayload(job.payload);
+      const payload = buildRestartPayload(job.payload, options);
       const restartedJobId = await submitWorkflowJob(job.workflowType, payload);
       restartedJobIds.push(restartedJobId);
       originalJobIds.push(job.id);
@@ -346,14 +373,27 @@ function isRestartableAuthFailure(snapshot: IJobSnapshot): boolean {
   );
 }
 
-function buildRestartPayload(payload: Record<string, unknown>): CliOptions {
+function buildRestartPayload(
+  payload: Record<string, unknown>,
+  options: CliOptions = {},
+): CliOptions {
   const restartedPayload: Record<string, unknown> = {
     ...payload,
   };
 
-  delete restartedPayload.token;
+  const resolvedToken = typeof options.token === "string" && options.token.trim().length > 0
+    ? options.token.trim()
+    : undefined;
+
+  if (resolvedToken) {
+    restartedPayload.token = resolvedToken;
+    restartedPayload.ignoreCachedToken = true;
+  } else {
+    delete restartedPayload.token;
+    delete restartedPayload.ignoreCachedToken;
+  }
+
   delete restartedPayload.browser;
-  delete restartedPayload.ignoreCachedToken;
   delete restartedPayload.__authenticatedClient;
   delete restartedPayload.__abortSignal;
   delete restartedPayload.saveLocal;

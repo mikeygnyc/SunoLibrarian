@@ -23,6 +23,8 @@ import type {
 } from "./core/contracts";
 import { validateWorkflowSubmission } from "./http-api-workflows";
 import { SUPPORTED_WORKFLOW_TYPES, cancelWorkflowJob, createControlPlaneRepository, getJobSnapshot, restartRecentlyFailedAuthJobs, submitWorkflowJob } from "./core/orchestration";
+import { clearSharedAuthToken, getSharedAuthToken, setSharedAuthToken } from "./orchestration/auth-token-store";
+import { resolveRequiredControlPlaneMqttUrl } from "./orchestration/mqtt-control-plane-notifier";
 import { Storage } from "./storage";
 import type { CliOptions } from "./core/services";
 
@@ -113,8 +115,9 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
 
       if (method === "GET" && pathname === "/api/v1/auth/status") {
         const storage = new Storage({ cacheDir: options.cacheDir });
+        const sharedToken = await getSharedAuthToken({ postgresUrl: defaultControlPlane.postgresUrl });
         const response: IHttpApiAuthStatusResponse = {
-          hasToken: Boolean(storage.getAuthToken()),
+          hasToken: Boolean(storage.getAuthToken() || sharedToken),
         };
         sendJson(res, 200, response);
         return;
@@ -129,10 +132,15 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
         }
         const storage = new Storage({ cacheDir: options.cacheDir });
         storage.setAuthToken(token);
+        await setSharedAuthToken({ postgresUrl: defaultControlPlane.postgresUrl }, token);
         let restartedJobIds: string[] = [];
         let restartError: string | undefined;
         try {
-          const restartResult = await restartRecentlyFailedAuthJobs(defaultControlPlane);
+          const restartResult = await restartRecentlyFailedAuthJobs({
+            ...defaultControlPlane,
+            cacheDir: options.cacheDir,
+            token,
+          });
           restartedJobIds = restartResult.restartedJobIds;
           if (restartedJobIds.length > 0) {
             serverLogger.info("restarted auth-blocked jobs after token update", {
@@ -159,6 +167,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
       if (method === "DELETE" && pathname === "/api/v1/auth/token") {
         const storage = new Storage({ cacheDir: options.cacheDir });
         storage.clearAuthToken();
+        await clearSharedAuthToken({ postgresUrl: defaultControlPlane.postgresUrl });
         const response: IHttpApiMutationResponse = { ok: true };
         sendJson(res, 200, response);
         return;
@@ -341,7 +350,7 @@ function resolveApiServerMode(options: ApiServerConfig): ApiServerMode {
 function resolveApiControlPlaneOptions(
   options: ApiServerConfig,
   apiMode: ApiServerMode,
-): Pick<CliOptions, "controlPlane" | "postgresUrl"> {
+): Pick<CliOptions, "controlPlane" | "postgresUrl" | "mqttUrl" | "mqttTopicPrefix"> {
   void apiMode;
   const postgresUrl = typeof options.postgresUrl === "string" ? options.postgresUrl.trim() : "";
   if (!postgresUrl) {
@@ -350,6 +359,12 @@ function resolveApiControlPlaneOptions(
   return {
     controlPlane: "postgres",
     postgresUrl,
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(
+      typeof options.mqttUrl === "string" && options.mqttUrl.trim().length > 0 ? options.mqttUrl.trim() : undefined,
+    ),
+    mqttTopicPrefix: typeof options.mqttTopicPrefix === "string" && options.mqttTopicPrefix.trim().length > 0
+      ? options.mqttTopicPrefix.trim()
+      : undefined,
   };
 }
 
@@ -410,7 +425,6 @@ function normalizeWorkerRole(value: string | null): ILogQueryFilter["role"] | un
     case "auth":
     case "metadata":
     case "asset":
-    case "processing":
     case "conversion":
       return value.trim() as ILogQueryFilter["role"];
     default:

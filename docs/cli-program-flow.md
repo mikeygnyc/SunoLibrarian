@@ -6,8 +6,9 @@ where behavior lives.
 
 ## Top-Level Dispatch
 
-`src/index.ts` defines the CLI with Commander. Each command registers options and
-then dispatches to a flow function in `src/cli-actions.ts` through
+`src/index.ts` bootstraps the main CLI. Command registration lives in
+`src/cli-programs.ts`, and each command dispatches to a flow function in
+`src/cli-actions.ts` through
 `withCliError(...)`.
 
 ```mermaid
@@ -40,12 +41,13 @@ flowchart TD
 ### Dispatch Notes
 
 - `src/index.ts`
-  - `program.command("download")`: command registration for download.
-  - `program.command("sync")`: command registration for download plus process.
-  - `program.command("process")`: command registration for converter-only runs.
-  - `program.command("download-images")`: command registration for artwork fetches.
-  - `program.command("clear-auth-token")`: command registration for auth-token
-    cache clearing.
+  - `createCliProgram().parse()`: main CLI bootstrap.
+- `src/cli-programs.ts`
+  - `createCliProgram()`: builds the main mixed user/runtime command surface.
+  - `registerOperatorCliCommands(...)`: registers the user-facing commands.
+  - `registerWorkerCommand(...)`: registers `run-worker`.
+  - `registerLibrarianCommand(...)`: registers `run-librarian`.
+  - `registerServeApiCommand(...)`: registers `serve-api`.
   - `withCliError(...)`: shared error wrapper that prints the error and exits.
 - `src/cli-defaults.ts`
   - `DEFAULT_DOWNLOAD_ROOT`: default output root for commands with `--output`.

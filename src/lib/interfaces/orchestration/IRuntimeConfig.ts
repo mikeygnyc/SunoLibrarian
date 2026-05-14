@@ -10,7 +10,6 @@ export interface ILeaseTimingConfig {
 export interface IConcurrencyConfig {
   metadataAcquisitionMaxActive: number;
   assetAcquisitionMaxActive: number;
-  processingSongConcurrency: number;
   conversionConcurrency: number;
   metadataUpdateConcurrency?: number;
 }
@@ -23,6 +22,8 @@ export interface ICentralLoggingConfig {
 }
 
 export interface IControlPlaneConfig {
+  mqttTopicPrefix?: string;
+  mqttUrl?: string;
   postgresUrl?: string;
   schema?: string;
 }
@@ -37,4 +38,3 @@ export interface IRuntimeConfig {
   storageLocations: IStorageLocation[];
   defaultRoots?: Partial<Record<StorageRootKey, string>>;
 }
-

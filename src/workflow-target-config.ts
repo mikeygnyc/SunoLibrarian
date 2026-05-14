@@ -6,13 +6,14 @@ export const DEFAULT_WORKFLOW_TARGET_CONFIG = "suno-export.config.json";
 
 type WorkflowTargetFile = {
   target?: {
-    apiUrl?: unknown;
-    localRoot?: unknown;
+    apiUrl?: string;
+    localRoot?: string;
   };
+  
 };
 
 export type ResolvedWorkflowTarget =
-  | {
+   {
       kind: "api";
       apiUrl: string;
       configPath?: string;
@@ -62,8 +63,12 @@ function loadWorkflowTargetConfig(explicitPath?: string): ResolvedWorkflowTarget
   }
 
   const target = parsed.target;
+  if (target === undefined) {
+    return undefined;
+  }
+
   if (!target || typeof target !== "object" || Array.isArray(target)) {
-    throw new Error(`Workflow config must include a target object: ${configPath}`);
+    throw new Error(`Workflow config target must be an object: ${configPath}`);
   }
 
   const apiUrl = optionalString(target.apiUrl);

@@ -257,6 +257,8 @@ export interface MetadataStore {
   loadAll(): Promise<ISongData[]>;
   loadByClipIds(clipIds: string[]): Promise<ISongData[]>;
   getByClipId(clipId: string): Promise<ISongData | undefined>;
+  listWorkspaces(): Promise<IWorkspace[]>;
+  listPendingAssetClipIds(workspaceId: string, format: "mp3" | "wav", limit?: number): Promise<string[]>;
   saveAll(songs: ISongData[]): Promise<void>;
   upsert(song: ISongData): Promise<void>;
   upsertWorkspaces(workspaces: IWorkspace[]): Promise<void>;
@@ -382,13 +384,27 @@ export function resolveMetadataStoreConfig(input?: MetadataStoreConfigInput | st
     return { type: "sqlite", sqlitePath: resolveDatabasePath(input) };
   }
 
-  const requestedType = input?.databaseType?.trim().toLowerCase() || "sqlite";
+  const requestedType = input?.databaseType?.trim().toLowerCase();
+  const postgresUrl = input?.postgresUrl?.trim() || process.env.SUNO_EXPORT_POSTGRES_URL;
+
+  if (!requestedType) {
+    if (postgresUrl) {
+      return { type: "postgres", postgresUrl };
+    }
+
+    throw new Error(
+      [
+        "Metadata database type is required when no Postgres URL is configured.",
+        "Provide --database-type postgres with --postgres-url, or explicitly set --database-type sqlite.",
+      ].join("\n"),
+    );
+  }
+
   if (requestedType !== "sqlite" && requestedType !== "postgres" && requestedType !== "file") {
     throw new Error("--database-type must be sqlite, postgres, or file");
   }
 
   if (requestedType === "postgres") {
-    const postgresUrl = input?.postgresUrl?.trim() || process.env.SUNO_EXPORT_POSTGRES_URL;
     if (!postgresUrl) {
       throw new Error("Postgres metadata database selected; provide --postgres-url or SUNO_EXPORT_POSTGRES_URL");
     }
@@ -472,6 +488,17 @@ export class JsonMetadataStore implements MetadataStore {
   async getByClipId(clipId: string): Promise<ISongData | undefined> {
     const songs = await this.loadAll();
     return songs.find((song) => song.clipId === clipId);
+  }
+
+  async listWorkspaces(): Promise<IWorkspace[]> {
+    return [];
+  }
+
+  async listPendingAssetClipIds(workspaceId: string, format: "mp3" | "wav", limit: number = Number.MAX_SAFE_INTEGER): Promise<string[]> {
+    void workspaceId;
+    void format;
+    void limit;
+    return [];
   }
 
   async saveAll(songs: ISongData[]): Promise<void> {
@@ -736,6 +763,47 @@ export class SqliteMetadataStore implements MetadataStore {
     return normalizeMetadata(this.rowToSong(row));
   }
 
+  async listWorkspaces(): Promise<IWorkspace[]> {
+    const rows = this.db
+      .prepare(`
+        SELECT id, name, description, is_trashed, is_public
+        FROM workspaces
+        ORDER BY name COLLATE NOCASE ASC, id ASC
+      `)
+      .all() as Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        is_trashed: number;
+        is_public: number;
+      }>;
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description ?? "",
+      is_trashed: row.is_trashed === 1,
+      is_public: row.is_public === 1,
+    }));
+  }
+
+  async listPendingAssetClipIds(workspaceId: string, format: "mp3" | "wav", limit: number = Number.MAX_SAFE_INTEGER): Promise<string[]> {
+    const column = format === "mp3" ? "mp3_status" : "wav_status";
+    const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : Number.MAX_SAFE_INTEGER;
+    const rows = this.db
+      .prepare(`
+        SELECT s.clip_id
+        FROM songs s
+        INNER JOIN song_workspaces sw ON sw.clip_id = s.clip_id
+        WHERE sw.workspace_id = ?
+          AND s.raw_api_response_json IS NOT NULL
+          AND COALESCE(s.${column}, 'PENDING') <> 'DOWNLOADED'
+        ORDER BY s.sort_index ASC, s.clip_id ASC
+        LIMIT ?
+      `)
+      .all(workspaceId, normalizedLimit) as Array<{ clip_id: string }>;
+    return rows.map((row) => row.clip_id);
+  }
+
   async saveAll(songs: ISongData[]): Promise<void> {
     const normalizedSongs = songs.map((song) => normalizeMetadata(song));
 
@@ -795,13 +863,13 @@ export class SqliteMetadataStore implements MetadataStore {
     workspace: IWorkspace,
     source: string = "discovery",
   ): Promise<void> {
-    this.log?.(`SQLite song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
+    //this.log?.(`SQLite song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
     const save = this.db.transaction(() => {
       this.writeWorkspace(workspace);
       this.upsertSongWorkspaceStatement.run(clipId, workspace.id, source);
     });
     save();
-    this.log?.(`SQLite song-workspace link upsert complete: clip=${clipId}, workspace=${workspace.id}`);
+    //this.log?.(`SQLite song-workspace link upsert complete: clip=${clipId}, workspace=${workspace.id}`);
   }
 
   close(): void {
@@ -970,23 +1038,32 @@ export class PostgresMetadataStore implements MetadataStore {
   readonly location: string;
   private static readonly SONG_BATCH_SIZE = 500;
   private static readonly CHILD_BATCH_SIZE = 5000;
+  private readonly connectionString: string;
   private log?: MetadataStoreLogger;
   private pool: Pool;
   private existedBeforeInitialize = false;
   private initialized = false;
+  private closed = false;
 
   constructor(postgresUrl?: string, options: MetadataStoreOptions = {}) {
-    const connectionString = postgresUrl?.trim() || process.env.SUNO_EXPORT_POSTGRES_URL;
-    if (!connectionString) {
+    const resolvedConnectionString = postgresUrl?.trim() || process.env.SUNO_EXPORT_POSTGRES_URL;
+    if (!resolvedConnectionString) {
       throw new Error("Postgres metadata database selected; provide --postgres-url or SUNO_EXPORT_POSTGRES_URL");
     }
+    this.connectionString = resolvedConnectionString;
     this.log = options.log ?? logMetadataDatabaseStatus;
-    this.location = describePostgresConnection(connectionString);
+    this.location = describePostgresConnection(this.connectionString);
     this.log?.(`Creating Postgres metadata pool: ${this.location}`);
-    this.pool = new Pool({ connectionString });
+    this.pool = this.createPool();
   }
 
   async initialize(): Promise<void> {
+    if (this.closed) {
+      this.pool = this.createPool();
+      this.closed = false;
+      this.initialized = false;
+      this.log?.(`Recreated Postgres metadata pool: ${this.location}`);
+    }
     if (this.initialized) return;
     this.log?.(`Opening Postgres connection: ${this.location}`);
     const connectedAt = Date.now();
@@ -1002,7 +1079,6 @@ export class PostgresMetadataStore implements MetadataStore {
           this.existedBeforeInitialize = existing.rows[0]?.table_name === "songs";
           this.log?.(`Postgres songs table ${this.existedBeforeInitialize ? "exists" : "will be created"}`);
           await client.query(POSTGRES_SCHEMA);
-          this.log?.("Postgres schema ready");
         },
       );
     } finally {
@@ -1022,14 +1098,9 @@ export class PostgresMetadataStore implements MetadataStore {
     const result = await this.pool.query("SELECT * FROM songs ORDER BY sort_index ASC, clip_id ASC");
     this.log?.(`Postgres retrieved ${result.rows.length} song row${result.rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
     const songs: ISongData[] = [];
-    const progressInterval = 100;
     for (let index = 0; index < result.rows.length; index++) {
       const row = result.rows[index];
       songs.push(normalizeMetadata(await this.rowToSong(row)));
-      const hydrated = index + 1;
-      if (hydrated % progressInterval === 0 || hydrated === result.rows.length) {
-        this.log?.(`Postgres hydrated ${hydrated}/${result.rows.length} song${result.rows.length === 1 ? "" : "s"}`);
-      }
     }
     this.log?.(`Postgres metadata load complete in ${Date.now() - startedAt}ms`);
     return songs;
@@ -1044,23 +1115,18 @@ export class PostgresMetadataStore implements MetadataStore {
     }
 
     const startedAt = Date.now();
-    this.log?.(`Postgres loading targeted metadata: ${uniqueClipIds.length} clip id${uniqueClipIds.length === 1 ? "" : "s"}`);
+    // this.log?.(`Postgres loading targeted metadata: ${uniqueClipIds.length} clip id${uniqueClipIds.length === 1 ? "" : "s"}`);
     const result = await this.pool.query(
       "SELECT * FROM songs WHERE clip_id = ANY($1::text[]) ORDER BY sort_index ASC, clip_id ASC",
       [uniqueClipIds],
     );
-    this.log?.(`Postgres retrieved ${result.rows.length}/${uniqueClipIds.length} targeted song row${result.rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
+    //this.log?.(`Postgres retrieved ${result.rows.length}/${uniqueClipIds.length} targeted song row${result.rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
 
     const songs: ISongData[] = [];
-    const progressInterval = 100;
     for (let index = 0; index < result.rows.length; index++) {
       songs.push(normalizeMetadata(await this.rowToSong(result.rows[index])));
-      const hydrated = index + 1;
-      if (hydrated % progressInterval === 0 || hydrated === result.rows.length) {
-        this.log?.(`Postgres hydrated targeted metadata ${hydrated}/${result.rows.length} song${result.rows.length === 1 ? "" : "s"}`);
-      }
     }
-    this.log?.(`Postgres targeted metadata load complete in ${Date.now() - startedAt}ms`);
+    //this.log?.(`Postgres targeted metadata load complete in ${Date.now() - startedAt}ms`);
     return songs;
   }
 
@@ -1076,8 +1142,44 @@ export class PostgresMetadataStore implements MetadataStore {
       this.log?.(`Postgres metadata not found for clip: ${normalizedClipId} (${Date.now() - startedAt}ms)`);
       return undefined;
     }
-    this.log?.(`Postgres metadata found for clip: ${normalizedClipId} (${Date.now() - startedAt}ms)`);
+    //this.log?.(`Postgres metadata found for clip: ${normalizedClipId} (${Date.now() - startedAt}ms)`);
     return normalizeMetadata(await this.rowToSong(result.rows[0]));
+  }
+
+  async listWorkspaces(): Promise<IWorkspace[]> {
+    await this.initialize();
+    const result = await this.pool.query(`
+      SELECT id, name, description, is_trashed, is_public
+      FROM workspaces
+      ORDER BY name ASC, id ASC
+    `);
+    return result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description ?? "",
+      is_trashed: row.is_trashed === true,
+      is_public: row.is_public === true,
+    }));
+  }
+
+  async listPendingAssetClipIds(workspaceId: string, format: "mp3" | "wav", limit: number = Number.MAX_SAFE_INTEGER): Promise<string[]> {
+    await this.initialize();
+    const column = format === "mp3" ? "mp3_status" : "wav_status";
+    const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : Number.MAX_SAFE_INTEGER;
+    const result = await this.pool.query(
+      `
+      SELECT s.clip_id
+      FROM songs s
+      INNER JOIN song_workspaces sw ON sw.clip_id = s.clip_id
+      WHERE sw.workspace_id = $1
+        AND s.raw_api_response_json IS NOT NULL
+        AND COALESCE(s.${column}, 'PENDING') <> 'DOWNLOADED'
+      ORDER BY s.sort_index ASC, s.clip_id ASC
+      LIMIT $2
+      `,
+      [workspaceId, normalizedLimit],
+    );
+    return result.rows.map((row) => row.clip_id as string);
   }
 
   async saveAll(songs: ISongData[]): Promise<void> {
@@ -1097,14 +1199,14 @@ export class PostgresMetadataStore implements MetadataStore {
       await this.writeSongChildrenBatch(client, effectiveSongs);
       await this.writeSongProjectsBatch(client, effectiveSongs);
       await client.query("COMMIT");
-      this.log?.(`Postgres transaction committed: ${effectiveSongs.length} song${effectiveSongs.length === 1 ? "" : "s"} saved`);
+     //this.log?.(`Postgres transaction committed: ${effectiveSongs.length} song${effectiveSongs.length === 1 ? "" : "s"} saved`);
     } catch (error) {
       await client.query("ROLLBACK");
       this.log?.("Postgres transaction rolled back");
       throw error;
     } finally {
       client.release();
-      this.log?.("Postgres client released");
+    //  this.log?.("Postgres client released");
     }
   }
 
@@ -1394,9 +1496,9 @@ export class PostgresMetadataStore implements MetadataStore {
   async upsert(song: ISongData): Promise<void> {
     await this.initialize();
     const normalizedSong = normalizeMetadata(song);
-    this.log?.(`Postgres upsert starting: ${normalizedSong.clipId}`);
+    this.log?.(`Updating metadata for clip: ${normalizedSong.clipId}`);
     const client = await this.pool.connect();
-    this.log?.(`Postgres client acquired for song upsert: ${normalizedSong.clipId}`);
+    //this.log?.(`Postgres client acquired for song upsert: ${normalizedSong.clipId}`);
     try {
       await client.query("BEGIN");
       const currentMax = await client.query("SELECT COALESCE(MAX(sort_index), -1) AS max_index FROM songs");
@@ -1405,36 +1507,36 @@ export class PostgresMetadataStore implements MetadataStore {
 
       await this.writeSong(client, normalizedSong, sortIndex);
       await client.query("COMMIT");
-      this.log?.(`Postgres upsert committed: ${normalizedSong.clipId}`);
+      //this.log?.(`Postgres upsert committed: ${normalizedSong.clipId}`);
     } catch (error) {
       await client.query("ROLLBACK");
-      this.log?.(`Postgres upsert rolled back: ${normalizedSong.clipId}`);
+      this.log?.(`Postgres upsert rolled back for metadata update: ${normalizedSong.clipId}`);
       throw error;
     } finally {
       client.release();
-      this.log?.(`Postgres client released after song upsert: ${normalizedSong.clipId}`);
+      //this.log?.(`Postgres client released after song upsert: ${normalizedSong.clipId}`);
     }
   }
 
   async upsertWorkspaces(workspaces: IWorkspace[]): Promise<void> {
     await this.initialize();
-    this.log?.(`Postgres workspace upsert starting: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
+    this.log?.(`Updating workspaces: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
     const client = await this.pool.connect();
-    this.log?.("Postgres client acquired for workspace upsert");
+    //this.log?.("Postgres client acquired for workspace upsert");
     try {
       await client.query("BEGIN");
       for (const workspace of workspaces) {
         await this.writeWorkspace(client, workspace);
       }
       await client.query("COMMIT");
-      this.log?.(`Postgres workspace upsert committed: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
+      //this.log?.(`Postgres workspace upsert committed: ${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
     } catch (error) {
       await client.query("ROLLBACK");
-      this.log?.("Postgres workspace upsert rolled back");
+      this.log?.("Postgres workspace upsert rolled back for workspace update");
       throw error;
     } finally {
       client.release();
-      this.log?.("Postgres client released after workspace upsert");
+      //this.log?.("Postgres client released after workspace upsert");
     }
   }
 
@@ -1444,9 +1546,11 @@ export class PostgresMetadataStore implements MetadataStore {
     source: string = "discovery",
   ): Promise<void> {
     await this.initialize();
-    this.log?.(`Postgres song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
+    this.log?.(`Syncing clip to workspace: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
+
+    //this.log?.(`Postgres song-workspace link upsert starting: clip=${clipId}, workspace=${workspace.id}, source=${source}`);
     const client = await this.pool.connect();
-    this.log?.(`Postgres client acquired for song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
+    //this.log?.(`Postgres client acquired for song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
     try {
       await client.query("BEGIN");
       await this.writeWorkspace(client, workspace);
@@ -1461,22 +1565,28 @@ export class PostgresMetadataStore implements MetadataStore {
         [clipId, workspace.id, source],
       );
       await client.query("COMMIT");
-      this.log?.(`Postgres song-workspace link upsert committed: clip=${clipId}, workspace=${workspace.id}`);
+      //this.log?.(`Postgres song-workspace link upsert committed: clip=${clipId}, workspace=${workspace.id}`);
     } catch (error) {
       await client.query("ROLLBACK");
       this.log?.(`Postgres song-workspace link upsert rolled back: clip=${clipId}, workspace=${workspace.id}`);
       throw error;
     } finally {
       client.release();
-      this.log?.(`Postgres client released after song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
+      //this.log?.(`Postgres client released after song-workspace link: clip=${clipId}, workspace=${workspace.id}`);
     }
   }
 
   close(): Promise<void> {
-    this.log?.(`Closing Postgres pool: ${this.location}`);
-    return this.pool.end().then(() => {
-      this.log?.("Postgres pool closed");
-    });
+    if (this.closed) {
+      return Promise.resolve();
+    }
+    this.closed = true;
+    this.initialized = false;
+    return this.pool.end();
+  }
+
+  private createPool(): Pool {
+    return new Pool({ connectionString: this.connectionString });
   }
 
   private async writeSong(client: PoolClient, song: ISongData, sortIndex: number): Promise<void> {
