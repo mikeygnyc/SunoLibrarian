@@ -93,22 +93,22 @@ export type LibrarianConfig = CliOptions & BrowserAuthConfig & MetadataStoreConf
 
 export function normalizeApiServerConfig(options: Record<string, unknown>): ApiServerConfig {
   return {
-    cacheDir: optionalString(options.cacheDir),
-    host: optionalString(options.host),
-    port: optionalStringOrNumber(options.port),
+    cacheDir: optionalString(options.cacheDir) ?? envString("SUNO_EXPORT_CACHE_DIR"),
+    host: optionalString(options.host) ?? envString("SUNO_EXPORT_API_HOST"),
+    port: optionalStringOrNumber(options.port) ?? envString("SUNO_EXPORT_API_PORT"),
     mode: "postgres",
     controlPlane: "postgres",
-    postgresUrl: optionalString(options.postgresUrl),
-    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
-    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
-    databaseType: optionalString(options.databaseType),
-    database: optionalString(options.database),
-    output: optionalString(options.output),
-    library: optionalString(options.library),
-    logFile: optionalString(options.logFile),
-    delay: optionalString(options.delay),
-    processConcurrency: optionalString(options.processConcurrency),
-    processUpdateConcurrency: optionalString(options.processUpdateConcurrency),
+    postgresUrl: optionalString(options.postgresUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_URL")),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_TOPIC_PREFIX"),
+    databaseType: optionalString(options.databaseType) ?? envString("SUNO_EXPORT_METADATA_DATABASE_TYPE"),
+    database: optionalString(options.database) ?? envString("SUNO_EXPORT_METADATA_DATABASE"),
+    output: optionalString(options.output) ?? envString("SUNO_EXPORT_OUTPUT_ROOT"),
+    library: optionalString(options.library) ?? envString("SUNO_EXPORT_LIBRARY_ROOT"),
+    logFile: optionalString(options.logFile) ?? envString("SUNO_EXPORT_LOG_FILE"),
+    delay: optionalString(options.delay) ?? envString("SUNO_EXPORT_DOWNLOAD_DELAY_MS"),
+    processConcurrency: optionalString(options.processConcurrency) ?? envString("SUNO_EXPORT_PROCESS_CONCURRENCY"),
+    processUpdateConcurrency: optionalString(options.processUpdateConcurrency) ?? envString("SUNO_EXPORT_PROCESS_UPDATE_CONCURRENCY"),
   };
 }
 
@@ -117,34 +117,34 @@ export function normalizeOperatorCliConfig(options: Record<string, unknown>): Op
 }
 
 export function normalizeWorkerConfig(options: Record<string, unknown>): WorkerConfig {
-  const role = optionalWorkerRole(options.role);
+  const role = optionalWorkerRole(options.role) ?? optionalWorkerRole(envString("SUNO_EXPORT_WORKER_ROLE"));
   if (!role) {
     throw new Error("run-worker requires --role");
   }
-  const postgresUrl = optionalString(options.postgresUrl);
+  const postgresUrl = optionalString(options.postgresUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL");
 
   return {
-    cacheDir: optionalString(options.cacheDir),
+    cacheDir: optionalString(options.cacheDir) ?? envString("SUNO_EXPORT_CACHE_DIR"),
     role,
     controlPlane: inferRuntimeControlPlane(postgresUrl, options.controlPlane),
-    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
-    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_URL")),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_TOPIC_PREFIX"),
     postgresUrl,
     once: optionalBoolean(options.once),
-    pollInterval: optionalStringOrNumber(options.pollInterval),
-    healthHost: optionalString(options.healthHost),
-    healthPort: optionalStringOrNumber(options.healthPort),
+    pollInterval: optionalStringOrNumber(options.pollInterval) ?? envString("SUNO_EXPORT_WORKER_POLL_INTERVAL_MS"),
+    healthHost: optionalString(options.healthHost) ?? envString("SUNO_EXPORT_HEALTH_HOST"),
+    healthPort: optionalStringOrNumber(options.healthPort) ?? envString("SUNO_EXPORT_HEALTH_PORT"),
   };
 }
 
 export function normalizeLibrarianConfig(options: Record<string, unknown>): LibrarianConfig {
-  const workspace = optionalString(options.workspace);
+  const workspace = optionalString(options.workspace) ?? envString("SUNO_EXPORT_LIBRARIAN_WORKSPACE");
   if (!workspace) {
     throw new Error("run-librarian requires --workspace so each librarian process owns exactly one workspace");
   }
 
   return {
-    cacheDir: optionalString(options.cacheDir),
+    cacheDir: optionalString(options.cacheDir) ?? envString("SUNO_EXPORT_CACHE_DIR"),
     workspace,
     token: optionalString(options.token),
     browser: optionalBrowserOption(options.browser),
@@ -153,20 +153,24 @@ export function normalizeLibrarianConfig(options: Record<string, unknown>): Libr
     profileDirectory: optionalString(options.profileDirectory),
     enabledWorkspaces: parseWorkspaceListOption(options.enabledWorkspaces),
     disabledWorkspaces: parseWorkspaceListOption(options.disabledWorkspaces),
-    librarianInterval: optionalStringOrNumber(options.librarianInterval),
+    librarianInterval: optionalStringOrNumber(options.librarianInterval) ?? envString("SUNO_EXPORT_LIBRARIAN_INTERVAL_MS"),
     once: optionalBoolean(options.once),
-    healthHost: optionalString(options.healthHost),
-    healthPort: optionalStringOrNumber(options.healthPort),
-    databaseType: optionalString(options.databaseType),
-    database: optionalString(options.database),
-    postgresUrl: optionalString(options.postgresUrl),
-    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl)),
-    mqttTopicPrefix: optionalString(options.mqttTopicPrefix),
+    healthHost: optionalString(options.healthHost) ?? envString("SUNO_EXPORT_HEALTH_HOST"),
+    healthPort: optionalStringOrNumber(options.healthPort) ?? envString("SUNO_EXPORT_HEALTH_PORT"),
+    databaseType: optionalString(options.databaseType) ?? envString("SUNO_EXPORT_METADATA_DATABASE_TYPE"),
+    database: optionalString(options.database) ?? envString("SUNO_EXPORT_METADATA_DATABASE"),
+    postgresUrl: optionalString(options.postgresUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL"),
+    mqttUrl: resolveRequiredControlPlaneMqttUrl(optionalString(options.mqttUrl) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_URL")),
+    mqttTopicPrefix: optionalString(options.mqttTopicPrefix) ?? envString("SUNO_EXPORT_CONTROL_PLANE_MQTT_TOPIC_PREFIX"),
   };
 }
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function envString(name: string): string | undefined {
+  return optionalString(process.env[name]);
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {

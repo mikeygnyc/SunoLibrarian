@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as path from "path";
 import { URL } from "url";
-import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
+import { DEFAULT_DATABASE_PATH, DEFAULT_DOWNLOAD_ROOT, DEFAULT_HTTP_API_LOG_PATH } from "./cli-defaults";
 import { renderDashboardHtml } from "./http-dashboard";
 import { HttpApiServerLogger } from "./http-api-server-logger";
 import type { ApiServerConfig, ApiServerMode, ApiServerStorageConfig, WorkflowSubmissionOptions } from "./app-config";
@@ -27,6 +27,7 @@ import { clearSharedAuthToken, getSharedAuthToken, setSharedAuthToken } from "./
 import { resolveRequiredControlPlaneMqttUrl } from "./orchestration/mqtt-control-plane-notifier";
 import { Storage } from "./storage";
 import type { CliOptions } from "./core/services";
+import { installStructuredConsoleBridge, type StructuredConsoleBridgeHandle } from "./logging";
 
 type ApiWorkflowDefaults = Pick<
   ApiServerConfig,
@@ -43,6 +44,13 @@ type ApiWorkflowDefaults = Pick<
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
 export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<void> {
+  const logBridge: StructuredConsoleBridgeHandle = installStructuredConsoleBridge({
+    service: "api",
+    role: "api",
+    tags: ["runtime", "k8s"],
+  });
+
+  try {
   // The API process is intentionally server-only. Keep worker and librarian
   // runtime loops out of this bootstrap.
   const host = typeof options.host === "string" && options.host.trim().length > 0
@@ -335,6 +343,9 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   });
+  } finally {
+    logBridge.close();
+  }
 }
 
 function resolveApiServerMode(options: ApiServerConfig): ApiServerMode {
@@ -370,6 +381,7 @@ function resolveApiControlPlaneOptions(
 
 function buildLogFilter(url: URL): ILogQueryFilter {
   return {
+    service: readStringQuery(url, "service"),
     jobId: readStringQuery(url, "jobId"),
     stageId: readStringQuery(url, "stageId"),
     workItemId: readStringQuery(url, "workItemId"),
@@ -517,7 +529,7 @@ function resolveServerLogPath(value: unknown): string {
   if (typeof value === "string" && value.trim().length > 0) {
     return path.resolve(value.trim());
   }
-  return path.resolve("data", "http-api.log");
+  return DEFAULT_HTTP_API_LOG_PATH;
 }
 
 function resolveDirectoryOption(value: unknown, fallback: string): string {

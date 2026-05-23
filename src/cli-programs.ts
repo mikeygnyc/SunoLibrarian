@@ -28,7 +28,6 @@ import {
   runWorkerFlow,
   runWorkspacesFlow,
 } from "./cli-actions";
-import { DEFAULT_DOWNLOAD_ROOT } from "./cli-defaults";
 import { resolveCliCommandOptions } from "./cli-config";
 import { runServeApiFlow } from "./http-api";
 
@@ -62,16 +61,16 @@ export function createApiProgram(): Command {
     "HTTP API server for Suno export control-plane operations",
     async (options) => runServeApiFlow(normalizeApiServerConfig(options)),
     (program) => program
-      .option("--host <host>", "Host interface to bind", "127.0.0.1")
-      .option("--port <port>", "Port to listen on", "3000")
+      .option("--host <host>", "Host interface to bind")
+      .option("--port <port>", "Port to listen on")
       .option("--postgres-url <url>", "Postgres control-plane connection URL")
       .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
       .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
       .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
       .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
-      .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
+      .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows")
       .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
-      .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log"),
+      .option("--log-file <path>", "Local HTTP API log file path"),
   );
 }
 
@@ -557,15 +556,15 @@ function registerServeApiCommand(program: Command): void {
     .command("serve-api")
     .description("Run the HTTP API server and orchestration entrypoint")
     .option("--config <path>", "CLI config file")
-    .option("--host <host>", "Host interface to bind", "127.0.0.1")
-    .option("--port <port>", "Port to listen on", "3000")
+    .option("--host <host>", "Host interface to bind")
+    .option("--port <port>", "Port to listen on")
     .option("--postgres-url <url>", "Postgres control-plane connection URL")
     .option("--mqtt-url <url>", "MQTT broker URL for control-plane messaging")
     .option("--mqtt-topic-prefix <prefix>", "MQTT topic prefix for control-plane messaging")
     .option("--database-type <type>", "Workflow metadata database backend: sqlite or postgres")
     .option("--database <path>", "Workflow SQLite metadata database path when --database-type is sqlite")
-    .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows", DEFAULT_DOWNLOAD_ROOT)
+    .option("--output <dir>", "Server-owned download/workspace root for API-submitted workflows")
     .option("--library <dir>", "Server-owned library output root for API-submitted process/sync workflows")
-    .option("--log-file <path>", "Local HTTP API log file path", "data/http-api.log")
+    .option("--log-file <path>", "Local HTTP API log file path")
     .action(withResolvedCommandOptions("serve-api", async (options) => runServeApiFlow(normalizeApiServerConfig(options))));
 }

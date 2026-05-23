@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS log_entries (
 CREATE INDEX IF NOT EXISTS idx_log_entries_timestamp ON log_entries(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_log_entries_level ON log_entries(level, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_job_id ON log_entries((context_json->>'jobId'));
+CREATE INDEX IF NOT EXISTS idx_log_entries_context_service ON log_entries((context_json->>'service'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_role ON log_entries((context_json->>'role'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_worker_instance_id ON log_entries((context_json->>'workerInstanceId'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_clip_id ON log_entries((context_json->>'clipId'));
@@ -957,6 +958,7 @@ export function buildLogQuery(filter: ILogQueryFilter = {}): BuiltQuery {
   const params: unknown[] = [];
 
   addEqualsClause(clauses, params, "context_json->>'jobId'", filter.jobId);
+  addEqualsClause(clauses, params, "context_json->>'service'", filter.service);
   addEqualsClause(clauses, params, "context_json->>'stageId'", filter.stageId);
   addEqualsClause(clauses, params, "context_json->>'workItemId'", filter.workItemId);
   addEqualsClause(clauses, params, "context_json->>'workflowType'", filter.workflowType);
