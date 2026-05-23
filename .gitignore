@@ -27,3 +27,7 @@ downloads
 library
 dist
 tmp
+.npm-cache
+k8s/local
+scripts/pre-conf-bootstrap-k8s-local.sh
+

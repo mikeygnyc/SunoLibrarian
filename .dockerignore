@@ -1,0 +1,11 @@
+.git
+.github
+dist
+node_modules
+downloads
+library
+tmp
+data
+*.log
+.DS_Store
+npm-debug.log*

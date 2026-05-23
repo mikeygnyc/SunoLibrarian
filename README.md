@@ -157,6 +157,9 @@ For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flo
 For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
 For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
 For the split app entrypoints and multi-process runtime layout, see [App Runtime Model](docs/app-runtime-model.md).
+For the new Kubernetes deployment and operator scaffolding, see [Kubernetes Operator](docs/kubernetes-operator.md).
+For ELK-oriented container log aggregation, see [ELK Logging](docs/elk-logging.md).
+For generating gitignored local k8s manifests from tracked examples, see [Local K8s Bootstrap](docs/k8s-local-bootstrap.md).
 
 ## HTTP API
 

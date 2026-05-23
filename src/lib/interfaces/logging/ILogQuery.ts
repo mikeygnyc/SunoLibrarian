@@ -2,6 +2,7 @@ import type { LogLevel, WorkerRole, WorkflowType } from "../orchestration/IOrche
 import type { ILogEntry } from "./ILogEntry";
 
 export interface ILogQueryFilter {
+  service?: string;
   jobId?: string;
   stageId?: string;
   workItemId?: string;
@@ -23,4 +24,3 @@ export interface ILogQueryResult {
 export interface ILogQueryService {
   query(filter?: ILogQueryFilter): Promise<ILogQueryResult>;
 }
-

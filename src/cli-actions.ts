@@ -38,6 +38,7 @@ import {
 } from "./core/services";
 import { Storage } from "./storage";
 import { startRuntimeHealthServer } from "./supervisor/runtime-health";
+import { installStructuredConsoleBridge, type StructuredConsoleBridgeHandle } from "./logging";
 import {
   createMetadataStore,
   describeMetadataStoreConfig,
@@ -647,6 +648,13 @@ export async function runRefreshFlow(options: CliOptions): Promise<void> {
 }
 
 export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> {
+  const logBridge: StructuredConsoleBridgeHandle = installStructuredConsoleBridge({
+    service: "librarian",
+    role: "librarian",
+    workspaceId: options.workspace,
+    tags: ["runtime", "k8s"],
+  });
+
   const healthServer = await startRuntimeHealthServer({
     service: "librarian",
     role: "librarian",
@@ -660,6 +668,7 @@ export async function runLibrarianFlow(options: LibrarianConfig): Promise<void> 
     await librarianService.run(options);
   } finally {
     await healthServer?.close();
+    logBridge.close();
   }
 }
 
@@ -747,6 +756,11 @@ export async function runApiCancelJobFlow(jobId: string, options: CliOptions = {
 export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
   const role = options.role;
   const once = options.once === true;
+  const logBridge: StructuredConsoleBridgeHandle = installStructuredConsoleBridge({
+    service: "worker",
+    role,
+    tags: ["runtime", "k8s"],
+  });
   const healthServer = await startRuntimeHealthServer({
     service: "worker",
     role,
@@ -789,6 +803,7 @@ export async function runWorkerFlow(options: WorkerConfig): Promise<void> {
     await notifier.close();
     await healthServer?.close();
     await loggerRepository.close();
+    logBridge.close();
   }
 }
 
