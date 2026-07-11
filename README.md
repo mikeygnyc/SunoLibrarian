@@ -160,6 +160,7 @@ For the split app entrypoints and multi-process runtime layout, see [App Runtime
 For the new Kubernetes deployment and operator scaffolding, see [Kubernetes Operator](docs/kubernetes-operator.md).
 For ELK-oriented container log aggregation, see [ELK Logging](docs/elk-logging.md).
 For generating gitignored local k8s manifests from tracked examples, see [Local K8s Bootstrap](docs/k8s-local-bootstrap.md).
+For the current prioritized follow-up work, see [Remaining Work TODO](docs/remaining-work-todo.md).
 
 ## HTTP API
 

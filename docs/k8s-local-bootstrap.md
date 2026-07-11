@@ -12,6 +12,23 @@ Run:
 scripts/bootstrap-k8s-local.sh
 ```
 
+The bootstrap requires runtime and (unless `--skip-elk` is used) Elasticsearch
+credentials. For local use, copy the tracked template and fill it with your
+own values:
+
+```bash
+cp scripts/pre-conf-bootstrap-k8s-local.env.example \
+  scripts/pre-conf-bootstrap-k8s-local.env
+scripts/pre-conf-bootstrap-k8s-local.sh --no-run
+```
+
+The local `.env` file is gitignored. Do not put credentials in shell scripts or
+tracked manifests. You can instead set the same variables in your shell, or set
+`SUNO_EXPORT_K8S_LOCAL_ENV_FILE` to an alternate local env-file path.
+
+The generator is safe to rerun: it keeps existing files unless `--force` is
+specified, and it does not duplicate generated kustomization resources.
+
 That creates:
 
 - `k8s/local`
@@ -35,7 +52,11 @@ IMAGE_REPO=ghcr.io/mikeygnyc/suno-export \
 IMAGE_TAG=latest \
 RUNTIME_POSTGRES_URL='postgres://...' \
 RUNTIME_MQTT_URL='mqtt://...' \
-ELK_LOGSTASH_HOSTS='logstash.logging.svc.cluster.local:5044' \
+ELK_ELASTICSEARCH_HOSTS='https://elasticsearch.example.internal:9200' \
+ELK_ELASTICSEARCH_USERNAME='filebeat_suno_export' \
+ELK_ELASTICSEARCH_PASSWORD='...' \
+ELK_ELASTICSEARCH_ADMIN_USERNAME='elastic' \
+ELK_ELASTICSEARCH_ADMIN_PASSWORD='...' \
 ELK_ENVIRONMENT=local \
 scripts/bootstrap-k8s-local.sh --force
 ```
