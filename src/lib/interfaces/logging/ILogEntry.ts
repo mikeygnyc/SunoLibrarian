@@ -2,6 +2,7 @@ import type { LogLevel, WorkerRole, WorkflowType } from "../orchestration/IOrche
 
 export interface ILogContext {
   service?: string;
+  subsystem?: string;
   jobId?: string;
   stageId?: string;
   workItemId?: string;

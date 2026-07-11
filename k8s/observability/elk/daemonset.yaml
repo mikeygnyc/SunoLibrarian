@@ -62,6 +62,8 @@ spec:
               subPath: filebeat.yml
             - name: data
               mountPath: /usr/share/filebeat/data
+            - name: logs
+              mountPath: /usr/share/filebeat/logs
             - name: varlogcontainers
               mountPath: /var/log/containers
               readOnly: true
@@ -80,6 +82,8 @@ spec:
           hostPath:
             path: /var/lib/suno-export-filebeat-data
             type: DirectoryOrCreate
+        - name: logs
+          emptyDir: {}
         - name: varlogcontainers
           hostPath:
             path: /var/log/containers

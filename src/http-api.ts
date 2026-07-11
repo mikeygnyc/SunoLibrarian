@@ -96,6 +96,9 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
       pathname = url.pathname;
       method = req.method.toUpperCase();
       res.once("finish", () => {
+        if (pathname === "/healthz") {
+          return;
+        }
         serverLogger.info("request completed", {
           method,
           pathname,

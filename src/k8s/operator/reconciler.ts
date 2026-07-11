@@ -95,6 +95,10 @@ export class SunoExportK8sOperator {
       });
 
     const body = extractResponseBody<{ items?: SunoExportClusterResource[] }>(response);
+    if (!body) {
+      console.warn("[k8s-operator] failed to extract response body from listClusterCustomObject response");
+      return [];
+    }
     return Array.isArray(body?.items) ? body.items : [];
   }
 

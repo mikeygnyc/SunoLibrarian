@@ -9,6 +9,7 @@ export class ConsoleLogSink implements ILogSink {
       timestamp: entry.timestamp.toISOString(),
       level: entry.level,
       service: entry.context?.service,
+      subsystem: entry.context?.subsystem,
       role: entry.context?.role,
       jobId: entry.context?.jobId,
       stageId: entry.context?.stageId,

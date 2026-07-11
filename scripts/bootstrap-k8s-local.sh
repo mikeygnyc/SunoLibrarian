@@ -11,13 +11,13 @@ NAMESPACE="${NAMESPACE:-suno-export}"
 CLUSTER_NAME="${CLUSTER_NAME:-main}"
 IMAGE_REPO="${IMAGE_REPO:-ghcr.io/mikeygnyc/suno-export}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-RUNTIME_POSTGRES_URL="${RUNTIME_POSTGRES_URL:-postgres://user:password@postgres.example.internal:5432/suno_export}"
-RUNTIME_MQTT_URL="${RUNTIME_MQTT_URL:-mqtt://mqtt.example.internal:1883}"
-ELK_ELASTICSEARCH_HOSTS="${ELK_ELASTICSEARCH_HOSTS:-https://your-es:9200}"
-ELK_ELASTICSEARCH_USERNAME="${ELK_ELASTICSEARCH_USERNAME:-filebeat_suno_export}"
-ELK_ELASTICSEARCH_PASSWORD="${ELK_ELASTICSEARCH_PASSWORD:-change-me}"
-ELK_ELASTICSEARCH_ADMIN_USERNAME="${ELK_ELASTICSEARCH_ADMIN_USERNAME:-elastic}"
-ELK_ELASTICSEARCH_ADMIN_PASSWORD="${ELK_ELASTICSEARCH_ADMIN_PASSWORD:-change-me}"
+RUNTIME_POSTGRES_URL="${RUNTIME_POSTGRES_URL:-}"
+RUNTIME_MQTT_URL="${RUNTIME_MQTT_URL:-}"
+ELK_ELASTICSEARCH_HOSTS="${ELK_ELASTICSEARCH_HOSTS:-}"
+ELK_ELASTICSEARCH_USERNAME="${ELK_ELASTICSEARCH_USERNAME:-}"
+ELK_ELASTICSEARCH_PASSWORD="${ELK_ELASTICSEARCH_PASSWORD:-}"
+ELK_ELASTICSEARCH_ADMIN_USERNAME="${ELK_ELASTICSEARCH_ADMIN_USERNAME:-}"
+ELK_ELASTICSEARCH_ADMIN_PASSWORD="${ELK_ELASTICSEARCH_ADMIN_PASSWORD:-}"
 ELK_ELASTICSEARCH_CA_CERT="${ELK_ELASTICSEARCH_CA_CERT:-}"
 ELK_ENVIRONMENT="${ELK_ENVIRONMENT:-local}"
 NO_RUN="${NO_RUN:-0}"
@@ -144,8 +144,46 @@ PERL
   log "Wrote ${target}"
 }
 
+require_environment() {
+  local required=(RUNTIME_POSTGRES_URL RUNTIME_MQTT_URL)
+  if [[ "$INCLUDE_ELK" == "1" ]]; then
+    required+=(
+      ELK_ELASTICSEARCH_HOSTS
+      ELK_ELASTICSEARCH_USERNAME
+      ELK_ELASTICSEARCH_PASSWORD
+      ELK_ELASTICSEARCH_ADMIN_USERNAME
+      ELK_ELASTICSEARCH_ADMIN_PASSWORD
+    )
+  fi
+
+  local missing=()
+  local name
+  for name in "${required[@]}"; do
+    if [[ -z "${!name}" ]]; then
+      missing+=("$name")
+    fi
+  done
+
+  if ((${#missing[@]} > 0)); then
+    printf 'Missing required environment variables: %s\n' "${missing[*]}" >&2
+    printf 'Set them in your shell or use scripts/pre-conf-bootstrap-k8s-local.sh with its local .env file.\n' >&2
+    exit 1
+  fi
+}
+
+ensure_kustomization_resource() {
+  local kustomization_file="$1"
+  local resource="$2"
+
+  if ! rg -Fqx -- "  - ${resource}" "$kustomization_file"; then
+    printf '  - %s\n' "$resource" >> "$kustomization_file"
+    log "Added ${resource} to ${kustomization_file}"
+  fi
+}
+
 main() {
   cd "$REPO_ROOT"
+  require_environment
 
   local local_root="k8s/local"
   local local_cluster_dir="${local_root}/cluster"
@@ -349,9 +387,8 @@ EOF
       "${local_elk_dir}/kustomization.yaml" \
       "secret.example.yaml" "secret.yaml"
 
-    if [[ -e "${local_elk_dir}/kustomization.yaml" ]]; then
-      printf '%s\n' "  - bootstrap-secret.yaml" "  - provisioner-job.yaml" >> "${local_elk_dir}/kustomization.yaml"
-    fi
+    ensure_kustomization_resource "${local_elk_dir}/kustomization.yaml" "bootstrap-secret.yaml"
+    ensure_kustomization_resource "${local_elk_dir}/kustomization.yaml" "provisioner-job.yaml"
   fi
   if [[ "$NO_RUN" == "1" ]]; then
     log "Local manifests are ready under ${local_root}"

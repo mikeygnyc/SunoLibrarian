@@ -47,6 +47,14 @@ export class HttpApiServerLogger {
     }
 
     const timestamp = new Date().toISOString();
+    const structuredPayload = JSON.stringify({
+      timestamp,
+      level,
+      service: "api",
+      subsystem: "http-api",
+      message,
+      properties: fields,
+    });
     const suffix = fields && Object.keys(fields).length > 0
       ? ` ${JSON.stringify(fields)}`
       : "";
@@ -55,13 +63,13 @@ export class HttpApiServerLogger {
     switch (level) {
       case "debug":
       case "info":
-        console.log(line);
+        process.stdout.write(`${structuredPayload}\n`);
         break;
       case "warn":
-        console.warn(line);
+        process.stderr.write(`${structuredPayload}\n`);
         break;
       case "error":
-        console.error(line);
+        process.stderr.write(`${structuredPayload}\n`);
         break;
     }
 

@@ -1,9 +1,0 @@
-resources:
-  - namespace.yaml
-  - operator-serviceaccount.yaml
-  - operator-clusterrole.yaml
-  - operator-clusterrolebinding.yaml
-  - crd-sunoexportcluster.yaml
-  - operator-deployment.yaml
-  - shared-storage-pvc.yaml
-  - runtime-secret.yaml

@@ -12,31 +12,49 @@ data:
         prospector.scanner.symlinks: true
         paths:
           - /var/log/containers/*suno-export*.log
+        exclude_files:
+          - '.*suno-export-filebeat.*\.log$'
         parsers:
           - container: ~
         processors:
-          - add_kubernetes_metadata:
-              host: ${NODE_NAME}
-              matchers:
-                - logs_path:
-                    logs_path: "/var/log/containers/"
           - decode_json_fields:
               fields: ["message"]
               target: ""
               overwrite_keys: true
               add_error_key: true
+          - drop_event:
+              when:
+                equals:
+                  service.name: "filebeat"
+          - dissect:
+              tokenizer: "[%{subsystem}] %{subsystem_message}"
+              field: "message"
+              target_prefix: ""
+              ignore_failure: true
+          - drop_fields:
+              when:
+                has_fields: ["subsystem_message"]
+              fields: ["message"]
+              ignore_missing: true
+          - rename:
+              when:
+                has_fields: ["subsystem_message"]
+              fields:
+                - from: "subsystem_message"
+                  to: "message"
+              ignore_missing: true
+              fail_on_error: false
           - add_fields:
               target: ""
               fields:
                 stack: suno-export
                 environment: ${SUNO_EXPORT_ENVIRONMENT}
-    processors:
-      - add_host_metadata: ~
-      - add_cloud_metadata: ~
     output.elasticsearch:
       hosts: ["${ELASTICSEARCH_HOSTS}"]
       username: "${ELASTICSEARCH_USERNAME}"
       password: "${ELASTICSEARCH_PASSWORD}"
       index: "suno-export-logs"
+    setup.ilm.enabled: false
+    setup.template.enabled: false
     setup.template.name: "suno-export-logs"
     setup.template.pattern: "suno-export-logs-*"
