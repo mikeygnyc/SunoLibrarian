@@ -1,10 +1,10 @@
 {
   "target": {
-    "localRoot": "/Volumes/StudioProjects/suno_aug_26_dl"
+    "localRoot": "/path/to/your/local/directory"
   },
   "commands": {
     "sync": {
-      "library": "/Volumes/StudioProjects/suno_aug_26",
+      "library": "/path/to/your/music/library",
       "processExistingMetadata": true,
       "copySongsMetadataToOutput": true
     }

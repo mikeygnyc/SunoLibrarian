@@ -1,23 +1,24 @@
 # suno-export
 
-TypeScript tools for downloading Suno tracks, converting a local music library, and running API-backed workflows with separate workers.
+TypeScript tools and Kubernetes deployments for downloading Suno tracks, converting a local music library, and running API-backed workflows with separate workers. 
+
+## **IMPORTANT NOTE**
+This has not been tested since the Suno v6 release and download restrictions were added. It should still be able to retrieve metadata and locally embed it, however downloading audio files is unlikely to fully work.
 
 ## Project Status
 
-The current implementation supports two workflow targets:
+The current implementation supports three workflow targets:
 
 - **Local filesystem:** `download`, `process`, and `sync` run directly against `target.localRoot`, with metadata in `songs_metadata.json`.
 - **HTTP API:** `target.apiUrl` submits durable jobs for separate runtime processes. Postgres stores workflow state and MQTT dispatches work.
+- **Kubernetes Operator:** allows the HTTP API to be run on a Kubernetes cluster with automatic periodic checks.
 
 Implemented features include MP3/WAV downloads, FLAC/MP3/ALAC conversion, metadata and artwork processing, browser authentication, an HTTP API and dashboard, workspace librarians, and workers for `auth`, `metadata`, `asset`, and `conversion`. Kubernetes deployment includes a `SunoExportCluster` operator, shared runtime image, local manifest bootstrap, and optional Filebeat/Elasticsearch logging.
 
-The architecture simplification is implemented. The [architecture checklist](docs/architecture-simplification-checklist.md) still lists live API job completion, worker execution, librarian sync, and expanded API-first coverage as follow-up verification. The [operational checklist](docs/remaining-work-todo.md) records completed Kubernetes/ELK hardening and a successful local logging smoke test on August 7, 2026; that is separate from end-to-end workflow validation.
-
-The CLI no longer exposes `run-supervisor`, `run-orchestrator`, `--runtime-mode`, or `--submit-only`.
 
 ## Config-First Usage
 
-The CLI now prefers loading settings from `suno-export.config.json` in the current working directory. Settings can come from config or CLI flags; explicit CLI flags win for that run. Commands still require their relevant target, arguments, and runtime settings. Use `--config <path>` to select another config file.
+The CLI loads settings from `suno-export.config.json` in the current working directory. Settings can come from config or CLI flags; explicit CLI flags win for that run. Commands  require their relevant target, arguments, and runtime settings. Use `--config <path>` to select another config file.
 
 Example:
 
@@ -46,7 +47,7 @@ With that file in place and a logged-in Suno browser session available, run:
 npm start -- sync
 ```
 
-And one-off overrides still work:
+Or use one-off overrides:
 
 ```bash
 npm start -- sync --workspace another-workspace --format mp3
@@ -170,12 +171,10 @@ When using default output paths, required directories are created automatically 
 
 For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flow.md).
 For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
-For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
-For the current simplified architecture, see [Architecture Simplification Checklist](docs/architecture-simplification-checklist.md).
 For Kubernetes deployment and operator configuration, see [Kubernetes Operator](docs/kubernetes-operator.md).
 For ELK-oriented container log aggregation, see [ELK Logging](docs/elk-logging.md).
 For generating gitignored local k8s manifests from tracked examples, see [Local K8s Bootstrap](docs/k8s-local-bootstrap.md).
-For the current prioritized follow-up work, see [Remaining Work TODO](docs/remaining-work-todo.md).
+
 
 ## HTTP API
 
@@ -204,7 +203,7 @@ Current endpoints:
 
 The API only handles HTTP and control-plane mutations. Start workers and
 librarians as separate processes so each runtime stays focused on one
-responsibility. There is no `run-supervisor` command in the current CLI.
+responsibility. 
 
 Example separate-process setup (run each command in its own terminal with the same `POSTGRES_URL` and `MQTT_URL` values):
 
@@ -392,7 +391,7 @@ For the runtime process options, use `suno-export serve-api --help`,
 
 ### METADATA STORAGE
 
-Local `target.localRoot` workflows use `songs_metadata.json` as their metadata store. Downloads create or update it under the download root; `process` reads metadata from the input root. The existing JSON array format remains supported.
+Local `target.localRoot` workflows use `songs_metadata.json` as their metadata store. Downloads create or update it under the download root; `process` reads metadata from the input root. 
 
 Runtime metadata storage and standalone database utilities support SQLite and Postgres. Outside containers, the default SQLite path is `data/suno-export.sqlite`. Use `--database <path>` to override it, or `--database-type postgres --postgres-url <url>` for Postgres. `SUNO_EXPORT_POSTGRES_URL` is also supported for metadata storage. Distributed workflow state uses Postgres independently of the metadata backend.
 
@@ -546,7 +545,7 @@ npm test
 
 `npm run build` runs `npm install` followed by TypeScript compilation. `npm run compile` compiles existing dependencies without reinstalling. Output goes to `dist/` (CommonJS, ES2020).
 
-See [Runtime Smoke Test](docs/testing.md) for current runtime startup commands. Live workflow verification needs Postgres, MQTT, shared asset paths, and valid Suno authentication for downloads; CLI help checks do not establish end-to-end runtime health.
+See [Runtime Smoke Test](docs/testing.md) for current runtime startup commands. Live workflow verification needs Postgres, MQTT, shared asset paths, and valid Suno authentication for downloads.
 
 ## Deployment and Operations
 
@@ -555,7 +554,97 @@ The root `Dockerfile` builds a shared runtime image; `SUNO_EXPORT_APP` selects `
 - [Kubernetes Operator](docs/kubernetes-operator.md): custom resource, API/worker deployments, and workspace librarian jobs.
 - [Local K8s Bootstrap](docs/k8s-local-bootstrap.md): generate local manifests from tracked examples and a gitignored environment file.
 - [ELK Logging](docs/elk-logging.md): structured runtime logs, secret redaction, Filebeat collection, retention, and the repeatable `scripts/elk-smoke-test.sh` check.
-- [Remaining Work TODO](docs/remaining-work-todo.md): operational hardening and recorded local verification.
+
+### Kubernetes Setup
+
+The operator reconciles a namespaced `SunoExportCluster` into an API Service/Deployment, one Deployment per worker role, and workspace librarian CronJobs or one-off Jobs. Postgres holds durable state and MQTT dispatches work; both services must be provided separately and reachable from the pods.
+
+Before deploying, have:
+
+- A Kubernetes context selected in `kubectl`, with permission to install the CRD and RBAC resources.
+- A runtime image accessible to the cluster. Set `IMAGE_REPO` and `IMAGE_TAG` to your published image when generating manifests.
+- Storage that supports the shared volume: the supplied PVC requests **100 GiB with ReadWriteMany**. Adjust the generated PVC for your storage class, or set `spec.sharedStorage.existingClaim` to a suitable existing claim and remove the generated PVC resource from the local kustomization.
+- Postgres and MQTT connection URLs. Optional ELK collection also requires an external Elasticsearch endpoint and the credentials in the environment template.
+
+The examples below use namespace `suno-export` and cluster name `main`. Substitute your values if you set `NAMESPACE` or `CLUSTER_NAME`.
+
+### Generate and Deploy
+
+Create the local configuration file if it does not already exist:
+
+```bash
+cp -n scripts/pre-conf-bootstrap-k8s-local.env.example scripts/pre-conf-bootstrap-k8s-local.env
+```
+
+Edit that file with your `RUNTIME_POSTGRES_URL` and `RUNTIME_MQTT_URL`, plus any image or namespace overrides. Keep real credentials in this gitignored file and the generated `k8s/local` tree.
+
+Generate the application manifests without applying them:
+
+```bash
+scripts/pre-conf-bootstrap-k8s-local.sh --skip-elk --no-run
+```
+
+`--no-run` still writes local files but does not execute `kubectl`. Without it, the bootstrap also applies the manifests. Existing generated files are preserved; use `--force` when deliberately regenerating them, including after changing credentials or image settings.
+
+Review `k8s/local/shared-storage-pvc.yaml`, `k8s/local/operator-deployment.yaml`, and `k8s/local/cluster/sunoexportcluster.yaml`. The custom resource controls worker replicas, shared paths, image settings, and librarian schedules. Render the manifests to check them, then apply the base resources before the custom resource:
+
+```bash
+kubectl kustomize k8s/local > /dev/null
+kubectl kustomize k8s/local/cluster > /dev/null
+kubectl apply -k k8s/local
+kubectl wait --for=condition=Established crd/sunoexportclusters.suno.mikegales.dev --timeout=60s
+kubectl apply -k k8s/local/cluster
+kubectl -n suno-export rollout status deployment/suno-export-k8s-operator --timeout=180s
+kubectl -n suno-export get sunoexportclusters,pods,pvc
+```
+
+Once the operator has created `main-api`, check its rollout and open a local connection:
+
+```bash
+kubectl -n suno-export rollout status deployment/main-api --timeout=180s
+kubectl -n suno-export port-forward service/main-api 3000:3000
+```
+
+Leave port-forwarding running and open `http://127.0.0.1:3000/` for the dashboard. From another terminal, verify the API and send a token captured from your local logged-in Chrome session:
+
+```bash
+suno-export api-health --api-url http://127.0.0.1:3000
+suno-export capture-auth-token --browser http://localhost:9222 --send-to-api --api-url http://127.0.0.1:3000
+```
+
+Browser authentication runs on the operator's machine. Submit workflows through `target.apiUrl` or `--api-url`; output is written to the shared cluster volume. The example mount is `/var/lib/suno-export`, with `downloads/`, `library/`, and `cache/` beneath it.
+
+### Librarians and Scaling
+
+Edit `spec.workers.<role>.replicas` in the local custom resource to scale `auth`, `metadata`, `asset`, or `conversion` workers, then reapply `k8s/local/cluster`. The example starts one worker for each role except conversion, which starts two.
+
+Dynamic librarian discovery uses workspaces already present in the Postgres metadata store. Each discovered workspace gets a CronJob (every six hours by default) running the librarian with `--once`. Use `spec.librarians.workspaces` to configure static workspace IDs and schedules. Pending manual sync requests create one-off Jobs and temporarily suspend the corresponding CronJob.
+
+### Logging and Troubleshooting
+
+```bash
+kubectl -n suno-export logs deployment/suno-export-k8s-operator --tail=100
+kubectl -n suno-export logs deployment/main-api --tail=100
+kubectl -n suno-export logs deployment/main-worker-asset --tail=100
+kubectl -n suno-export get cronjobs,jobs
+kubectl -n suno-export get events --sort-by=.metadata.creationTimestamp
+```
+
+For a pending PVC, check storage class and ReadWriteMany support. For image pull failures, check the configured image tag and registry access. For queued jobs, check that all required worker roles are running, Postgres/MQTT are reachable, and the API has a valid Suno token. API liveness alone does not verify job completion.
+
+To enable Filebeat, fill in the `ELK_*` settings in the local environment file, regenerate without `--skip-elk`, and apply the logging bundle:
+
+```bash
+scripts/pre-conf-bootstrap-k8s-local.sh --no-run
+kubectl -n suno-export delete job/suno-export-filebeat-provisioner --ignore-not-found
+kubectl apply -k k8s/local/observability/elk
+```
+
+The fixed-name provisioner Job is replaced so provisioning runs again. It configures the Elasticsearch writer account, mappings, rollover alias, and 30-day retention policy. Use `--force` during generation if existing local credentials or settings need updating.
+
+For a repeatable live check, run `scripts/elk-smoke-test.sh`. It generates/applies manifests, verifies that a tagged API request reaches Elasticsearch as a structured event, and leaves the deployment running. See [ELK Logging](docs/elk-logging.md) for details.
+
+Full removal is available through `scripts/remove-k8s-resources.sh`. This removes namespace resources, including PVCs, and cluster RBAC/CRD resources; storage loss depends on the volume reclaim policy. Review its `--help` before teardown.
 
 Older design and migration documents may retain historical runtime examples. Use the current CLI help and runtime smoke-test instructions when launching services.
 

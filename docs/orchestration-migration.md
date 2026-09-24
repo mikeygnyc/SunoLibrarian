@@ -125,7 +125,7 @@ from the simpler `localRoot` user workflow.
 
 ## How To Validate
 
-Use [testing-guide.md](/Users/mikegales/Projects/SunoTrackExporter/docs/testing-guide.md:1)
+Use [testing-guide.md](./testing-guide.md:1)
 for the current validation steps.
 
 The main remaining verification work is operational rather than architectural:
