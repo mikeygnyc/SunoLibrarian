@@ -79,7 +79,7 @@
       "args": [
         "sync",
         "-o",
-        "/path/to/output/directory/",
+        "/path/to/output/directory",
         "--metadata-file",
         "/path/to/songs_metadata.json",
         "--browser",

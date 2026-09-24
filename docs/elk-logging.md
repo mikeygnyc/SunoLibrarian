@@ -29,7 +29,7 @@ without parsing ad hoc text output.
 ## Filebeat Bundle
 
 An optional Filebeat-to-Logstash bundle lives under
-[k8s/observability/elk](./k8s/observability/elk/kustomization.yaml:1).
+[k8s/observability/elk](./kustomization.yaml:1).
 
 It does the following:
 
