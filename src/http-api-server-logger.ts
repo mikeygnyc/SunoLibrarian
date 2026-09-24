@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { sanitizeLogData, sanitizeLogMessage } from "./logging/sanitize-log-data";
 
 type ServerLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -47,18 +48,20 @@ export class HttpApiServerLogger {
     }
 
     const timestamp = new Date().toISOString();
+    const sanitizedMessage = sanitizeLogMessage(message);
+    const sanitizedFields = sanitizeLogData(fields);
     const structuredPayload = JSON.stringify({
       timestamp,
       level,
       service: "api",
       subsystem: "http-api",
-      message,
-      properties: fields,
+      message: sanitizedMessage,
+      properties: sanitizedFields,
     });
-    const suffix = fields && Object.keys(fields).length > 0
-      ? ` ${JSON.stringify(fields)}`
+    const suffix = sanitizedFields && Object.keys(sanitizedFields).length > 0
+      ? ` ${JSON.stringify(sanitizedFields)}`
       : "";
-    const line = `[${timestamp}] ${level.toUpperCase()} ${message}${suffix}`;
+    const line = `[${timestamp}] ${level.toUpperCase()} ${sanitizedMessage}${suffix}`;
 
     switch (level) {
       case "debug":

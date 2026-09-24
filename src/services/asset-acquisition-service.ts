@@ -108,6 +108,12 @@ export class AssetAcquisitionService {
           ? tracks.filter((track) => requestedClipIds.has(track.id))
           : tracks;
         console.log(`Found ${candidateTracks.length} track(s)`);
+        const downloadVerifications = await metadataStore.loadDownloadVerifications(
+          candidateTracks.map((track) => track.id),
+        );
+        const downloadVerificationByClipId = new Map(
+          downloadVerifications.map((verification) => [verification.clipId, verification]),
+        );
 
         for (let i = 0; i < candidateTracks.length; i++) {
           await assertNotCancelled(options);
@@ -127,25 +133,31 @@ export class AssetAcquisitionService {
             continue;
           }
 
-          const existingEntry = await metadataStore.getByClipId(track.id);
-          if (existingEntry) {
-            if (!existingEntry.rawApiResponse) {
-              console.log(`Updating metadata for: ${track.title || track.id}`);
-              const metadata = await client.fetchTrackMetadata(track.id);
-              existingEntry.rawApiResponse = metadata.fullData as ISunoTrackResponse;
-              await metadataStore.upsert(existingEntry);
-              fs.writeFileSync(
-                path.join(metadataDir, `${track.id}.json`),
-                JSON.stringify(normalizeMetadata(existingEntry), null, 2),
-              );
-              await sleep(delay);
+          const downloadVerification = downloadVerificationByClipId.get(track.id);
+          let existingEntry: ISongData | undefined;
+          if (downloadVerification) {
+            if (!downloadVerification.hasRawApiResponse) {
+              existingEntry = await metadataStore.getByClipId(track.id);
+              if (existingEntry) {
+                console.log(`Updating metadata for: ${track.title || track.id}`);
+                const metadata = await client.fetchTrackMetadata(track.id);
+                existingEntry.rawApiResponse = metadata.fullData as ISunoTrackResponse;
+                await metadataStore.upsert(existingEntry);
+                fs.writeFileSync(
+                  path.join(metadataDir, `${track.id}.json`),
+                  JSON.stringify(normalizeMetadata(existingEntry), null, 2),
+                );
+                await sleep(delay);
+              }
             }
 
-            if (existingEntry[targetStatusKey] === "DOWNLOADED") {
+            if (downloadVerification[targetStatusKey] === "DOWNLOADED") {
               console.log(`Already downloaded: ${(track.title ?? "-")} : ${track.id}`);
               totalSkipped++;
               continue;
             }
+
+            existingEntry ??= await metadataStore.getByClipId(track.id);
           }
 
           const audioDir = options.format === "wav" ? wavDir : mp3Dir;

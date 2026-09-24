@@ -16,38 +16,42 @@ smoke test. It is ordered by operational risk and release value.
 
 ## P1 — Close the runtime and operational gaps
 
-- [ ] Resolve the `run-supervisor` documentation mismatch: the README describes
-  it, but the built CLI help does not currently expose that command. Either
-  register and test the command, or remove/update the documentation.
-- [ ] Add a repeatable ELK smoke-test command that is safe by default. It should
+- [x] Resolve the `run-supervisor` documentation mismatch: the README describes
+  it, but the built CLI help does not currently expose that command. Removed
+  obsolete supervisor instructions and documented the separate runtime
+  entrypoints instead.
+- [x] Add a repeatable ELK smoke-test command that is safe by default. It should
   generate manifests, wait for Filebeat readiness, emit a tagged API request,
   and verify that Elasticsearch indexes the decoded structured event. Keep any
   destructive teardown behind an explicit flag.
-- [ ] Document an Elasticsearch troubleshooting query using
+- [x] Document an Elasticsearch troubleshooting query using
   `suno-export-*`, rather than assuming the bare `suno-export-logs` name is a
   readable alias. The smoke test confirmed indexed rollover indices such as
   `suno-export-logs-000011`.
-- [ ] Decide the lifecycle of the Filebeat provisioner Job: rerunning bootstrap
-  creates a new Job only if its prior object is absent. Confirm whether the Job
-  should be retained, replaced, or use a unique generated name on credential
-  rotation.
+- [x] Define the lifecycle of the Filebeat provisioner Job: replace the
+  fixed-name Job before each bootstrap or smoke test, so credential rotation
+  reruns provisioning without accumulating uniquely named Jobs.
 
 ## P2 — Quality and security hardening
 
-- [ ] Add automated coverage for bootstrap validation: missing required values,
+- [x] Add automated coverage for bootstrap validation: missing required values,
   `--skip-elk`, idempotent kustomization generation, and `kubectl kustomize`
   rendering.
-- [ ] Add integration coverage for JSON logging and Filebeat field extraction,
+- [x] Add integration coverage for JSON logging and Filebeat field extraction,
   especially bracketed subsystem prefixes and health-check log suppression.
-- [ ] Review application logs for connection-string and token redaction. The
+- [x] Review application logs for connection-string and token redaction. The
   smoke test showed the PostgreSQL username and host in logs; confirm this is an
-  intentional, acceptable disclosure for the target log audience.
-- [ ] Triage and remediate the dependency audit findings reported by
+  intentional, acceptable disclosure for the target log audience. Shared log
+  boundaries now redact secrets; non-secret connection identity is documented
+  as intentional operator context.
+- [x] Triage and remediate the dependency audit findings reported by
   `npm install` (18 findings at the last build, including 11 high severity),
-  with a lockfile-aware upgrade plan and regression check.
-- [ ] Confirm Elasticsearch index lifecycle, retention, mappings, and access
+  with a lockfile-aware upgrade plan and regression check. Lockfile-only patched
+  transitive updates now produce a zero-finding `npm audit`.
+- [x] Confirm Elasticsearch index lifecycle, retention, mappings, and access
   policy for `suno-export-*`; the current Filebeat configuration disables its
-  automatic ILM and template setup.
+  automatic ILM and template setup. The provisioner now owns a 30-day policy,
+  daily/25 GB rollover, mappings, write alias, and least-privilege roles.
 
 ## Verified in the current local environment
 
@@ -58,3 +62,10 @@ smoke test. It is ordered by operational risk and release value.
 - [x] Generated base, cluster, and ELK kustomizations render successfully.
 - [x] Docker Desktop smoke test confirmed Filebeat delivery and decoded API and
   operator events in Elasticsearch.
+- [x] Repeated the live smoke test after collector/ILM hardening on 2026-08-07;
+  the provisioner, Filebeat rollout, unique API probe, and decoded Elasticsearch
+  event all completed successfully.
+- [x] Live Elasticsearch inspection confirmed the 30-day policy, rollover
+  alias, index template/mappings, writer/reader roles, and managed current write
+  index. The existing equivalent 30-day policy remains on the current index;
+  the new policy applies at the next rollover.

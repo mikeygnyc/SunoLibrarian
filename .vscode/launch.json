@@ -182,18 +182,14 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Capture Auth Token",
-      "preLaunchTask": "tsc: build - tsconfig.json",
+      "preLaunchTask": "compile via nvm",
       "runtimeVersion": "24",
       "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "capture-auth-token",
         "--browser",
-        "http://localhost:9222",
-        "--browser-profile",
-        "/Users/mikegales/.suno-export/chrome-user-data",
-        "--profile-directory",
-        "Profile 2"
+        "http://localhost:9222"
       ],
       "console": "internalConsole",
       "outFiles": [

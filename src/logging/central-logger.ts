@@ -1,6 +1,7 @@
 import type { ILogContext, ILogEntry, ILogWriteResult, LogLevel } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 import { shouldLog } from "./log-level";
+import { sanitizeLogData, sanitizeLogMessage } from "./sanitize-log-data";
 
 export type CentralLoggerOptions = {
   minimumLevel?: LogLevel;
@@ -48,12 +49,12 @@ export class CentralLogger {
       return [];
     }
 
-    const mergedContext = withDerivedSubsystem(mergeContext(this.baseContext, context));
+    const mergedContext = sanitizeLogData(withDerivedSubsystem(mergeContext(this.baseContext, context)));
 
     const entry: ILogEntry = {
       timestamp: new Date(),
       level,
-      message,
+      message: sanitizeLogMessage(message),
       context: mergedContext,
     };
 

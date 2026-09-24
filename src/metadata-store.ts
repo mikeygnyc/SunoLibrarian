@@ -248,6 +248,13 @@ export interface MetadataStoreOptions {
   log?: MetadataStoreLogger;
 }
 
+export interface DownloadVerification {
+  clipId: string;
+  hasRawApiResponse: boolean;
+  mp3Status?: string;
+  wavStatus?: string;
+}
+
 function logMetadataDatabaseStatus(message: string): void {
   console.log(`[metadata-db] ${message}`);
 }
@@ -256,6 +263,7 @@ export interface MetadataStore {
   readonly location: string;
   loadAll(): Promise<ISongData[]>;
   loadByClipIds(clipIds: string[]): Promise<ISongData[]>;
+  loadDownloadVerifications(clipIds: string[]): Promise<DownloadVerification[]>;
   getByClipId(clipId: string): Promise<ISongData | undefined>;
   listWorkspaces(): Promise<IWorkspace[]>;
   listPendingAssetClipIds(workspaceId: string, format: "mp3" | "wav", limit?: number): Promise<string[]>;
@@ -483,6 +491,16 @@ export class JsonMetadataStore implements MetadataStore {
     const clipIdSet = new Set(clipIds);
     const songs = await this.loadAll();
     return songs.filter((song) => clipIdSet.has(song.clipId));
+  }
+
+  async loadDownloadVerifications(clipIds: string[]): Promise<DownloadVerification[]> {
+    const songs = await this.loadByClipIds(clipIds);
+    return songs.map((song) => ({
+      clipId: song.clipId,
+      hasRawApiResponse: song.rawApiResponse != null,
+      mp3Status: song.mp3Status,
+      wavStatus: song.wavStatus,
+    }));
   }
 
   async getByClipId(clipId: string): Promise<ISongData | undefined> {
@@ -745,6 +763,32 @@ export class SqliteMetadataStore implements MetadataStore {
       .all(...uniqueClipIds) as any[];
     this.log?.(`SQLite retrieved ${rows.length}/${uniqueClipIds.length} targeted song row${rows.length === 1 ? "" : "s"} in ${Date.now() - startedAt}ms`);
     return rows.map((row) => normalizeMetadata(this.rowToSong(row)));
+  }
+
+  async loadDownloadVerifications(clipIds: string[]): Promise<DownloadVerification[]> {
+    const uniqueClipIds = Array.from(new Set(clipIds.map((clipId) => clipId.trim()).filter(Boolean)));
+    if (uniqueClipIds.length === 0) return [];
+
+    const placeholders = uniqueClipIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`
+        SELECT clip_id, raw_api_response_json IS NOT NULL AS has_raw_api_response,
+          mp3_status, wav_status
+        FROM songs
+        WHERE clip_id IN (${placeholders})
+      `)
+      .all(...uniqueClipIds) as Array<{
+        clip_id: string;
+        has_raw_api_response: number;
+        mp3_status: string | null;
+        wav_status: string | null;
+      }>;
+    return rows.map((row) => ({
+      clipId: row.clip_id,
+      hasRawApiResponse: row.has_raw_api_response === 1,
+      mp3Status: row.mp3_status ?? undefined,
+      wavStatus: row.wav_status ?? undefined,
+    }));
   }
 
   async getByClipId(clipId: string): Promise<ISongData | undefined> {
@@ -1128,6 +1172,28 @@ export class PostgresMetadataStore implements MetadataStore {
     }
     //this.log?.(`Postgres targeted metadata load complete in ${Date.now() - startedAt}ms`);
     return songs;
+  }
+
+  async loadDownloadVerifications(clipIds: string[]): Promise<DownloadVerification[]> {
+    await this.initialize();
+    const uniqueClipIds = Array.from(new Set(clipIds.map((clipId) => clipId.trim()).filter(Boolean)));
+    if (uniqueClipIds.length === 0) return [];
+
+    const result = await this.pool.query(
+      `
+      SELECT clip_id, raw_api_response_json IS NOT NULL AS has_raw_api_response,
+        mp3_status, wav_status
+      FROM songs
+      WHERE clip_id = ANY($1::text[])
+      `,
+      [uniqueClipIds],
+    );
+    return result.rows.map((row) => ({
+      clipId: row.clip_id as string,
+      hasRawApiResponse: row.has_raw_api_response === true,
+      mp3Status: (row.mp3_status as string | null) ?? undefined,
+      wavStatus: (row.wav_status as string | null) ?? undefined,
+    }));
   }
 
   async getByClipId(clipId: string): Promise<ISongData | undefined> {
