@@ -32,7 +32,7 @@ Runtime roles are selected with `SUNO_EXPORT_APP`:
 - `librarian`
 
 The repo also now includes a GitHub Actions workflow at
-[.github/workflows/container-image.yml](.github/workflows/container-image.yml:1)
+[.github/workflows/container-image.yml](../.github/workflows/container-image.yml)
 that builds the image on pull requests and publishes it to
 `ghcr.io/<owner>/suno-export` on pushes to `main` and version tags.
 

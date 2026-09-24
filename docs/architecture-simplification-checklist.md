@@ -84,7 +84,7 @@ These already pass as part of the simplification work:
 - [x] `npm start -- run-worker --help`
 - [x] `npm start -- run-librarian --help`
 
-Use [testing-guide.md](./testing-guide.md:1)
+Use [testing-guide.md](./testing-guide.md)
 for the live end-to-end validation steps.
 
 ## Current Open Decisions

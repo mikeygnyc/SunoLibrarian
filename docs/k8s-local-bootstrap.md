@@ -87,6 +87,6 @@ scripts/remove-k8s-resources.sh --keep-namespace --keep-crd
 
 ## Redeploy Script
 
-[`scripts/redeploy-k8s-operator.sh`](./scripts/redeploy-k8s-operator.sh:1)
+[`scripts/redeploy-k8s-operator.sh`](../scripts/redeploy-k8s-operator.sh)
 now expects `k8s/local` and `k8s/local/cluster` to exist already. If they do
 not, it will tell you to run the bootstrap script first.
