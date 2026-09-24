@@ -1,6 +1,7 @@
-import type { ILogContext, ILogEntry, ILogWriteResult, LogLevel } from "../lib/interfaces";
+import type { ILogContext, ILogEntry, ILogWriteResult, LogLevel } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 import { shouldLog } from "./log-level";
+import { sanitizeLogData, sanitizeLogMessage } from "./sanitize-log-data";
 
 export type CentralLoggerOptions = {
   minimumLevel?: LogLevel;
@@ -48,11 +49,13 @@ export class CentralLogger {
       return [];
     }
 
+    const mergedContext = sanitizeLogData(withDerivedSubsystem(mergeContext(this.baseContext, context)));
+
     const entry: ILogEntry = {
       timestamp: new Date(),
       level,
-      message,
-      context: mergeContext(this.baseContext, context),
+      message: sanitizeLogMessage(message),
+      context: mergedContext,
     };
 
     return Promise.all(this.sinks.map((sink) => sink.write(entry)));
@@ -76,4 +79,34 @@ function mergeContext(baseContext?: ILogContext, overrideContext?: ILogContext):
 function dedupeTags(...tagLists: Array<string[] | undefined>): string[] | undefined {
   const tags = Array.from(new Set(tagLists.flatMap((tagList) => tagList ?? [])));
   return tags.length > 0 ? tags : undefined;
+}
+
+function withDerivedSubsystem(context?: ILogContext): ILogContext | undefined {
+  if (!context) {
+    return undefined;
+  }
+
+  if (typeof context.subsystem === "string" && context.subsystem.trim().length > 0) {
+    return context;
+  }
+
+  const stageType = typeof context.properties?.stageType === "string"
+    ? context.properties.stageType.trim()
+    : "";
+  if (stageType) {
+    return {
+      ...context,
+      subsystem: stageType,
+    };
+  }
+
+  const role = typeof context.role === "string" ? context.role.trim() : "";
+  if (role) {
+    return {
+      ...context,
+      subsystem: role,
+    };
+  }
+
+  return context;
 }

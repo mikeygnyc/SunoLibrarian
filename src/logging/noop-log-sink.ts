@@ -1,4 +1,4 @@
-import type { ILogEntry, ILogWriteResult } from "../lib/interfaces";
+import type { ILogEntry, ILogWriteResult } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
 
 export class NoopLogSink implements ILogSink {
@@ -11,4 +11,3 @@ export class NoopLogSink implements ILogSink {
     };
   }
 }
-

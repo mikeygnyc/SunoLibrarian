@@ -3,27 +3,32 @@ import * as path from 'path';
 import * as os from 'os';
 import type { ICacheData, ITrack, ITrackMetadata } from './lib/interfaces';
 
-const STORAGE_DIR = path.join(os.homedir(), '.suno-export');
-const CACHE_FILE = path.join(STORAGE_DIR, 'cache.json');
+export interface StorageOptions {
+  cacheDir?: string;
+}
 
 export class Storage {
   private cache: ICacheData;
+  private readonly storageDir: string;
+  private readonly cacheFile: string;
 
-  constructor() {
+  constructor(options: StorageOptions = {}) {
+    this.storageDir = resolveStorageDir(options.cacheDir);
+    this.cacheFile = path.join(this.storageDir, 'cache.json');
     this.ensureStorageDir();
     this.cache = this.loadCache();
   }
 
   private ensureStorageDir(): void {
-    if (!fs.existsSync(STORAGE_DIR)) {
-      fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    if (!fs.existsSync(this.storageDir)) {
+      fs.mkdirSync(this.storageDir, { recursive: true });
     }
   }
 
   private loadCache(): ICacheData {
-    if (fs.existsSync(CACHE_FILE)) {
+    if (fs.existsSync(this.cacheFile)) {
       try {
-        return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
+        return JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
       } catch (error) {
         console.warn('Failed to load cache, starting fresh');
       }
@@ -32,7 +37,7 @@ export class Storage {
   }
 
   private saveCache(): void {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(this.cache, null, 2));
+    fs.writeFileSync(this.cacheFile, JSON.stringify(this.cache, null, 2));
   }
 
   cacheTracks(workspaceId: string, tracks: ITrack[]): void {
@@ -95,4 +100,11 @@ export class Storage {
   clearCache(): void {
     this.clearAll();
   }
+}
+
+function resolveStorageDir(configuredCacheDir?: string): string {
+  const configuredRoot = configuredCacheDir?.trim()
+    || process.env.SUNO_EXPORT_CACHE_DIR?.trim()
+    || path.join(os.homedir(), '.suno-export');
+  return path.join(configuredRoot, 'cache');
 }

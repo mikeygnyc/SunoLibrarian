@@ -11,19 +11,21 @@ export class ProcessingPlannerService {
     storeConfig: MetadataStoreConfig,
     overrides: Partial<IConverterRunOptions> = {},
   ): IConverterRunOptions {
-    const outputDir = path.resolve(options.output);
+    const outputDir = path.resolve(String(options.output));
     return {
-      input: options.input,
+      input: String(options.input),
       output: outputDir,
+      assertNotCancelled: options.__assertNotCancelled,
+      abortSignal: options.__abortSignal,
       metadataDatabaseType: storeConfig.type,
-      metadataDatabase: storeConfig.sqlitePath,
+      metadataDatabase: storeConfig.sqlitePath ?? storeConfig.jsonFilePath,
       metadataPostgresUrl: storeConfig.postgresUrl,
       metadataFile: this.resolveMetadataFilePath(outputDir, options),
       copySongsMetadataToOutput: options.copySongsMetadataToOutput === true,
       processFormats: options.processFormats,
       processBitrate: options.processBitrate,
-      processConcurrency: options.processConcurrency,
-      processUpdateConcurrency: options.processUpdateConcurrency,
+      processConcurrency: toOptionalString(options.processConcurrency),
+      processUpdateConcurrency: toOptionalString(options.processUpdateConcurrency),
       images: options.images,
       lyrics: options.lyrics,
       exitOnError: options.exitOnError,
@@ -40,4 +42,14 @@ export class ProcessingPlannerService {
       ? path.resolve(options.metadataFile.trim())
       : path.join(rootDir, DEFAULT_METADATA_FILENAME);
   }
+}
+
+function toOptionalString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return undefined;
 }

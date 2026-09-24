@@ -1,36 +1,41 @@
-import type { ILogEntry, ILogWriteResult } from "../lib/interfaces";
+import type { ILogEntry, ILogWriteResult } from "../core/contracts";
 import type { ILogSink } from "./log-sink";
-
-function formatLogEntry(entry: ILogEntry): string {
-  const segments = [
-    entry.timestamp.toISOString(),
-    entry.level.toUpperCase(),
-    entry.context?.role,
-    entry.context?.jobId,
-    entry.message,
-  ].filter((segment): segment is string => Boolean(segment));
-
-  return segments.join(" ");
-}
 
 export class ConsoleLogSink implements ILogSink {
   readonly name = "console";
 
   async write(entry: ILogEntry): Promise<ILogWriteResult> {
-    const formatted = formatLogEntry(entry);
+    const formatted = JSON.stringify({
+      timestamp: entry.timestamp.toISOString(),
+      level: entry.level,
+      service: entry.context?.service,
+      subsystem: entry.context?.subsystem,
+      role: entry.context?.role,
+      jobId: entry.context?.jobId,
+      stageId: entry.context?.stageId,
+      workItemId: entry.context?.workItemId,
+      workerInstanceId: entry.context?.workerInstanceId,
+      workflowType: entry.context?.workflowType,
+      clipId: entry.context?.clipId,
+      tags: entry.context?.tags,
+      properties: entry.context?.properties,
+      message: entry.message,
+      errorCode: entry.errorCode,
+      errorStack: entry.errorStack,
+    });
     switch (entry.level) {
       case "debug":
       case "info":
-        console.log(formatted);
+        process.stdout.write(`${formatted}\n`);
         break;
       case "warn":
-        console.warn(formatted);
+        process.stderr.write(`${formatted}\n`);
         break;
       case "error":
-        console.error(formatted);
+        process.stderr.write(`${formatted}\n`);
         break;
       default:
-        console.log(formatted);
+        process.stdout.write(`${formatted}\n`);
         break;
     }
 
@@ -40,4 +45,3 @@ export class ConsoleLogSink implements ILogSink {
     };
   }
 }
-

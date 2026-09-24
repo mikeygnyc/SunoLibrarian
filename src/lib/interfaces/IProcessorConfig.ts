@@ -3,7 +3,9 @@ export type AudioFormat = "flac" | "alac" | "mp3" | "wav";
 export interface IProcessorConfig {
   inputRoot: string;
   outputRoot: string;
-  metadataDatabaseType?: "sqlite" | "postgres";
+  assertNotCancelled?: () => Promise<void> | void;
+  abortSignal?: AbortSignal;
+  metadataDatabaseType?: "sqlite" | "postgres" | "file";
   metadataDatabasePath?: string;
   metadataPostgresUrl?: string;
   metadataFilePath?: string;

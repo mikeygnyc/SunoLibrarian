@@ -1,6 +1,8 @@
 import type { LogLevel, WorkerRole, WorkflowType } from "../orchestration/IOrchestrationShared";
 
 export interface ILogContext {
+  service?: string;
+  subsystem?: string;
   jobId?: string;
   stageId?: string;
   workItemId?: string;
@@ -27,4 +29,3 @@ export interface ILogWriteResult {
   sinkName: string;
   error?: Error;
 }
-

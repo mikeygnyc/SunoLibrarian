@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: suno-export-filebeat
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: suno-export-filebeat
+subjects:
+  - kind: ServiceAccount
+    name: suno-export-filebeat
+    namespace: suno-export

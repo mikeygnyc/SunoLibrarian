@@ -1,12 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { ISongData, IProcessorConfig } from "./lib/interfaces";
 import { splitTags } from "./lib/metadata/normalize-metadata";
-
-const execFileAsync = promisify(execFile);
+import { runCommand } from "./process-utils";
 
 export class MetadataProcessor {
   constructor(private config: IProcessorConfig) {}
@@ -117,7 +114,7 @@ export class MetadataProcessor {
     
     args.push(flacPath);
     console.log(`    metaflac command: ${JSON.stringify(args)}`);
-    await execFileAsync("metaflac", args);
+    await runCommand("metaflac", args, { signal: this.config.abortSignal });
     try { await fs.promises.rm(tmpFile); } catch {}
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`    metaflac: ${elapsed}s`);
@@ -168,7 +165,7 @@ export class MetadataProcessor {
     }
     console.log(`    atomicparsley command: ${JSON.stringify(args)}`);
     try {
-      await execFileAsync("atomicparsley", args);
+      await runCommand("atomicparsley", args, { signal: this.config.abortSignal });
     } catch (err: any) {
       console.error(`    atomicparsley stderr: ${err.stderr}`);
       console.error(`    atomicparsley stdout: ${err.stdout}`);
@@ -178,7 +175,7 @@ export class MetadataProcessor {
     console.log(`    atomicparsley: ${elapsed}s`);
   }
 
-  private createCustomAtom(atomName: string, argType: string, value: string, fullName: string): string[] {
+  private createCustomAtom(_atomName: string, _argType: string, value: string, fullName: string): string[] {
     return ["--rDNSatom", value, `name=${fullName}`, `domain=com.apple.iTunes`];
   }
 
@@ -241,7 +238,7 @@ export class MetadataProcessor {
     args.push(tempPath);
     
     console.log(`    ffmpeg command: ${JSON.stringify(args)}`);
-    await execFileAsync("ffmpeg", args);
+    await runCommand("ffmpeg", args, { signal: this.config.abortSignal });
     try { await fs.promises.rename(tempPath, mp3Path); } catch (err) { throw err; }
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`    ffmpeg: ${elapsed}s`);

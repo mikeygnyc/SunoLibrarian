@@ -19,3 +19,14 @@ node_modules
 data
 data/*
 .env
+.DS_Store
+.tmp
+api-remote-config.json
+api-local-config.json
+downloads
+library
+dist
+tmp
+.npm-cache
+k8s/local
+scripts/pre-conf-bootstrap-k8s-local.env

@@ -1,7 +1,7 @@
-import type { IRuntimeConfig } from "../lib/interfaces";
+import type { IRuntimeConfig } from "../core/contracts";
 
 export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
-  mode: "local",
+  mode: "distributed",
   controlPlane: {},
   leases: {
     heartbeatIntervalMs: 5_000,
@@ -11,7 +11,6 @@ export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
   concurrency: {
     metadataAcquisitionMaxActive: 1,
     assetAcquisitionMaxActive: 1,
-    processingSongConcurrency: 4,
     conversionConcurrency: 4,
     metadataUpdateConcurrency: 8,
   },
@@ -24,4 +23,3 @@ export const DEFAULT_RUNTIME_CONFIG: IRuntimeConfig = {
   storageLocations: [],
   defaultRoots: {},
 };
-

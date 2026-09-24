@@ -4,30 +4,20 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug CLI",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
+      "name": "Debug CLI - Download",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "download",
-        "--browser",
-        "http://localhost:9222",
-        "--browser-profile",
-        "/path/to/chrome-user-data",
-        "--profile-directory",
-        "Profile 2",
-        "-f",
-        "wav"
+        "--config",
+        "${workspaceFolder}/api-local-config.json"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -36,16 +26,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - List",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "list",
@@ -54,9 +37,12 @@
         "--browser-profile",
         "/path/to/chrome-user-data",
         "--profile-directory",
-        "Profile 2",
+        "Profile 2"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -65,16 +51,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Workspaces",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "workspaces",
@@ -82,6 +61,9 @@
         "YOUR_TOKEN_HERE"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -90,21 +72,14 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Sync",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "sync",
         "-o",
-        "/path/to/output/directory/",
+        "/path/to/output/directory",
         "--metadata-file",
         "/path/to/songs_metadata.json",
         "--browser",
@@ -118,6 +93,9 @@
       ],
       "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -126,16 +104,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Import JSON",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "import-metadata-json",
@@ -146,6 +117,9 @@
       ],
       "envFile": "${workspaceFolder}/.env",
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -154,16 +128,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug CLI - Image List",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "download-images",
@@ -177,6 +144,9 @@
         "Profile 2"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
@@ -185,16 +155,9 @@
       "type": "node",
       "request": "launch",
       "name": "Debug Process",
-      "runtimeExecutable": "${userHome}/.nvm/nvm-exec",
-      "runtimeArgs": [
-        "node"
-      ],
-      "program": "${workspaceFolder}/dist/index.js",
       "preLaunchTask": "tsc: build - tsconfig.json",
-      "outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-      "sourceMaps": true,
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
       "cwd": "${workspaceFolder}",
       "args": [
         "process",
@@ -208,9 +171,878 @@
         "--reconvert-missing"
       ],
       "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
       "skipFiles": [
         "<node_internals>/**"
       ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Capture Auth Token",
+      "preLaunchTask": "compile via nvm",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "capture-auth-token",
+        "--browser",
+        "http://localhost:9222"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug API",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/api/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "3000",
+        "--control-plane",
+        "postgres",
+        "--database-type",
+        "postgres",
+        "--output",
+        "${workspaceFolder}/downloads",
+        "--library",
+        "${workspaceFolder}/library",
+        "--log-file",
+        "${workspaceFolder}/data/http-api.log"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Local Stack (Supervisor)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/supervisor/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "--database-type",
+        "postgres",
+        "--control-plane",
+        "postgres"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "autoAttachChildProcesses": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Orchestrator",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/orchestrator/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Librarian",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/librarian/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--workspace",
+        "YOUR_WORKSPACE_ID_HERE",
+        "--browser",
+        "http://localhost:9222",
+        "--browser-profile",
+        "/path/to/chrome-user-data",
+        "--profile-directory",
+        "Profile 2",
+        "--database-type",
+        "postgres",
+        "--librarian-interval",
+        "300000"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Asset",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "asset",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Processing",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "processing",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Conversion",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "conversion",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker - Auth",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/worker/main.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--role",
+        "auth",
+        "--control-plane",
+        "postgres",
+        "--poll-interval",
+        "500"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Supervisor (Bare)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/apps/supervisor/main.js",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "autoAttachChildProcesses": true,
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): download --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): process --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "process",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): sync --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sync",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): serve-api --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "serve-api",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-librarian --help",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-librarian",
+        "--help"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): process --config",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "process",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): download --config (browser)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json",
+        "--browser",
+        "http://localhost:9222"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): download --config (token)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json",
+        "--token",
+        "YOUR_TOKEN_HERE"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): sync --config (browser)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sync",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json",
+        "--browser",
+        "http://localhost:9222"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): serve-api",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "serve-api",
+        "--config",
+        "${workspaceFolder}/api-local-config.json"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): api-health",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "api-health",
+        "--api-url",
+        "http://127.0.0.1:3000"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): refresh --config (browser)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "refresh",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json",
+        "--browser",
+        "http://localhost:9222"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): job-status",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "job-status",
+        "YOUR_JOB_ID_HERE",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): watch-job",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "watch-job",
+        "YOUR_JOB_ID_HERE",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): logs (job-id)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "logs",
+        "--job-id",
+        "YOUR_JOB_ID_HERE",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker (auth)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--role",
+        "auth",
+        "--postgres-url",
+        "${env:POSTGRES_URL}"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker (metadata)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--role",
+        "metadata",
+        "--postgres-url",
+        "${env:POSTGRES_URL}"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker (asset)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--role",
+        "asset",
+        "--postgres-url",
+        "${env:POSTGRES_URL}"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker (processing)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--role",
+        "processing",
+        "--postgres-url",
+        "${env:POSTGRES_URL}"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-worker (conversion)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-worker",
+        "--role",
+        "conversion",
+        "--postgres-url",
+        "${env:POSTGRES_URL}"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): logs (role asset)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "logs",
+        "--role",
+        "asset",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): logs (role conversion)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "logs",
+        "--role",
+        "conversion",
+        "--config",
+        "${workspaceFolder}/suno-export.config.json"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-librarian (--once)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-librarian",
+        "--workspace",
+        "YOUR_WORKSPACE_ID_HERE",
+        "--browser",
+        "http://localhost:9222",
+        "--once"
+      ],
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug (testing guide): run-librarian (--once, postgres)",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "runtimeVersion": "24",
+      "program": "${workspaceFolder}/dist/index.js",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run-librarian",
+        "--workspace",
+        "YOUR_WORKSPACE_ID_HERE",
+        "--browser",
+        "http://localhost:9222",
+        "--database-type",
+        "postgres",
+        "--postgres-url",
+        "${env:POSTGRES_URL}",
+        "--once"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "internalConsole",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Split API Stack",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "configurations": [
+        "Debug API",
+        "Debug Orchestrator",
+        "Debug Worker - Auth",
+        "Debug Worker - Asset",
+        "Debug Worker - Processing",
+        "Debug Worker - Conversion"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Debug Split API Stack + Librarian",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "configurations": [
+        "Debug API",
+        "Debug Orchestrator",
+        "Debug Worker - Auth",
+        "Debug Worker - Asset",
+        "Debug Worker - Processing",
+        "Debug Worker - Conversion",
+        "Debug Librarian"
+      ],
+      "stopAll": true
     }
   ]
 }

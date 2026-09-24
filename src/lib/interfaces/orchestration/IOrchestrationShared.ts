@@ -34,11 +34,9 @@ export type WorkItemStatus =
 export type WorkerLeaseStatus = "active" | "expired" | "released";
 
 export type WorkerRole =
-  | "orchestrator"
   | "auth"
   | "metadata"
   | "asset"
-  | "processing"
   | "conversion";
 
 export type RuntimeMode = "local" | "distributed";
@@ -47,11 +45,9 @@ export type OrchestrationStageType =
   | "authorization"
   | "metadata-acquisition"
   | "asset-acquisition"
-  | "processing"
   | "conversion"
   | "finalization";
 
 export type StatusEventScope = "job" | "stage" | "work-item" | "lease" | "worker";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
-

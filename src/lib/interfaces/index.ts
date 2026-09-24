@@ -16,5 +16,6 @@ export * from "./ITrackProject";
 export * from "./ITrackReaction";
 export * from "./IWorkspace";
 export * from "./IRateLimitConfig";
+export * from "./http-api";
 export * from "./logging";
 export * from "./orchestration";

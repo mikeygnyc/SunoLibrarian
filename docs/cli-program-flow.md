@@ -6,8 +6,9 @@ where behavior lives.
 
 ## Top-Level Dispatch
 
-`src/index.ts` defines the CLI with Commander. Each command registers options and
-then dispatches to a flow function in `src/cli-actions.ts` through
+`src/index.ts` bootstraps the main CLI. Command registration lives in
+`src/cli-programs.ts`, and each command dispatches to a flow function in
+`src/cli-actions.ts` through
 `withCliError(...)`.
 
 ```mermaid
@@ -40,12 +41,13 @@ flowchart TD
 ### Dispatch Notes
 
 - `src/index.ts`
-  - `program.command("download")`: command registration for download.
-  - `program.command("sync")`: command registration for download plus process.
-  - `program.command("process")`: command registration for converter-only runs.
-  - `program.command("download-images")`: command registration for artwork fetches.
-  - `program.command("clear-auth-token")`: command registration for auth-token
-    cache clearing.
+  - `createCliProgram().parse()`: main CLI bootstrap.
+- `src/cli-programs.ts`
+  - `createCliProgram()`: builds the main mixed user/runtime command surface.
+  - `registerOperatorCliCommands(...)`: registers the user-facing commands.
+  - `registerWorkerCommand(...)`: registers `run-worker`.
+  - `registerLibrarianCommand(...)`: registers `run-librarian`.
+  - `registerServeApiCommand(...)`: registers `serve-api`.
   - `withCliError(...)`: shared error wrapper that prints the error and exits.
 - `src/cli-defaults.ts`
   - `DEFAULT_DOWNLOAD_ROOT`: default output root for commands with `--output`.
@@ -90,53 +92,67 @@ flowchart LR
 - `src/client.ts`
   - `SunoClient`: API client used after authentication.
 
-## Metadata Storage Rule
+## Target Resolution
 
-The authoritative combined metadata store is SQLite. The default database path
-is `data/suno-export.sqlite`, but callers can override it with `--database`.
-Current-format JSON compatibility is handled through import/export commands and
-options.
+The user-facing workflow commands now resolve a target from either `--api-url`
+or `suno-export.config.json`. The config file must contain exactly one of:
+
+- `target.apiUrl`
+- `target.localRoot`
+
+When `target.localRoot` is configured, `download`, `process`, and `sync` run
+directly against local folders and `songs_metadata.json`. When `target.apiUrl`
+is configured, the workflow and inspection commands talk to the remote API.
 
 ```mermaid
 flowchart TD
-  A{"--database set?"}
-  A -- yes --> B["Use provided absolute/resolved SQLite path"]
-  A -- no --> C["data/suno-export.sqlite"]
-  C --> D["SqliteMetadataStore"]
-  B --> D
-  E["--import-metadata-json"] --> D
-  D --> F["--export-metadata-json / export-metadata-json"]
+  A{"target in config?"}
+  A -- "apiUrl" --> B["Submit/query remote API"]
+  A -- "localRoot" --> C["Run local download/process/sync"]
+  D["--api-url"] --> B
 ```
+
+## Metadata Storage Rule
+
+For normal local workflow execution, the authoritative metadata store is now
+`songs_metadata.json` under the local root. SQLite/Postgres metadata stores
+remain available for API/runtime paths and compatibility commands.
 
 ### Metadata Storage Notes
 
+- `src/workflow-target-config.ts`
+  - Loads `suno-export.config.json` by default, or `--config <path>` when
+    provided.
 - `src/index.ts`
-  - Registers `--database <path>`, `--import-metadata-json <path>`, and
-    `--export-metadata-json <path>` on `download`, `sync`, `process`, and
-    `download-images`.
-  - Registers `import-metadata-json` and `export-metadata-json` compatibility
-    commands.
+  - Registers `--config <path>` for `download`, `sync`, `process`, and the
+    API-oriented user commands, plus local inspection commands that persist
+    workspace metadata.
+  - Keeps `import-metadata-json` and `export-metadata-json` as compatibility
+    commands for direct metadata-store maintenance.
 - `src/cli-actions.ts`
-  - `resolveMetadataDatabasePath(options)`: resolves the authoritative SQLite
-    database path.
-  - `runDownloadFlow(...)`: reads, initializes, normalizes, and writes metadata
-    through `SqliteMetadataStore`.
+  - `resolveMetadataStoreOptions(options)`: chooses file-backed metadata for
+    `localRoot` workflows and database-backed metadata for API/runtime or
+    compatibility paths.
+  - `runDownloadFlow(...)`, `runProcessFlow(...)`, and `runSyncFlow(...)`:
+    dispatch locally for `localRoot`, or submit/query the API for `apiUrl`.
   - `runImportMetadataJsonFlow(...)`: imports existing `songs_metadata.json`
-    arrays into SQLite.
-  - `runExportMetadataJsonFlow(...)`: exports SQLite data back to the current
+    arrays into the selected metadata store.
+  - `runExportMetadataJsonFlow(...)`: exports metadata store data back to the current
     JSON array format.
 - `src/converter.ts`
   - `runConverter(options)`: maps `metadataDatabase` to
     `IProcessorConfig.metadataDatabasePath`.
 - `src/library-processor.ts`
-  - `Processor.getMetadataDatabasePath()`: resolves the processor's
-    authoritative SQLite database.
-  - `Processor.loadMetadata()`: reads and normalizes metadata from SQLite.
-  - `Processor.saveMetadata()`: persists full metadata to SQLite.
+  - `Processor.loadMetadata()`: reads and normalizes metadata from the selected
+    metadata store.
+  - `Processor.saveMetadata()`: persists full metadata to the selected metadata
+    store.
   - `Processor.copyFinalMetadataToOutput()`: optionally exports finalized
     metadata JSON to the output root.
 - `src/metadata-store.ts`
+  - `JsonMetadataStore`: file-backed metadata store for `songs_metadata.json`.
   - `SqliteMetadataStore`: SQLite-backed metadata store.
+  - `PostgresMetadataStore`: Postgres-backed metadata store.
   - Schema is normalized into `songs`, `song_tags`, `song_negative_tags`, and
     `song_mashup_sources`; only the nested Suno API response remains JSON.
   - Suno project/workspace loads are upserted into `workspaces` through
@@ -147,8 +163,8 @@ flowchart TD
     when listing tracks.
   - Existing first-pass SQLite databases with `metadata_entries.metadata_json`
     are migrated into the normalized tables when opened.
-  - `importMetadataJsonToDatabase(...)`: JSON-to-SQLite migration helper.
-  - `exportMetadataDatabaseToJson(...)`: SQLite-to-JSON compatibility export.
+  - `importMetadataJsonToDatabase(...)`: JSON-to-store import helper.
+  - `exportMetadataDatabaseToJson(...)`: metadata-store-to-JSON export helper.
 
 ## Download Command
 
@@ -158,27 +174,30 @@ folder layout.
 ```mermaid
 flowchart TD
   A["download<br/>src/index.ts"] --> B["runDownloadFlow<br/>src/cli-actions.ts"]
-  B --> C["getAuthenticatedClient"]
-  C --> D["resolve output dirs"]
-  D --> E["load/create metadata database"]
-  E --> F["client.getWorkspaces"]
-  F --> G["client.getTracks per workspace"]
-  G --> H{"track downloadable<br/>and date filters pass?"}
-  H -- no --> I["skip"]
-  H -- yes --> J{"already in metadata?"}
-  J -- yes --> K["skip or refresh missing rawApiResponse"]
-  J -- no --> L["client.fetchTrackMetadata"]
-  L --> M["download wav/mp3"]
-  M --> N["download image if available"]
-  N --> O["normalizeMetadata"]
-  O --> P["append metadata entry<br/>write metadata + sidecar JSON"]
-  P --> Q["optional onTrackDownloaded hook"]
+  B --> C{"target kind"}
+  C -- "api" --> D["submit workflow to API"]
+  C -- "local" --> E["getAuthenticatedClient"]
+  E --> F["resolve output dirs"]
+  F --> G["load/create file-backed metadata store"]
+  G --> H["client.getWorkspaces"]
+  H --> I["client.getTracks per workspace"]
+  I --> J{"track downloadable<br/>and date filters pass?"}
+  J -- no --> K["skip"]
+  J -- yes --> L{"already in metadata?"}
+  L -- yes --> M["skip or refresh missing rawApiResponse"]
+  L -- no --> N["client.fetchTrackMetadata"]
+  N --> O["download wav/mp3"]
+  O --> P["download image if available"]
+  P --> Q["normalizeMetadata"]
+  Q --> R["append metadata entry<br/>write metadata + sidecar JSON"]
+  R --> S["optional onTrackDownloaded hook"]
 ```
 
 ### Download Notes
 
 - `src/cli-actions.ts`
-  - `runDownloadFlow(options)`: owns the download workflow.
+  - `runDownloadFlow(options)`: resolves local vs API execution.
+  - `runDownloadWorkflow(options)`: owns the local download workflow.
   - `getCreatedAtFilters(options)`: parses `--created-after` and
     `--created-before`.
   - `isTrackInDateWindow(...)`: applies date filters to each track.
@@ -195,29 +214,32 @@ flowchart TD
 
 ## Process Command
 
-`process` runs the converter against an existing download-style input root.
+`process` runs the converter against an existing download-style input root, or
+submits the remote API workflow when the target is an API.
 
 ```mermaid
 flowchart TD
   A["process<br/>src/index.ts"] --> B["runProcessFlow<br/>src/cli-actions.ts"]
-  B --> C["runConverter<br/>src/converter.ts"]
-  C --> D["build IProcessorConfig"]
-  D --> E["new Processor(config)"]
-  E --> F["Processor.process"]
-  F --> G["ensureDirectories"]
-  G --> H["loadMetadata"]
-  H --> I{"processClipIds set?"}
-  I -- yes --> J["filter processing set only<br/>preserve full metadata list"]
-  I -- no --> K["use all metadata entries"]
-  J --> L["detect songs needing conversion"]
-  K --> L
-  L --> M["processSong"]
-  M --> N["AudioConverter.convertFormat"]
-  N --> O["MetadataProcessor.embedMetadata"]
-  O --> P["MetadataProcessor.saveSidecarFiles"]
-  P --> Q["updateExistingFiles"]
-  Q --> R["persistState"]
-  R --> S["copyFinalMetadataToOutput"]
+  B --> C{"target kind"}
+  C -- "api" --> D["submit workflow to API"]
+  C -- "local" --> E["runConverter<br/>src/converter.ts"]
+  E --> F["build IProcessorConfig"]
+  F --> G["new Processor(config)"]
+  G --> H["Processor.process"]
+  H --> I["ensureDirectories"]
+  I --> J["loadMetadata"]
+  J --> K{"processClipIds set?"}
+  K -- yes --> L["filter processing set only<br/>preserve full metadata list"]
+  K -- no --> M["use all metadata entries"]
+  L --> N["detect songs needing conversion"]
+  M --> N
+  N --> O["processSong"]
+  O --> P["AudioConverter.convertFormat"]
+  P --> Q["MetadataProcessor.embedMetadata"]
+  Q --> R["MetadataProcessor.saveSidecarFiles"]
+  R --> S["updateExistingFiles"]
+  S --> T["persistState"]
+  T --> U["copyFinalMetadataToOutput"]
 ```
 
 ### Process Notes
@@ -357,6 +379,9 @@ flowchart TD
 - `src/cli-actions.ts`
   - `runListFlow(options)`: lists tracks, optionally as JSON.
   - `runWorkspacesFlow(options)`: lists workspaces, optionally as JSON.
+  - Both commands also persist discovered workspaces and workspace-track links
+    through the selected metadata store, so `--config` can point them at a
+    `localRoot`.
   - `runMetadataFlow(trackId, options)`: prints metadata for one track.
   - `runFetchMetadataFlow(options)`: fetches metadata for explicit IDs or tracks
     selected by workspace/date filters.
@@ -373,8 +398,9 @@ Download-style output root:
 - `wav/`: downloaded WAV source files.
 - `metadata/`: per-track metadata sidecar JSON.
 - `images/`: downloaded artwork.
-- `songs_metadata.json`: compatibility export when requested.
-- `data/suno-export.sqlite`: default authoritative metadata database.
+- `songs_metadata.json`: authoritative metadata file for `localRoot` workflows.
+- `data/suno-export.sqlite`: compatibility metadata store when using
+  SQLite-backed commands explicitly.
 
 Process output root:
 
@@ -385,7 +411,10 @@ Process output root:
 
 Authoritative combined metadata:
 
-- Commands use `data/suno-export.sqlite` by default.
-- `--database <path>` overrides the SQLite metadata database location.
+- `localRoot` workflows use `songs_metadata.json`.
+- Compatibility and runtime-oriented flows may still use SQLite or Postgres.
+- `--database <path>` overrides the SQLite metadata store location when those
+  compatibility flows are used.
+- `--config <path>` can point local-facing commands at a `localRoot`.
 - `--import-metadata-json` and `--export-metadata-json` bridge the previous
-  `songs_metadata.json` format.
+  `songs_metadata.json` format and the selected metadata store.

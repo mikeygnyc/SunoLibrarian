@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { assertNotCancelled } from "./cancellation";
 import { ISongData, IProcessorConfig, AudioFormat } from "./lib/interfaces";
 import { AudioConverter } from "./audio-converter";
 import { MetadataProcessor } from "./metadata-processor";
@@ -26,7 +27,7 @@ export class Processor {
   // the background using a timer so they don't block processing.
   private retryQueue: Set<string> = new Set();
   private retryTimer: NodeJS.Timeout | null = null;
-  private runTimestamp: string | null = null;
+  private inferredProcessClipIds: Set<string> | null | undefined;
 
   // When a 403 is encountered during image download, all image downloads pause
   // for 2 minutes. a shared promise tracks this wait so all image downloads
@@ -84,7 +85,17 @@ export class Processor {
     const clipIds = this.config.processClipIds
       ?.map((clipId) => clipId.trim())
       .filter((clipId) => clipId.length > 0);
-    return clipIds?.length ? new Set(clipIds) : null;
+    if (clipIds?.length) {
+      return new Set(clipIds);
+    }
+
+    if (this.inferredProcessClipIds !== undefined) {
+      return this.inferredProcessClipIds;
+    }
+
+    const inferredClipIds = inferProcessTargetClipIdsFromRoots(this.config.inputRoot, this.config.outputRoot);
+    this.inferredProcessClipIds = inferredClipIds.size > 0 ? inferredClipIds : null;
+    return this.inferredProcessClipIds;
   }
 
   private getProcessSongs(songs: ISongData[]): ISongData[] {
@@ -93,15 +104,19 @@ export class Processor {
   }
 
   async process(): Promise<void> {
+    await assertNotCancelled(this.config);
     const startTime = Date.now();
     // make sure output directories exist before doing anything else
     await this.ensureDirectories();
     // metadata loader is now async
     this.songs = await this.loadMetadata();
     const processSongs = this.getProcessSongs(this.songs);
-    // create a single run timestamp so incremental log writes use the same
-    // filename for this run instead of creating a new file on every song.
-    this.runTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    if (!this.config.processClipIds?.length) {
+      const inferredClipIds = this.getProcessTargetClipIds();
+      if (inferredClipIds) {
+        logger.log(`Inferred ${inferredClipIds.size} process target clip id${inferredClipIds.size === 1 ? "" : "s"} from input/output roots`);
+      }
+    }
     logger.log(`Found ${processSongs.length} songs to process`);
     if (processSongs.length !== this.songs.length) {
       logger.log(`Selected ${processSongs.length} of ${this.songs.length} metadata entries\n`);
@@ -111,6 +126,7 @@ export class Processor {
 
     const songsToProcess: ISongData[] = [];
     for (const song of processSongs) {
+      await assertNotCancelled(this.config);
       const { wavPath, source } = await this.resolveSourceWavPath(song);
       if (!wavPath) {
         logger.log(`  [${song.clipId}] skipping: source WAV missing in input and output`);
@@ -182,6 +198,7 @@ export class Processor {
     // entries as they resolve.
     const active = new Set<Promise<void>>();
     for (let songIdx = 0; songIdx < songsToProcess.length; songIdx++) {
+      await assertNotCancelled(this.config);
       const song = songsToProcess[songIdx];
       const p = this.processSong(song, songIdx + 1, songsToProcess.length)
         .catch(err => {
@@ -195,15 +212,19 @@ export class Processor {
       if (active.size >= concurrency) {
         // wait for one to finish before queuing another
         await Promise.race(active);
+        await assertNotCancelled(this.config);
       }
     }
 
     // wait for remaining in-flight songs
     await Promise.all(active);
 
+    await assertNotCancelled(this.config);
     await this.updateExistingFiles(processSongs);
     // Persist final state (async)
+    await assertNotCancelled(this.config);
     await this.persistState();
+    await assertNotCancelled(this.config);
     await this.copyFinalMetadataToOutput();
     
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -211,6 +232,7 @@ export class Processor {
   }
 
   private async processSong(song: ISongData, index: number, total: number): Promise<void> {
+    await assertNotCancelled(this.config);
     const remaining = total - index;
     const startTime = Date.now();
     let lastTime = startTime;
@@ -232,20 +254,19 @@ export class Processor {
     logger.log(`[${index}/${total}] Processing: ${song.clipId} - ${song.title} (${remaining} remaining)`);
     
     logger.log("  starting downloadImageIfNeeded");
+    await assertNotCancelled(this.config);
     await this.downloadImageIfNeeded(song, true);
     logStep("downloadImageIfNeeded");
 
-    // Check if copyWav will do work and if any formats will be converted
+    // Check if copyWav will do work.
     const willCopyWav = await this.wouldCopyWav(song, wavPath);
-    const willConvertAnyFormat = this.config.formats
-      .filter(format => format !== "wav")
-      .some(format => this.shouldConvert(song, format));
 
     // Track actual completion
     let didCopyWav = false;
     
     if (willCopyWav) {
       logger.log("  starting copyWav");
+      await assertNotCancelled(this.config);
       didCopyWav = await this.copyWav(song, wavPath);
       logStep("copyWav");
     }
@@ -261,6 +282,7 @@ export class Processor {
     const formatTasks = this.config.formats
       .filter(format => format !== "wav")
       .map(async format => {
+        await assertNotCancelled(this.config);
         if (!this.shouldConvert(song, format)) {
           logger.log(`  Skipping ${format.toUpperCase()} (timestamp not in range)`);
           return;
@@ -272,6 +294,7 @@ export class Processor {
         // Delete existing file to force fresh conversion
         if (await this.fileExists(filePath)) {
           logger.log(`  Deleting existing ${format.toUpperCase()} to reconvert`);
+          await assertNotCancelled(this.config);
           const removed = await this.safeUnlink(filePath);
           if (!removed) {
             logger.warn(`  Could not remove busy file; skipping ${format.toUpperCase()}`);
@@ -281,6 +304,7 @@ export class Processor {
 
         logger.log(`  Converting to ${format.toUpperCase()}`);
         const convStart = Date.now();
+        await assertNotCancelled(this.config);
         await this.converter.convertFormat(wavPath, filePath, format);
         const convElapsed = ((Date.now() - convStart) / 1000).toFixed(1);
         logger.log(`  ${format.toUpperCase()} conversion took ${convElapsed}s`);
@@ -288,6 +312,7 @@ export class Processor {
         const embedStartTime = Date.now();
         logger.log(`  Embedding metadata in ${format.toUpperCase()}`);
         try {
+          await assertNotCancelled(this.config);
           await this.metadataProc.embedMetadata(song, ext, filePath);
           const elapsed = ((Date.now() - embedStartTime) / 1000).toFixed(1);
           logger.log(`  ${format.toUpperCase()} embedded in ${elapsed}s`);
@@ -314,6 +339,7 @@ export class Processor {
     // looping if a format conversion is blocked (e.g., file busy).
     if (didCopyWav || completedAnyFormat) {
       logger.log("  starting saveSidecarFiles");
+      await assertNotCancelled(this.config);
       await this.metadataProc.saveSidecarFiles(song);
       logStep("saveSidecarFiles");
     }
@@ -427,6 +453,7 @@ export class Processor {
     const results: { clipId: string; thumbnail: string | null }[] = [];
 
     for (const song of songs) {
+      await assertNotCancelled(this.config);
       if (!song.thumbnail) continue;
       const ext = path.extname(song.thumbnail) || ".jpeg";
       const inputPath = path.join(this.config.inputRoot, "images", `${song.clipId}${ext}`);
@@ -449,6 +476,7 @@ export class Processor {
   }
 
   private async copyWav(song: ISongData, wavPath: string): Promise<boolean> {
+    await assertNotCancelled(this.config);
     if (!this.config.formats.includes("wav")) return false;
     const outputWavPath = path.join(this.config.outputRoot, "wav", `${song.clipId}.wav`);
     
@@ -477,31 +505,8 @@ export class Processor {
     // more expensive comparisons could be added here if needed
   }
 
-  private async embedAllFormats(song: ISongData): Promise<void> {
-    const tasks = this.config.formats
-      .filter(format => format !== "wav")
-      .map(async format => {
-        const ext = format === "alac" ? "m4a" : format;
-        const filePath = path.join(this.config.outputRoot, format, `${song.clipId}.${ext}`);
-        
-        if (await this.fileExists(filePath)) {
-          const startTime = Date.now();
-          logger.log(`  Embedding metadata in ${format.toUpperCase()}`);
-          try {
-            await this.metadataProc.embedMetadata(song, ext, filePath);
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            logger.log(`  ${format.toUpperCase()} embedded in ${elapsed}s`);
-          } catch (err) {
-            logger.error(`  Failed to embed metadata: ${err}`);
-            if (this.config.exitOnError) throw err;
-          }
-        }
-      });
-    
-    await Promise.all(tasks);
-  }
-
   private async updateExistingFiles(songs: ISongData[]): Promise<void> {
+    await assertNotCancelled(this.config);
     logger.log("\n=== Updating all files with metadata ===");
     const processedIds = new Set(this.processed.map(p => p.split(" - ")[0]));
     const songsToUpdate = songs.filter(song => !processedIds.has(song.clipId));
@@ -511,6 +516,7 @@ export class Processor {
 
     const active = new Set<Promise<void>>();
     for (let songIdx = 0; songIdx < songsToUpdate.length; songIdx++) {
+      await assertNotCancelled(this.config);
       const song = songsToUpdate[songIdx];
       const p = this.updateSong(song, songIdx + 1, songsToUpdate.length)
         .catch(err => {
@@ -520,12 +526,14 @@ export class Processor {
       active.add(p);
       if (active.size >= concurrency) {
         await Promise.race(active);
+        await assertNotCancelled(this.config);
       }
     }
     await Promise.all(active);
   }
 
   private async updateSong(song: ISongData, index: number, total: number): Promise<void> {
+    await assertNotCancelled(this.config);
     const remaining = total - index;
     const startTime = Date.now();
     const { wavPath, source } = await this.resolveSourceWavPath(song);
@@ -541,6 +549,7 @@ export class Processor {
     const tasks = this.config.formats
       .filter((format) => format !== "wav")
       .map(async (format) => {
+        await assertNotCancelled(this.config);
         const statusKey = `${format}Status` as keyof ISongData;
         if (!song[statusKey]) return;
 
@@ -558,6 +567,7 @@ export class Processor {
         }
 
         hasAudioUpdates = true;
+        await assertNotCancelled(this.config);
         await this.downloadImageIfNeeded(song, true);
 
         const ext = format === "alac" ? "m4a" : format;
@@ -574,11 +584,13 @@ export class Processor {
 
         {
           const convStart = Date.now();
+          await assertNotCancelled(this.config);
           await this.converter.convertFormat(wavPath, filePath, format);
           const convElapsed = ((Date.now() - convStart) / 1000).toFixed(1);
           logger.log(`  ${format.toUpperCase()} conversion took ${convElapsed}s`);
         }
 
+        await assertNotCancelled(this.config);
         await this.metadataProc.embedMetadata(song, ext, filePath);
 
         const tsKey = `${format}Timestamp` as keyof ISongData;
@@ -612,20 +624,20 @@ export class Processor {
     let songs: ISongData[];
     try {
       if (targetClipIds) {
-        logger.log(`Loading ${targetClipIds.size} targeted metadata entr${targetClipIds.size === 1 ? "y" : "ies"} from database`);
+        logger.log(`Loading ${targetClipIds.size} targeted metadata entr${targetClipIds.size === 1 ? "y" : "ies"} from store`);
         songs = await store.loadByClipIds(Array.from(targetClipIds));
       } else {
         songs = await store.loadAll();
       }
     } catch (err: any) {
-      logger.error(`Failed to read metadata database: ${err.message || err}`);
+      logger.error(`Failed to read metadata store: ${err.message || err}`);
       await store.close();
       throw err;
     }
     await store.close();
 
     if (!this.metadataDatabaseExisted) {
-      logger.warn(`Metadata database not found; created empty database: ${store.location}`);
+      logger.warn(`Metadata store not found; using empty metadata set: ${store.location}`);
       return [];
     }
 
@@ -637,8 +649,9 @@ export class Processor {
   }
 
   private async saveMetadata(): Promise<void> {
+    await assertNotCancelled(this.config);
     if (this.dirtyClipIds.size === 0) {
-      logger.log("Skipping metadata database write: no changed songs");
+      logger.log("Skipping metadata store write: no changed songs");
       return;
     }
 
@@ -647,26 +660,28 @@ export class Processor {
       .filter((song) => dirtyClipIds.has(song.clipId))
       .map((song) => normalizeMetadata(song));
     if (dirtySongs.length === 0) {
-      logger.warn("Skipping metadata database write: changed songs were not loaded");
+      logger.warn("Skipping metadata store write: changed songs were not loaded");
       dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
       return;
     }
 
     const store = await createMetadataStore(this.getMetadataStoreConfig());
     try {
-      logger.log(`Writing ${dirtySongs.length} changed metadata entr${dirtySongs.length === 1 ? "y" : "ies"} to database`);
+      logger.log(`Writing ${dirtySongs.length} changed metadata entr${dirtySongs.length === 1 ? "y" : "ies"} to store`);
       for (const song of dirtySongs) {
+        await assertNotCancelled(this.config);
         await store.upsert(song);
       }
       dirtyClipIds.forEach((clipId) => this.dirtyClipIds.delete(clipId));
     } catch (err: any) {
-      logger.warn(`Failed to update metadata database: ${err.message || err}`);
+      logger.warn(`Failed to update metadata store: ${err.message || err}`);
     } finally {
       await store.close();
     }
   }
 
   private async copyFinalMetadataToOutput(): Promise<void> {
+    await assertNotCancelled(this.config);
     if (this.config.copySongsMetadataToOutput !== true) return;
 
     const outFile = this.getMetadataFilePath();
@@ -675,39 +690,6 @@ export class Processor {
       logger.log(`Exported finalized songs_metadata.json to output: ${outFile}`);
     } catch (err: any) {
       logger.warn(`Failed to export songs_metadata.json: ${err.message || err}`);
-    }
-  }
-
-  private async cleanupOldBackups(baseFilePath: string): Promise<void> {
-    // Find all backup files matching the pattern baseFilePath.*.bak
-    const dir = path.dirname(baseFilePath);
-    const filename = path.basename(baseFilePath);
-    const backupPattern = new RegExp(`^${filename}\.\\d+\.bak$`);
-
-    try {
-      const files = await fs.promises.readdir(dir);
-      const backups = files
-        .filter(f => backupPattern.test(f))
-        .map(f => ({
-          name: f,
-          path: path.join(dir, f),
-          timestamp: parseInt(f.match(/\\d+/)?.[0] || "0", 10),
-        }))
-        .sort((a, b) => b.timestamp - a.timestamp); // newest first
-
-      // delete all but the 3 most recent
-      if (backups.length > 3) {
-        for (const backup of backups.slice(3)) {
-          try {
-            await fs.promises.unlink(backup.path);
-            logger.log(`  deleted old backup: ${backup.name}`);
-          } catch (err: any) {
-            logger.warn(`  failed to delete backup ${backup.name}: ${err.message}`);
-          }
-        }
-      }
-    } catch (err: any) {
-      logger.warn(`failed to clean up backups: ${err.message}`);
     }
   }
 
@@ -790,14 +772,8 @@ export class Processor {
     return this.persistenceChain;
   }
 
-  private dateReviver(key: string, value: any): any {
-    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
-      return new Date(value);
-    }
-    return value;
-  }
-
   private async ensureDirectories(): Promise<void> {
+    await assertNotCancelled(this.config);
     const inputImages = path.join(this.config.inputRoot, "images");
     if (!(await this.fileExists(inputImages))) {
       await fs.promises.mkdir(inputImages, { recursive: true });
@@ -812,6 +788,7 @@ export class Processor {
     }
   }
   private async downloadImageIfNeeded(song: ISongData, hasAudioUpdates: boolean): Promise<void> {
+    await assertNotCancelled(this.config);
     if (!song.thumbnail) {
       this.imageLog.push(`${song.clipId}: No thumbnail URL`);
       return;
@@ -1045,4 +1022,36 @@ export class Processor {
       await fs.promises.copyFile(inputPath, outputPath);
     }
   }
+}
+
+export function inferProcessTargetClipIdsFromRoots(inputRoot: string, outputRoot: string): Set<string> {
+  const clipIds = new Set<string>();
+  const candidateDirs = [
+    path.join(inputRoot, "metadata"),
+    path.join(inputRoot, "wav"),
+    path.join(inputRoot, "mp3"),
+    path.join(outputRoot, "wav"),
+    path.join(outputRoot, "flac"),
+    path.join(outputRoot, "mp3"),
+    path.join(outputRoot, "alac"),
+  ];
+
+  for (const dir of candidateDirs) {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+      continue;
+    }
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const clipId = path.parse(entry.name).name.trim();
+      if (clipId.length > 0) {
+        clipIds.add(clipId);
+      }
+    }
+  }
+
+  return clipIds;
 }

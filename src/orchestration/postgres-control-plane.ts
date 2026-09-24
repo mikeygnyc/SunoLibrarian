@@ -9,6 +9,7 @@ import type {
   IOrchestrationJob,
   IOrchestrationRepository,
   IOrchestrationStage,
+  IRuntimeStateCleanupResult,
   IStatusEvent,
   IWorkItem,
   IWorkerInstance,
@@ -151,15 +152,26 @@ CREATE TABLE IF NOT EXISTS log_entries (
 CREATE INDEX IF NOT EXISTS idx_log_entries_timestamp ON log_entries(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_log_entries_level ON log_entries(level, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_job_id ON log_entries((context_json->>'jobId'));
+CREATE INDEX IF NOT EXISTS idx_log_entries_context_service ON log_entries((context_json->>'service'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_role ON log_entries((context_json->>'role'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_worker_instance_id ON log_entries((context_json->>'workerInstanceId'));
 CREATE INDEX IF NOT EXISTS idx_log_entries_context_clip_id ON log_entries((context_json->>'clipId'));
+
+CREATE TABLE IF NOT EXISTS runtime_settings (
+  key TEXT PRIMARY KEY,
+  value_json JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `;
 
 export type ControlPlaneOptions = {
   postgresUrl?: string;
   schema?: string;
 };
+
+const CONTROL_PLANE_SCHEMA_LOCK_NAMESPACE = 2048;
+const CONTROL_PLANE_SCHEMA_LOCK_RESOURCE = 1;
+const CONTROL_PLANE_BOOTSTRAPPED_ENV = "SUNO_EXPORT_CONTROL_PLANE_BOOTSTRAPPED";
 
 export function resolveControlPlanePostgresUrl(postgresUrl?: string): string {
   const resolved = postgresUrl?.trim()
@@ -187,9 +199,20 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    if (process.env[CONTROL_PLANE_BOOTSTRAPPED_ENV] === "1") {
+      this.initialized = true;
+      return;
+    }
     const client = await this.pool.connect();
     try {
-      await this.applySchema(client);
+      await withAdvisoryLock(
+        client,
+        CONTROL_PLANE_SCHEMA_LOCK_NAMESPACE,
+        CONTROL_PLANE_SCHEMA_LOCK_RESOURCE,
+        async () => {
+          await this.applySchema(client);
+        },
+      );
       this.initialized = true;
     } finally {
       client.release();
@@ -263,6 +286,75 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
       `,
       [jobId, status, toDate(details.startedAt), toDate(details.completedAt), details.errorCode ?? null, details.errorMessage ?? null],
     );
+  }
+
+  async updateJobPayload(
+    jobId: string,
+    payload: IOrchestrationJob["payload"],
+  ): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+      UPDATE orchestration_jobs
+      SET payload_json = $2::jsonb,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      `,
+      [jobId, toJson(payload)],
+    );
+  }
+
+  async cancelJob(
+    jobId: string,
+    details: Partial<Pick<IOrchestrationJob, "completedAt" | "errorCode" | "errorMessage">> = {},
+  ): Promise<void> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cancelledAt = toDate(details.completedAt ?? new Date());
+      await client.query(
+        `
+        UPDATE orchestration_jobs
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            error_code = COALESCE($3, error_code),
+            error_message = COALESCE($4, error_message),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND status NOT IN ('completed', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt, details.errorCode ?? null, details.errorMessage ?? null],
+      );
+      await client.query(
+        `
+        UPDATE orchestration_stages
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = $1
+          AND status NOT IN ('succeeded', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt],
+      );
+      await client.query(
+        `
+        UPDATE work_items
+        SET status = 'cancelled',
+            completed_at = COALESCE($2, completed_at),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = $1
+          AND status NOT IN ('succeeded', 'failed', 'cancelled')
+        `,
+        [jobId, cancelledAt],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage> {
@@ -374,106 +466,105 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
 
   async claimNextRunnableWorkItem(workerRole: IWorkItem["workerRole"], workerInstanceId: string): Promise<IClaimedWorkItem | null> {
     await this.initialize();
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      const candidateResult = await client.query(
-        `
-        SELECT
-          w.*,
-          s.id AS stage_record_id,
-          s.job_id AS stage_job_id,
-          s.stage_type AS stage_record_type,
-          s.status AS stage_record_status,
-          s.sequence AS stage_record_sequence,
-          s.payload_json AS stage_payload_json,
-          s.depends_on_stage_ids AS stage_depends_on_stage_ids,
-          s.resource_key AS stage_resource_key,
-          s.blocked_by_stage_id AS stage_blocked_by_stage_id,
-          s.last_known_job_status AS stage_last_known_job_status,
-          s.created_at AS stage_created_at,
-          s.updated_at AS stage_updated_at,
-          s.started_at AS stage_started_at,
-          s.completed_at AS stage_completed_at,
-          s.error_code AS stage_error_code,
-          s.error_message AS stage_error_message,
-          j.id AS job_record_id,
-          j.workflow_type AS job_workflow_type,
-          j.status AS job_record_status,
-          j.runtime_mode AS job_runtime_mode,
-          j.queue_name AS job_queue_name,
-          j.priority AS job_priority,
-          j.payload_json AS job_payload_json,
-          j.created_at AS job_created_at,
-          j.updated_at AS job_updated_at,
-          j.started_at AS job_started_at,
-          j.completed_at AS job_completed_at,
-          j.error_code AS job_error_code,
-          j.error_message AS job_error_message
-        FROM work_items w
-        INNER JOIN orchestration_stages s ON s.id = w.stage_id
-        INNER JOIN orchestration_jobs j ON j.id = w.job_id
-        WHERE j.status IN ('queued', 'running')
-          AND w.worker_role = $1
-          AND w.status IN ('pending', 'blocked')
-          AND NOT EXISTS (
-            SELECT 1
-            FROM orchestration_stages prior
-            WHERE prior.job_id = s.job_id
-              AND prior.sequence < s.sequence
-              AND prior.status <> 'succeeded'
-          )
-        ORDER BY w.created_at ASC
-        FOR UPDATE OF w SKIP LOCKED
-        LIMIT 1
-        `,
-        [workerRole],
-      );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const candidateResult = await client.query(
+          `
+          SELECT
+            w.*,
+            s.id AS stage_record_id,
+            s.job_id AS stage_job_id,
+            s.stage_type AS stage_record_type,
+            s.status AS stage_record_status,
+            s.sequence AS stage_record_sequence,
+            s.payload_json AS stage_payload_json,
+            s.depends_on_stage_ids AS stage_depends_on_stage_ids,
+            s.resource_key AS stage_resource_key,
+            s.blocked_by_stage_id AS stage_blocked_by_stage_id,
+            s.last_known_job_status AS stage_last_known_job_status,
+            s.created_at AS stage_created_at,
+            s.updated_at AS stage_updated_at,
+            s.started_at AS stage_started_at,
+            s.completed_at AS stage_completed_at,
+            s.error_code AS stage_error_code,
+            s.error_message AS stage_error_message,
+            j.id AS job_record_id,
+            j.workflow_type AS job_workflow_type,
+            j.status AS job_record_status,
+            j.runtime_mode AS job_runtime_mode,
+            j.queue_name AS job_queue_name,
+            j.priority AS job_priority,
+            j.payload_json AS job_payload_json,
+            j.created_at AS job_created_at,
+            j.updated_at AS job_updated_at,
+            j.started_at AS job_started_at,
+            j.completed_at AS job_completed_at,
+            j.error_code AS job_error_code,
+            j.error_message AS job_error_message
+          FROM work_items w
+          INNER JOIN orchestration_stages s ON s.id = w.stage_id
+          INNER JOIN orchestration_jobs j ON j.id = w.job_id
+          WHERE j.status IN ('queued', 'running')
+            AND w.worker_role = $1
+            AND w.status IN ('pending', 'blocked')
+            AND NOT EXISTS (
+              SELECT 1
+              FROM orchestration_stages prior
+              WHERE prior.job_id = s.job_id
+                AND prior.sequence < s.sequence
+                AND prior.status <> 'succeeded'
+            )
+          ORDER BY COALESCE(j.priority, 0) DESC, w.created_at ASC
+          FOR UPDATE OF w SKIP LOCKED
+          LIMIT 1
+          `,
+          [workerRole],
+        );
 
-      if (candidateResult.rows.length === 0) {
+        if (candidateResult.rows.length === 0) {
+          await client.query("COMMIT");
+          return null;
+        }
+
+        const row = candidateResult.rows[0];
+        const claimedAt = new Date();
+        await client.query(
+          `
+          UPDATE work_items
+          SET status = 'leased',
+              lease_owner_id = $2,
+              updated_at = $3
+          WHERE id = $1
+          `,
+          [row.id, workerInstanceId, claimedAt],
+        );
         await client.query("COMMIT");
-        return null;
+
+        return {
+          job: mapClaimedJobRow(row),
+          stage: mapClaimedStageRow(row),
+          workItem: {
+            ...mapWorkItemRow(row),
+            status: "leased",
+            leaseOwnerId: workerInstanceId,
+            updatedAt: claimedAt,
+          },
+        };
+      } catch (error) {
+        await client.query("ROLLBACK");
+        if (isRetryablePostgresDeadlock(error) && attempt < 2) {
+          await sleep(25 * (attempt + 1));
+          continue;
+        }
+        throw error;
+      } finally {
+        client.release();
       }
-
-      const row = candidateResult.rows[0];
-      const claimedAt = new Date();
-      await client.query(
-        `
-        UPDATE work_items
-        SET status = 'leased',
-            lease_owner_id = $2,
-            updated_at = $3
-        WHERE id = $1
-        `,
-        [row.id, workerInstanceId, claimedAt],
-      );
-      await client.query(
-        `
-        UPDATE orchestration_stages
-        SET status = 'queued',
-            updated_at = $2
-        WHERE id = $1
-        `,
-        [row.stage_record_id, claimedAt],
-      );
-      await client.query("COMMIT");
-
-      return {
-        job: mapClaimedJobRow(row),
-        stage: mapClaimedStageRow(row),
-        workItem: {
-          ...mapWorkItemRow(row),
-          status: "leased",
-          leaseOwnerId: workerInstanceId,
-          updatedAt: claimedAt,
-        },
-      };
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
     }
+
+    return null;
   }
 
   async updateWorkItemStatus(
@@ -735,6 +826,51 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     return result.rows.map(mapStatusEventRow);
   }
 
+  async cleanupStaleRuntimeState(staleBefore: Date): Promise<IRuntimeStateCleanupResult> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const removedWorkerInstancesResult = await client.query(
+        `
+        DELETE FROM worker_instances
+        WHERE heartbeat_at <= $1
+        `,
+        [toDate(staleBefore)],
+      );
+
+      const expiredLeasesResult = await client.query(
+        `
+        UPDATE worker_leases
+        SET status = 'expired',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'active'
+          AND (
+            lease_expires_at <= $1
+            OR NOT EXISTS (
+              SELECT 1
+              FROM worker_instances wi
+              WHERE wi.id = worker_leases.worker_instance_id
+            )
+          )
+        `,
+        [toDate(staleBefore)],
+      );
+
+      await client.query("COMMIT");
+      return {
+        expiredLeaseCount: expiredLeasesResult.rowCount ?? 0,
+        removedWorkerInstanceCount: removedWorkerInstancesResult.rowCount ?? 0,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async write(entry: ILogEntry): Promise<void> {
     await this.initialize();
     await this.pool.query(
@@ -773,6 +909,34 @@ export class PostgresControlPlaneRepository implements IOrchestrationRepository,
     };
   }
 
+  async getRuntimeSetting(key: string): Promise<unknown | undefined> {
+    await this.initialize();
+    const result = await this.pool.query(
+      `SELECT value_json FROM runtime_settings WHERE key = $1`,
+      [key],
+    );
+    return result.rows[0]?.value_json;
+  }
+
+  async setRuntimeSetting(key: string, value: unknown): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+      INSERT INTO runtime_settings (key, value_json, updated_at)
+      VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [key, toJson(value)],
+    );
+  }
+
+  async deleteRuntimeSetting(key: string): Promise<void> {
+    await this.initialize();
+    await this.pool.query(`DELETE FROM runtime_settings WHERE key = $1`, [key]);
+  }
+
   private async applySchema(client: PoolClient): Promise<void> {
     if (this.options.schema?.trim()) {
       const schemaName = this.options.schema.trim();
@@ -794,6 +958,7 @@ export function buildLogQuery(filter: ILogQueryFilter = {}): BuiltQuery {
   const params: unknown[] = [];
 
   addEqualsClause(clauses, params, "context_json->>'jobId'", filter.jobId);
+  addEqualsClause(clauses, params, "context_json->>'service'", filter.service);
   addEqualsClause(clauses, params, "context_json->>'stageId'", filter.stageId);
   addEqualsClause(clauses, params, "context_json->>'workItemId'", filter.workItemId);
   addEqualsClause(clauses, params, "context_json->>'workflowType'", filter.workflowType);
@@ -826,6 +991,20 @@ function addEqualsClause(clauses: string[], params: unknown[], sql: string, valu
 
 function toDate(value?: Date): Date | null {
   return value ?? null;
+}
+
+async function withAdvisoryLock<T>(
+  client: PoolClient,
+  namespace: number,
+  resource: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  await client.query("SELECT pg_advisory_lock($1, $2)", [namespace, resource]);
+  try {
+    return await work();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock($1, $2)", [namespace, resource]);
+  }
 }
 
 function toJson(value: unknown): string {
@@ -986,6 +1165,19 @@ function mapClaimedStageRow(row: any): IOrchestrationStage {
     errorCode: row.stage_error_code ?? undefined,
     errorMessage: row.stage_error_message ?? undefined,
   };
+}
+
+function isRetryablePostgresDeadlock(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  return code === "40P01";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function randomLeaseId(): string {

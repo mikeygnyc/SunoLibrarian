@@ -1,11 +1,13 @@
 import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import type { Page } from 'puppeteer';
 import type { IRateLimitConfig, ITrack, IWorkspace, ITrackMetadata } from './lib/interfaces';
+import { CancellationError } from './cancellation';
 import { Storage } from './storage';
-import { connectOrLaunchBrowser } from './auth';
+import { attachBrowserAbortHandlers, connectOrLaunchBrowser } from './lib/auth/auth';
+
+export type AuthTokenRefresher = (rejectedToken: string) => Promise<string>;
 
 export class SunoClient {
   private authToken: string;
@@ -16,6 +18,9 @@ export class SunoClient {
   private rateLimitConfig: IRateLimitConfig;
   private metadataCache: Map<string, ITrackMetadata>;
   private storage: Storage;
+  private abortSignal?: AbortSignal;
+  private authTokenRefresher?: AuthTokenRefresher;
+  private authRefreshPromise?: Promise<string>;
 
   constructor(
     authToken: string,
@@ -23,12 +28,17 @@ export class SunoClient {
     browserUrl?: string,
     browserUserDataDir?: string,
     browserProfileDirectory?: string,
+    cacheDir?: string,
+    abortSignal?: AbortSignal,
+    authTokenRefresher?: AuthTokenRefresher,
   ) {
     this.authToken = authToken;
     this.browserUrl = browserUrl;
     this.browserUserDataDir = browserUserDataDir;
     this.browserProfileDirectory = browserProfileDirectory;
-    this.storage = new Storage();
+    this.abortSignal = abortSignal;
+    this.authTokenRefresher = authTokenRefresher;
+    this.storage = new Storage({ cacheDir });
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
       this.storage.setDeviceId(this.deviceId);
@@ -47,6 +57,10 @@ export class SunoClient {
     this.metadataCache = new Map();
   }
 
+  getAuthToken(): string {
+    return this.authToken;
+  }
+
   private generateUUID(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
@@ -61,11 +75,17 @@ export class SunoClient {
     return JSON.stringify({ token });
   }
 
+  private throwIfAborted(): void {
+    if (!this.abortSignal?.aborted) return;
+    throw getAbortError(this.abortSignal.reason);
+  }
+
   private async retryWithBackoff<T>(
     fn: () => Promise<T>,
     context: string = '',
     retryCount: number = 0
   ): Promise<T> {
+    this.throwIfAborted();
     try {
       return await fn();
     } catch (error: any) {
@@ -107,23 +127,23 @@ export class SunoClient {
   }
 
   private async makeRequest(url: string, options: any = {}) {
-    const browserToken = this.generateBrowserToken();
+    this.throwIfAborted();
+    const rejectedToken = this.authToken;
+    let response = await this.sendRequest(url, options);
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        accept: '*/*',
-        'accept-language': 'en-US,en;q=0.8',
-        authorization: `Bearer ${this.authToken}`,
-        'browser-token': browserToken,
-        'cache-control': 'no-cache',
-        'device-id': this.deviceId,
-        origin: 'https://suno.com',
-        pragma: 'no-cache',
-        referer: 'https://suno.com/',
-        ...options.headers,
-      },
-    });
+    if (response.status === 401 && this.authTokenRefresher) {
+      // Drain the rejected response before retrying so its connection can be
+      // returned to the HTTP agent.
+      await response.text();
+      // Another concurrent request may already have refreshed the token by the
+      // time this response arrives. In that case, reuse it without launching a
+      // second browser capture.
+      if (this.authToken === rejectedToken) {
+        await this.refreshAuthToken(rejectedToken);
+      }
+      this.throwIfAborted();
+      response = await this.sendRequest(url, options);
+    }
 
     if (!response.ok) {
       const error: any = new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -132,6 +152,49 @@ export class SunoClient {
     }
 
     return response;
+  }
+
+  private sendRequest(url: string, options: any): Promise<import('node-fetch').Response> {
+    const browserToken = this.generateBrowserToken();
+    return fetch(url, {
+      ...options,
+      signal: options.signal ?? this.abortSignal,
+      headers: {
+        accept: '*/*',
+        'accept-language': 'en-US,en;q=0.8',
+        'browser-token': browserToken,
+        'cache-control': 'no-cache',
+        'device-id': this.deviceId,
+        origin: 'https://suno.com',
+        pragma: 'no-cache',
+        referer: 'https://suno.com/',
+        ...options.headers,
+        authorization: `Bearer ${this.authToken}`,
+      },
+    });
+  }
+
+  private async refreshAuthToken(rejectedToken: string): Promise<void> {
+    if (!this.authTokenRefresher) return;
+
+    if (!this.authRefreshPromise) {
+      console.warn('Authentication token was rejected (HTTP 401). Retrieving a fresh token...');
+      this.authRefreshPromise = this.authTokenRefresher(rejectedToken)
+        .then((token) => {
+          const normalizedToken = token.trim();
+          if (!normalizedToken || normalizedToken === rejectedToken) {
+            throw new Error('Authentication refresh returned no new token after HTTP 401');
+          }
+          this.authToken = normalizedToken;
+          console.log('Authentication token refreshed successfully.');
+          return normalizedToken;
+        })
+        .finally(() => {
+          this.authRefreshPromise = undefined;
+        });
+    }
+
+    await this.authRefreshPromise;
   }
 
   async fetchWorkspacesPage(page: number = 1): Promise<any> {
@@ -150,6 +213,7 @@ export class SunoClient {
     const pageSize = 20;
 
     while (hasMore) {
+      this.throwIfAborted();
       try {
         const data = await this.fetchWorkspacesPage(page);
         const projects = data.projects || [];
@@ -197,6 +261,7 @@ export class SunoClient {
     workspaceId: string = 'default'
   ): Promise<any> {
     return this.retryWithBackoff(async () => {
+      this.throwIfAborted();
       const response = await this.makeRequest(
         'https://studio-api.prod.suno.com/api/feed/v3',
         {
@@ -230,6 +295,7 @@ export class SunoClient {
     let hasMore = true;
 
     while (hasMore) {
+      this.throwIfAborted();
       const data = await this.fetchTracks(cursor, 100, workspaceId);
       const clips = data.clips || [];
       allTracks.push(...clips);
@@ -251,6 +317,7 @@ export class SunoClient {
     let hasMore = true;
 
     while (hasMore) {
+      this.throwIfAborted();
       try {
         const response = await this.fetchTracks(cursor, 100, workspaceId);
         const clips = response.clips || [];
@@ -285,6 +352,7 @@ export class SunoClient {
   }
 
   async fetchTrackMetadata(clipId: string, forceRefresh: boolean = false): Promise<ITrackMetadata> {
+    this.throwIfAborted();
     if (!forceRefresh) {
       const cached = this.storage.getCachedMetadata(clipId);
       if (cached) {
@@ -297,6 +365,7 @@ export class SunoClient {
     }
 
     return this.retryWithBackoff(async () => {
+      this.throwIfAborted();
       const response = await this.makeRequest(
         `https://studio-api.prod.suno.com/api/feed/?ids=${clipId}`
       );
@@ -377,7 +446,8 @@ export class SunoClient {
 
   async fetchAllTracksMetadata(
     trackIds: string[],
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
+    shouldContinue?: () => Promise<void> | void,
   ): Promise<{ successCount: number; failedCount: number }> {
     let successCount = 0;
     let failedCount = 0;
@@ -386,6 +456,10 @@ export class SunoClient {
     console.log(`Starting metadata fetch for ${total} tracks...`);
 
     for (let i = 0; i < total; i++) {
+      if (shouldContinue) {
+        await shouldContinue();
+      }
+      this.throwIfAborted();
       const trackId = trackIds[i];
       try {
         const cached = this.storage.getCachedMetadata(trackId);
@@ -408,10 +482,14 @@ export class SunoClient {
     return { successCount, failedCount };
   }
 
-  async refreshAllWorkspaces(): Promise<IWorkspace[]> {
+  async refreshAllWorkspaces(shouldContinue?: () => Promise<void> | void): Promise<IWorkspace[]> {
     const workspaces = await this.getWorkspaces();
 
     for (let i = 0; i < workspaces.length; i++) {
+      if (shouldContinue) {
+        await shouldContinue();
+      }
+      this.throwIfAborted();
       const workspace = workspaces[i];
       try {
         const tracks = await this.refreshWorkspaceTracks(workspace.id);
@@ -488,6 +566,7 @@ export class SunoClient {
   }
 
   async downloadMp3(url: string, filepath: string, clipId?: string, withMetadata: boolean = true): Promise<void> {
+    this.throwIfAborted();
     if (withMetadata && clipId) {
       return this.downloadFileWithMetadataFromBillingEndpoint(clipId, filepath, 'mp3', url);
     }
@@ -503,7 +582,7 @@ export class SunoClient {
       }
     }
 
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: this.abortSignal });
     if (!response.ok) {
       throw new Error(`Failed to download: ${response.status}`);
     }
@@ -513,6 +592,7 @@ export class SunoClient {
   }
 
   async downloadImage(imageUrl: string, filepath: string, clipId?: string): Promise<void> {
+    this.throwIfAborted();
     try {
       await this.downloadImageFromUrl(imageUrl, filepath);
       return;
@@ -537,6 +617,7 @@ export class SunoClient {
   }
 
   private async downloadImageFromUrl(imageUrl: string, filepath: string): Promise<void> {
+    this.throwIfAborted();
     const tempPath = `${filepath}.tmp`;
     
     return new Promise((resolve, reject) => {
@@ -556,7 +637,7 @@ export class SunoClient {
         }
       };
       
-      https.get(imageUrl, options, (response: any) => {
+      const request = https.get(imageUrl, options, (response: any) => {
         if (response.statusCode !== 200) {
           file.close();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -578,7 +659,24 @@ export class SunoClient {
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         reject(err);
       });
-    });
+
+      const onAbort = () => {
+        request.destroy(getAbortError(this.abortSignal?.reason));
+        file.destroy(getAbortError(this.abortSignal?.reason));
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        reject(getAbortError(this.abortSignal?.reason));
+      };
+
+      if (this.abortSignal?.aborted) {
+        onAbort();
+        return;
+      }
+
+      this.abortSignal?.addEventListener("abort", onAbort, { once: true });
+      file.once("close", () => {
+        this.abortSignal?.removeEventListener("abort", onAbort);
+      });
+      });
   }
 
   private extractHttpStatus(error: unknown): number | null {
@@ -604,21 +702,32 @@ export class SunoClient {
   }
 
   private async regenerateArtworkForTrack(clipId: string): Promise<void> {
+    this.throwIfAborted();
     const songUrl = `https://suno.com/song/${clipId}`;
     console.log(`[artwork] Opening song page for ${clipId}: ${songUrl}`);
     const { browser, isRemoteBrowser } = await connectOrLaunchBrowser(this.browserUrl, {
       userDataDir: this.browserUserDataDir,
       profileDirectory: this.browserProfileDirectory,
+      abortSignal: this.abortSignal,
     });
     let page: Page | null = null;
+    let abortCleanup = () => {};
 
     try {
       page = await browser.newPage();
+      abortCleanup = attachBrowserAbortHandlers({
+        browser,
+        page,
+        isRemoteBrowser,
+        signal: this.abortSignal,
+      });
       await page.setDefaultTimeout(20000);
+      this.throwIfAborted();
       await page.goto(songUrl, { waitUntil: 'networkidle2', timeout: 60000 });
       console.log(`[artwork] Loaded song page for ${clipId}`);
 
       console.log(`[artwork] Opening Edit Song Details for ${clipId}`);
+      this.throwIfAborted();
       const clickedEdit =
         (await this.clickSelectorIfPresent(page, 'button[aria-label="Edit Song Details"]', 12000)) ||
         (await this.clickElementContainingText(page, ['edit song details'], 12000));
@@ -630,6 +739,7 @@ export class SunoClient {
       console.log(`[artwork] Edit Song Details opened for ${clipId}`);
 
       console.log(`[artwork] Clicking Generate Cover Art for ${clipId}`);
+      this.throwIfAborted();
       const clickedGenerate =
         (await this.clickAnySelector(
           page,
@@ -651,6 +761,7 @@ export class SunoClient {
       await this.clickElementContainingText(page, ['text to image'], 5000);
 
       console.log(`[artwork] Clicking prompt Generate button for ${clipId}`);
+      this.throwIfAborted();
       const clickedPromptGenerate =
         (await this.clickAnySelector(
           page,
@@ -673,6 +784,7 @@ export class SunoClient {
       }
 
       console.log(`[artwork] Clicking image Generate button for ${clipId}`);
+      this.throwIfAborted();
       const clickedImageGenerate = await this.clickDialogExactTextButton(page, 'generate', 45000);
       if (!clickedImageGenerate) {
         console.log(`[artwork] Failed to click image Generate for ${clipId}`);
@@ -686,9 +798,11 @@ export class SunoClient {
         throw new Error('Timed out waiting for generated images');
       }
       console.log(`[artwork] Selecting first generated option for ${clipId}`);
+      this.throwIfAborted();
       await this.clickSelectorIfPresent(page, '[role="dialog"] article', 5000);
 
       console.log(`[artwork] Saving generated image cover for ${clipId}`);
+      this.throwIfAborted();
       const clickedSave = await this.clickElementContainingText(
         page,
         ['save as image cover', 'save as image'],
@@ -703,6 +817,7 @@ export class SunoClient {
       await this.delay(4000);
       console.log(`[artwork] Artwork regeneration finished for ${clipId}`);
     } finally {
+      abortCleanup();
       if (page) {
         try {
           await page.close({ runBeforeUnload: false });
@@ -740,6 +855,7 @@ export class SunoClient {
   ): Promise<boolean> {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       for (const selector of selectors) {
         const elements = await page.$$(selector);
         for (const el of elements) {
@@ -767,6 +883,7 @@ export class SunoClient {
     const needles = textCandidates.map((text) => text.toLowerCase());
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       const candidates = await page.$$('button, [role="button"], a');
       for (const el of candidates) {
         const text = await el.evaluate((node: any) => ((node.textContent || '') as string).trim().toLowerCase());
@@ -800,6 +917,7 @@ export class SunoClient {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       const candidates = await page.$$('[role="dialog"] button, [role="dialog"] [role="button"]');
       for (const el of candidates) {
         const text = await el.evaluate((node: any) => ((node.textContent || '') as string).trim().toLowerCase());
@@ -832,6 +950,7 @@ export class SunoClient {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       const clicked = await page.evaluate((expected) => {
         const d: any = (globalThis as any).document;
         const w: any = (globalThis as any).window;
@@ -877,6 +996,7 @@ export class SunoClient {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       const existsAndEnabled = await page.evaluate((expected) => {
         const d: any = (globalThis as any).document;
         const w: any = (globalThis as any).window;
@@ -915,6 +1035,7 @@ export class SunoClient {
   ): Promise<boolean> {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
+      this.throwIfAborted();
       const elements = await page.$$(selector);
       for (const el of elements) {
         const visible = await el.isVisible().catch(() => false);
@@ -926,6 +1047,7 @@ export class SunoClient {
   }
 
   async initiateWavConversion(clipId: string): Promise<void> {
+    this.throwIfAborted();
     const response = await this.makeRequest(
       `https://studio-api.prod.suno.com/api/gen/${clipId}/convert_wav/`,
       { method: 'POST' }
@@ -938,6 +1060,7 @@ export class SunoClient {
 
   async pollWavFile(clipId: string, maxAttempts: number = 60, interval: number = 2000): Promise<string> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      this.throwIfAborted();
       try {
         const response = await this.makeRequest(
           `https://studio-api.prod.suno.com/api/gen/${clipId}/wav_file/`
@@ -962,6 +1085,7 @@ export class SunoClient {
   }
 
   async downloadWav(clipId: string, filepath: string, withMetadata: boolean = true): Promise<void> {
+    this.throwIfAborted();
     await this.initiateWavConversion(clipId);
     const wavUrl = await this.pollWavFile(clipId);
 
@@ -969,7 +1093,7 @@ export class SunoClient {
       return this.downloadFileWithMetadataFromBillingEndpoint(clipId, filepath, 'wav', wavUrl);
     }
 
-    const response = await fetch(wavUrl);
+    const response = await fetch(wavUrl, { signal: this.abortSignal });
     if (!response.ok) {
       throw new Error(`Failed to download WAV: ${response.status}`);
     }
@@ -979,7 +1103,26 @@ export class SunoClient {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    this.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.abortSignal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+
+      const onAbort = () => {
+        clearTimeout(timer);
+        this.abortSignal?.removeEventListener("abort", onAbort);
+        reject(getAbortError(this.abortSignal?.reason));
+      };
+
+      if (this.abortSignal?.aborted) {
+        onAbort();
+        return;
+      }
+
+      this.abortSignal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   private notifyRateLimit(context?: string): void {
@@ -996,6 +1139,7 @@ export class SunoClient {
     url: string | null = null
   ): Promise<void> {
     try {
+      this.throwIfAborted();
       let audioUrl = url;
 
       if (!audioUrl && format === 'mp3') {
@@ -1017,7 +1161,7 @@ export class SunoClient {
       }
 
       console.log(`Fetching audio from: ${audioUrl}`);
-      const audioResponse = await fetch(audioUrl!);
+      const audioResponse = await fetch(audioUrl!, { signal: this.abortSignal });
       if (!audioResponse.ok) {
         throw new Error(`Failed to fetch audio file: ${audioResponse.status}`);
       }
@@ -1098,6 +1242,7 @@ export class SunoClient {
     trackMetadata: ITrackMetadata | null = null,
     metadata: any = {}
   ): Promise<void> {
+    this.throwIfAborted();
     const fileSize = audioBuffer.length;
     const maxDataUrlSize = 2 * 1024 * 1024;
 
@@ -1130,12 +1275,12 @@ export class SunoClient {
   async downloadFromUrl(
     downloadUrl: string,
     filename: string,
-    clipId: string,
-    format: string,
+    _clipId: string,
+    _format: string,
     trackMetadata: ITrackMetadata | null = null,
     metadata: any = {}
   ): Promise<void> {
-    const response = await fetch(downloadUrl);
+      const response = await fetch(downloadUrl, { signal: this.abortSignal });
     if (!response.ok) {
       throw new Error(`Failed to download from URL: ${response.status}`);
     }
@@ -1170,7 +1315,7 @@ export class SunoClient {
         }
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: this.abortSignal });
       if (!response.ok) {
         throw new Error(`Failed to download: ${response.status}`);
       }
@@ -1181,4 +1326,14 @@ export class SunoClient {
       throw error;
     }
   }
+}
+
+function getAbortError(reason: unknown): CancellationError {
+  if (reason instanceof CancellationError) {
+    return reason;
+  }
+  if (reason instanceof Error) {
+    return new CancellationError(reason.message);
+  }
+  return new CancellationError(typeof reason === "string" ? reason : "Job cancelled");
 }

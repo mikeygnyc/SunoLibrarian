@@ -195,6 +195,55 @@ test("can load targeted metadata without hydrating every song", async () => {
   assert.deepEqual(targeted.map((song) => song.clipId), ["clip-2"]);
 });
 
+test("loads lightweight download verification for a batch of clips", async () => {
+  const databasePath = createTempDatabasePath();
+  const store = new SqliteMetadataStore(databasePath);
+
+  await store.saveAll([
+    {
+      clipId: "clip-downloaded",
+      title: "Downloaded",
+      songUrl: "https://suno.com/song/clip-downloaded",
+      liked: false,
+      mp3Status: "DOWNLOADED",
+      wavStatus: "PENDING",
+      rawApiResponse: { id: "clip-downloaded" } as any,
+    },
+    {
+      clipId: "clip-metadata-missing",
+      title: "Metadata Missing",
+      songUrl: "https://suno.com/song/clip-metadata-missing",
+      liked: false,
+      mp3Status: "PENDING",
+    },
+  ]);
+
+  const verifications = await store.loadDownloadVerifications([
+    "clip-downloaded",
+    "clip-metadata-missing",
+    "missing",
+  ]);
+  store.close();
+
+  assert.deepEqual(
+    verifications.sort((left, right) => left.clipId.localeCompare(right.clipId)),
+    [
+      {
+        clipId: "clip-downloaded",
+        hasRawApiResponse: true,
+        mp3Status: "DOWNLOADED",
+        wavStatus: "PENDING",
+      },
+      {
+        clipId: "clip-metadata-missing",
+        hasRawApiResponse: false,
+        mp3Status: "PENDING",
+        wavStatus: undefined,
+      },
+    ],
+  );
+});
+
 test("upserts workspaces into the database", async () => {
   const databasePath = createTempDatabasePath();
   const store = new SqliteMetadataStore(databasePath);

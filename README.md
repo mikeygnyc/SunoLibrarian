@@ -1,8 +1,83 @@
 # suno-export
 
-Unified TypeScript CLI for downloading, processing, and syncing Suno tracks to a local filesystem.
+TypeScript tools and Kubernetes deployments for downloading Suno tracks, converting a local music library, and running API-backed workflows with separate workers. 
+
+## **IMPORTANT NOTE**
+This has not been tested since the Suno v6 release and download restrictions were added. It should still be able to retrieve metadata and locally embed it, however downloading audio files is unlikely to fully work.
+
+## Project Status
+
+The current implementation supports three workflow targets:
+
+- **Local filesystem:** `download`, `process`, and `sync` run directly against `target.localRoot`, with metadata in `songs_metadata.json`.
+- **HTTP API:** `target.apiUrl` submits durable jobs for separate runtime processes. Postgres stores workflow state and MQTT dispatches work.
+- **Kubernetes Operator:** allows the HTTP API to be run on a Kubernetes cluster with automatic periodic checks.
+
+Implemented features include MP3/WAV downloads, FLAC/MP3/ALAC conversion, metadata and artwork processing, browser authentication, an HTTP API and dashboard, workspace librarians, and workers for `auth`, `metadata`, `asset`, and `conversion`. Kubernetes deployment includes a `SunoExportCluster` operator, shared runtime image, local manifest bootstrap, and optional Filebeat/Elasticsearch logging.
+
+
+## Config-First Usage
+
+The CLI loads settings from `suno-export.config.json` in the current working directory. Settings can come from config or CLI flags; explicit CLI flags win for that run. Commands  require their relevant target, arguments, and runtime settings. Use `--config <path>` to select another config file.
+
+Example:
+
+```json
+{
+  "target": {
+    "localRoot": "./downloads"
+  },
+  "defaults": {
+    "browser": "http://localhost:9222",
+    "format": "wav",
+    "processFormats": "flac,mp3,alac",
+    "processBitrate": "320"
+  },
+  "commands": {
+    "sync": {
+      "library": "./library"
+    }
+  }
+}
+```
+
+With that file in place and a logged-in Suno browser session available, run:
+
+```bash
+npm start -- sync
+```
+
+Or use one-off overrides:
+
+```bash
+npm start -- sync --workspace another-workspace --format mp3
+```
+
+Use `runtime` for shared process-level settings such as `postgresUrl`, `mqttUrl`,
+`mqttTopicPrefix`, `host`, `port`, or common runtime paths. Keep per-command
+overrides under `commands`.
+
+For distributed operation, `mqttUrl` is required. MQTT is the live control-plane
+transport for librarian/worker coordination, while Postgres remains the durable
+workflow and metadata store.
+
+`target` must contain exactly one of `localRoot` or `apiUrl`. Relative config paths, including `localRoot`, resolve from the config file's directory. `download`, `process`, and `sync` require a target; `--output` alone does not select local mode.
+
+For API mode, use a separate config such as:
+
+```json
+{
+  "target": {
+    "apiUrl": "http://127.0.0.1:3000"
+  }
+}
+```
 
 ## Install
+
+Prerequisites: `nvm`, Node.js 24 (pinned in `.nvmrc`), and `ffmpeg` on `PATH` for conversion. Suno access requires a valid token or a logged-in Chrome session. Distributed operation also requires Postgres, MQTT, and filesystem access to the configured asset roots.
+
+The install script selects the Node version through `nvm`, installs dependencies, builds, and checks CLI help.
 
 ```bash
 ./scripts/install.sh
@@ -37,6 +112,8 @@ suno-export --help
 If you are actively developing this repo and want a global command that tracks local changes, use:
 
 ```bash
+source ~/.nvm/nvm.sh
+nvm use
 npm run build
 npm link
 ```
@@ -47,12 +124,6 @@ Update global install from this repo:
 git pull
 npm run build
 npm install -g .
-```
-
-If installed from npm registry, update with:
-
-```bash
-npm update -g suno-export
 ```
 
 Uninstall global command:
@@ -100,7 +171,81 @@ When using default output paths, required directories are created automatically 
 
 For a diagrammed implementation map, see [CLI Program Flow](docs/cli-program-flow.md).
 For the orchestration runtime model, see [Orchestration Runtime](docs/orchestration-runtime.md).
-For migration guidance, see [Orchestration Migration Notes](docs/orchestration-migration.md).
+For Kubernetes deployment and operator configuration, see [Kubernetes Operator](docs/kubernetes-operator.md).
+For ELK-oriented container log aggregation, see [ELK Logging](docs/elk-logging.md).
+For generating gitignored local k8s manifests from tracked examples, see [Local K8s Bootstrap](docs/k8s-local-bootstrap.md).
+
+
+## HTTP API
+
+The HTTP API requires shared Postgres and MQTT settings, supplied through runtime config, environment variables, or flags:
+
+```bash
+npm run dev:api -- --host 127.0.0.1 --port 3000 --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+```
+
+Open `http://127.0.0.1:3000/` for the built-in dashboard shell.
+When the dashboard says jobs are waiting on auth, capture a fresh token on the
+operator machine with `suno-export capture-auth-token --browser
+http://localhost:9222`, then paste it into the Auth panel.
+
+Current endpoints:
+
+- `GET /healthz`: liveness check
+- `GET /api/v1/auth/status`: whether a cached token is present
+- `POST /api/v1/auth/token`: set cached auth token with JSON body `{ "token": "..." }`
+- `DELETE /api/v1/auth/token`: clear cached auth token
+- `GET /api/v1/jobs?limit=100`: list submitted jobs
+- `POST /api/v1/workflows/:workflow`: submit a validated workflow payload without raw CLI options
+- `GET /api/v1/jobs/:jobId`: fetch job snapshot, stages, work items, and status events
+- `POST /api/v1/jobs/:jobId/cancel`: cancel a queued or running job
+- `GET /api/v1/logs?...`: query centralized logs
+
+The API only handles HTTP and control-plane mutations. Start workers and
+librarians as separate processes so each runtime stays focused on one
+responsibility. 
+
+Example separate-process setup (run each command in its own terminal with the same `POSTGRES_URL` and `MQTT_URL` values):
+
+```bash
+npm run dev:api -- --host 127.0.0.1 --port 3000 --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+npm run dev:worker -- --role auth --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+npm run dev:worker -- --role metadata --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+npm run dev:worker -- --role asset --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+npm run dev:worker -- --role conversion --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+npm run dev:librarian -- --workspace <workspaceId> --browser http://localhost:9222 --database-type postgres --postgres-url "$POSTGRES_URL" --mqtt-url "$MQTT_URL"
+```
+
+For code-based callers, a small typed client is available in
+[`src/http-api-client.ts`](src/http-api-client.ts).
+
+The dashboard-oriented adapter in
+[`src/http-api-dashboard.ts`](src/http-api-dashboard.ts) wraps the client
+with workflow-specific submit helpers plus display-friendly job and log view
+models.
+
+There is also a small CLI utility layer on top of that client:
+
+```bash
+npm run dev:operator -- api-health --api-url http://127.0.0.1:3000
+npm run dev:operator -- api-submit process --payload ./process-workflow.json --api-url http://127.0.0.1:3000
+npm run dev:operator -- job-status <jobId> --api-url http://127.0.0.1:3000
+```
+
+Preferred workflow submission example:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/v1/workflows/process \
+  -H 'content-type: application/json' \
+  -d '{
+    "formats": ["flac", "mp3"],
+    "bitrateKbps": 320,
+    "embedImages": true,
+    "embedLyrics": true
+  }'
+```
+
+Server-owned settings such as filesystem roots and metadata store configuration are not accepted in workflow requests. Set `--output`, `--library`, and metadata store options on `serve-api`. Workers must have access to the same asset paths. The API does not execute queued work by itself.
 
 ### GLOBAL OPTIONS
 
@@ -116,7 +261,7 @@ Commands that access Suno need one of these authentication methods:
 
 ### TOKEN CACHE
 
-By default, any token supplied with `--token` or captured with `--browser` is saved in the local cache at `~/.suno-export/cache.json`. On later runs, commands that access Suno try the cached token first. If Suno rejects it with `401` or `403`, the CLI falls back to the auth method you passed for that run.
+By default, any token supplied with `--token` or captured with `--browser` is saved in the local cache at `~/.suno-export/cache.json`. A configured `cacheDir` changes the cache location. On later runs, commands that access Suno try the cached token first. If Suno rejects it with `401` or `403`, the CLI falls back to the auth method you passed for that run.
 
 Use `--ignore-cached-token` when you want to skip the cached token and force the command to use `--token` or `--browser`.
 
@@ -222,74 +367,40 @@ Verification and troubleshooting:
 
 ### ORCHESTRATION RUNTIME
 
-Workflow commands now submit durable jobs before they execute work. By default,
-they still run locally in the current process, but they can also leave jobs
-queued for a separate orchestrator or worker process.
-
-Runtime options on workflow commands:
-
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--control-plane <backend>`: `local` or `postgres`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in the current
-  process.
+Workflow commands execute directly against the configured local target or HTTP
+API target. Use the API, worker, and librarian entrypoints when operating the
+separate runtime processes.
 
 Operational commands:
 
-- `run-orchestrator`: poll for queued work and execute available stages.
 - `run-worker --role <role>`: execute only one worker role.
+- `run-librarian --workspace <id>`: synchronize one pinned workspace.
+- `serve-api`: run the HTTP API server.
 - `job-status <jobId>`: show the current durable job state.
 - `watch-job <jobId>`: watch a job until completion.
 - `logs`: query centralized orchestration logs.
 
-Local queued example:
+Example API health check:
 
 ```bash
-suno-export sync \
-  --runtime-mode distributed \
-  --submit-only \
-  --browser http://localhost:9222 \
-  --output ./downloads
-
-suno-export run-orchestrator
+suno-export api-health --api-url http://127.0.0.1:3000
 ```
 
-The current shared local control plane lives under `~/.suno-export/orchestration`
-and can be overridden with `SUNO_EXPORT_CONTROL_PLANE_DIR`.
-
-For a Postgres-backed control plane, pass `--control-plane postgres` and provide
-`--postgres-url <url>`, or set `SUNO_EXPORT_CONTROL_PLANE_POSTGRES_URL`.
+For the runtime process options, use `suno-export serve-api --help`,
+`suno-export run-worker --help`, and `suno-export run-librarian --help`.
 
 ### METADATA STORAGE
 
-The authoritative combined song metadata lives in a database. SQLite remains the default and is created at:
+Local `target.localRoot` workflows use `songs_metadata.json` as their metadata store. Downloads create or update it under the download root; `process` reads metadata from the input root. 
 
-```text
-data/suno-export.sqlite
-```
+Runtime metadata storage and standalone database utilities support SQLite and Postgres. Outside containers, the default SQLite path is `data/suno-export.sqlite`. Use `--database <path>` to override it, or `--database-type postgres --postgres-url <url>` for Postgres. `SUNO_EXPORT_POSTGRES_URL` is also supported for metadata storage. Distributed workflow state uses Postgres independently of the metadata backend.
 
-Use `--database <path>` on commands that read or write library metadata to store SQLite data somewhere else. To use Postgres instead, pass `--database-type postgres` with `--postgres-url <url>`, or set `SUNO_EXPORT_POSTGRES_URL`.
+For database import/export, run these with a config that does not select `target.localRoot`:
 
 ```bash
-suno-export process -i ./downloads -o ./library \
-  --database-type postgres \
-  --postgres-url postgres://user:password@localhost:5432/suno_export
+suno-export import-metadata-json --input ./downloads/songs_metadata.json --database ./data/suno-export.sqlite
+suno-export export-metadata-json --output ./metadata-export.json --database ./data/suno-export.sqlite
 ```
-
-Both database backends use the same normalized schema: primary song fields live in `songs`, repeated values live in child tables such as `song_tags`, `song_negative_tags`, and `song_mashup_sources`, loaded Suno projects/workspaces are upserted into `workspaces`, and song-to-workspace membership lives in `song_workspaces`. Only the nested Suno API payload is kept as JSON in `raw_api_response_json`.
-
-Import an existing current-format JSON file into the selected database:
-
-```bash
-suno-export import-metadata-json --input ./downloads/songs_metadata.json
-```
-
-Export the selected database back to the current JSON format:
-
-```bash
-suno-export export-metadata-json --output ./downloads/songs_metadata.json
-```
-
-Workflow commands also accept `--import-metadata-json <path>` before running and `--export-metadata-json <path>` after running. `--metadata-file` is retained as a legacy JSON export path used with `--copy-songs-metadata-to-output`; it is no longer the authoritative metadata store.
 
 #### `clear-auth-token`
 
@@ -301,413 +412,95 @@ suno-export clear-auth-token
 
 This command removes only the auth token from `~/.suno-export/cache.json`; it does not clear cached tracks, metadata, or the stored device ID.
 
-#### `import-metadata-json`
+#### `capture-auth-token`
 
-Import an existing current-format metadata JSON array into the metadata database.
+Capture a fresh Suno bearer token locally for pasting into the dashboard or API.
 
 ```text
-suno-export import-metadata-json --input <path> [--database-type sqlite|postgres] [--database <path>] [--postgres-url <url>]
+suno-export capture-auth-token --browser http://localhost:9222
+```
+
+To capture and immediately push the token into the API:
+
+```text
+suno-export capture-auth-token --browser http://localhost:9222 --send-to-api --api-url http://127.0.0.1:3000
 ```
 
 Options:
 
-- `-i, --input <path>`: current-format metadata JSON file. Required.
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
+- `-b, --browser [url]`: connect to an existing Chrome debug session. Required for token capture.
+- `--browser-profile <dir>`: Chrome user data directory for launched browser.
+- `--profile-directory <name>`: Chrome profile directory inside `--browser-profile`.
+- `--save-local`: save the captured token to the local cache after printing it.
+- `--send-to-api`: post the captured token to the configured HTTP API after saving it locally.
+- `--api-url <url>`: override the HTTP API base URL used by `--send-to-api`. You can also set `target.apiUrl` in the config file instead.
+- `--json`: emit `{ "token": "..." }` JSON instead of plain text output.
 
-#### `export-metadata-json`
+Config example:
 
-Export the metadata database to the current `songs_metadata.json` array format.
-
-```text
-suno-export export-metadata-json --output <path> [--database-type sqlite|postgres] [--database <path>] [--postgres-url <url>]
+```json
+{
+  "target": {
+    "apiUrl": "http://127.0.0.1:3000"
+  },
+  "commands": {
+    "capture-auth-token": {
+      "sendToApi": true
+    }
+  }
+}
 ```
 
-Options:
+### WORKFLOW AND UTILITY COMMANDS
 
-- `-o, --output <path>`: output metadata JSON file. Required.
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
+Use `suno-export <command> --help` for the current public options. Config keys use camelCase, such as `processFormats` and `processBitrate`; some compatibility flags are hidden from help.
 
-#### `download`
+| Command | Current behavior |
+| --- | --- |
+| `download` | Download MP3 or WAV (default WAV) to a local target, or submit an API job. Supports workspace and creation-date filters. |
+| `process` | Convert and embed metadata locally, or submit an API job. Local `--input` and `--output` default to `localRoot`. |
+| `sync` | Download and process locally, or submit an API job. Local `--library` defaults to the download output root. |
+| `download-images` | API-only artwork workflow. Requires `--list`, `--fetch-image-list`, or `--fetch-missing`. |
+| `fetch-metadata` | API-only metadata workflow. Select by `--ids` or workspace/date filters; these selection modes cannot be combined. |
+| `refresh` | Submit an API job to refresh cached tracks across workspaces. |
+| `list`, `workspaces`, `metadata <trackId>` | Query Suno directly using cached, token, or browser authentication. |
+| `import-metadata-json`, `export-metadata-json` | Import/export the compatible metadata JSON array using the selected metadata store. |
+| `job-status <jobId>`, `watch-job <jobId>` | Inspect an API job or watch until it completes, fails, or is cancelled. |
+| `logs` | Query API-backed centralized logs, with job, role, level, and other filters. |
+| `api-health` | Check API liveness. |
+| `api-submit <workflow>` | Submit a typed workflow payload using `--payload <file>` (or `-` for stdin). |
+| `api-cancel-job <jobId>` | Request cancellation, optionally with `--reason`. |
 
-Download tracks from Suno.
+API-only commands require `target.apiUrl` or `--api-url`; a local target does not execute them locally.
 
-```text
-suno-export download [options]
+Local examples using the config above:
+
+```bash
+suno-export download --workspace <workspaceId> --format wav
+suno-export process --input ./downloads --output ./library
+suno-export sync --workspace <workspaceId> --library ./library
 ```
 
-Options:
+API inspection examples:
 
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `-w, --workspace <id>`: only process the given workspace ID.
-- `-f, --format <format>`: audio download format, `mp3` or `wav`. Default: `wav`.
-- `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
-- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
-- `--export-metadata-json <path>`: export the database to current-format JSON after running.
-- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
-- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output on completion.
-- `--no-metadata`: skip metadata sidecar file behavior.
-- `--created-after <date>`: include only tracks created on/after this date.
-- `--created-before <date>`: include only tracks created on/before this date.
-- `--delay <ms>`: delay between downloads in milliseconds. Default: `1000`.
-- `--flush-cache`: clear local cache before running.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-#### `sync`
-
-Run download and processing in one workflow.
-
-```text
-suno-export sync [options]
+```bash
+suno-export job-status <jobId> --api-url http://127.0.0.1:3000
+suno-export watch-job <jobId> --api-url http://127.0.0.1:3000
+suno-export logs --job-id <jobId> --api-url http://127.0.0.1:3000
 ```
 
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `-w, --workspace <id>`: only process the given workspace ID.
-- `-f, --format <format>`: download format, `mp3` or `wav`. Default: `wav`.
-- `-o, --output <dir>`: download/output root for source files. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
-- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
-- `--export-metadata-json <path>`: export the database to current-format JSON after running.
-- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
-- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to conversion output on completion.
-- `--created-after <date>`: include only tracks created on/after this date.
-- `--created-before <date>`: include only tracks created on/before this date.
-- `--delay <ms>`: delay between downloads in milliseconds. Default: `1000`.
-- `--flush-cache`: clear local cache before running.
-- `--library <dir>`: final converted library output. Default: same as `--output`.
-- `--process-formats <formats>`: output formats CSV for processor. Default: `flac,mp3,alac`.
-- `--process-bitrate <kbps>`: MP3 bitrate for processor. Default: `320`.
-- `--process-concurrency <n>`: legacy compatibility flag for processing worker
-  concurrency. Default: `4`.
-- `--process-update-concurrency <n>`: legacy compatibility flag for
-  conversion/update concurrency. Default: `8`.
-- `--process-existing-metadata`: re-process all existing metadata after the download phase. By default, sync only processes tracks downloaded during the current run.
-- `--no-images`: skip image embedding during conversion.
-- `--no-lyrics`: skip lyric embedding during conversion.
-- `--exit-on-error`: stop on first conversion error.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-Sync behavior notes:
-
-- By default, conversion is queued after each successful download and is limited to tracks downloaded during the current sync run.
-- With `--process-existing-metadata`, sync waits for the download phase to finish and then runs one full metadata processing pass.
-
-#### `process`
-
-Run audio conversion and metadata embedding on an existing download-style input.
-
-```text
-suno-export process -i <path> -o <path> [options]
-```
-
-Options:
-
-- `-i, --input <path>`: input root directory. Required.
-- `-o, --output <path>`: output root directory. Required.
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
-- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
-- `--export-metadata-json <path>`: export the database to current-format JSON after running.
-- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
-- `--copy-songs-metadata-to-output`: export finalized `songs_metadata.json` to output root on completion.
-- `--process-formats <formats>`: output formats CSV. Default: `flac,mp3,alac`.
-- `--process-bitrate <kbps>`: MP3 bitrate. Default: `320`.
-- `--process-concurrency <n>`: legacy compatibility flag for processing worker
-  concurrency. Default: `4`.
-- `--process-update-concurrency <n>`: legacy compatibility flag for
-  conversion/update concurrency. Default: `8`.
-- `--no-images`: skip image embedding.
-- `--no-lyrics`: skip lyric embedding.
-- `--exit-on-error`: exit on processing error.
-- `--reconvert-before <iso>`: only reconvert tracks at or before the given timestamp.
-- `--reconvert-after <iso>`: only reconvert tracks at or after the given timestamp.
-- `--reconvert-missing`: only produce missing formats.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-#### `download-images`
-
-Download artwork from a provided list, or discover missing images from metadata.
-
-```text
-suno-export download-images [options]
-```
-
-Options:
-
-- `-l, --list <file>`: JSON file with objects containing `clipId` and `thumbnail`.
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `-o, --output <dir>`: output root directory. Default: OS Downloads directory + `/suno-export` (for example, `~/Downloads/suno-export`).
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`. Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default: `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted, `SUNO_EXPORT_POSTGRES_URL` is used.
-- `--import-metadata-json <path>`: import current-format metadata JSON into the database before running.
-- `--export-metadata-json <path>`: export the database to current-format JSON after running.
-- `--metadata-file <path>`: legacy JSON export path used by `--copy-songs-metadata-to-output`.
-- `--copy-songs-metadata-to-output`: on completion, export finalized `songs_metadata.json` to output root.
-- `--fetch-image-list <file>`: discover missing images and write JSON list to file.
-- `--fetch-missing`: discover missing images and download them directly.
-- `--delay <ms>`: delay between image downloads in milliseconds. Default: `1000`.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-Notes:
-
-- You must pass at least one of: `--list`, `--fetch-image-list`, `--fetch-missing`.
-- `--fetch-image-list` and `--fetch-missing` use `--output` as the discovery root for images and the configured metadata database.
-
-#### `fetch-metadata`
-
-Fetch and cache metadata for all tracks or a selected set of track IDs.
-
-```text
-suno-export fetch-metadata [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint
-  (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or
-  `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `--profile-directory <name>`: Chrome profile directory inside
-  `--browser-profile`.
-- `--ids <ids>`: comma-separated track IDs to fetch.
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`.
-  Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default:
-  `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted,
-  `SUNO_EXPORT_POSTGRES_URL` is used.
-- `-w, --workspace <id>`: only process the given workspace ID.
-- `--created-after <date>`: include only tracks created on/after this date.
-- `--created-before <date>`: include only tracks created on/before this date.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-#### `refresh`
-
-Refresh cached tracks for all workspaces.
-
-```text
-suno-export refresh [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint
-  (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or
-  `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `--profile-directory <name>`: Chrome profile directory inside
-  `--browser-profile`.
-- `--database-type <type>`: metadata database backend, `sqlite` or `postgres`.
-  Default: `sqlite`.
-- `--database <path>`: SQLite metadata database path. Default:
-  `data/suno-export.sqlite`.
-- `--postgres-url <url>`: Postgres connection URL. If omitted,
-  `SUNO_EXPORT_POSTGRES_URL` is used.
-- `--runtime-mode <mode>`: `local` or `distributed`. Default: `local`.
-- `--submit-only`: submit the job and exit without executing it in this
-  process.
-
-#### `run-orchestrator`
-
-Run the local control-plane orchestrator loop.
-
-```text
-suno-export run-orchestrator [options]
-```
-
-Options:
-
-- `--once`: process at most one polling cycle and exit.
-- `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
-
-#### `run-worker`
-
-Run a worker loop for a specific role.
-
-```text
-suno-export run-worker --role <role> [options]
-```
-
-Options:
-
-- `--role <role>`: `auth`, `metadata`, `asset`, `processing`, or `conversion`.
-- `--once`: process at most one work item and exit.
-- `--poll-interval <ms>`: polling interval in milliseconds. Default: `500`.
-
-#### `job-status`
-
-Show local orchestrator job status.
-
-```text
-suno-export job-status <jobId> [options]
-```
-
-Options:
-
-- `--json`: emit JSON output.
-
-#### `watch-job`
-
-Watch local orchestrator job status until completion.
-
-```text
-suno-export watch-job <jobId> [options]
-```
-
-Options:
-
-- `--json`: emit JSON output on each refresh.
-- `--interval <ms>`: polling interval in milliseconds. Default: `1000`.
-
-#### `logs`
-
-Query centralized orchestration logs.
-
-```text
-suno-export logs [options]
-```
-
-Options:
-
-- `--job-id <jobId>`: filter by job id.
-- `--stage-id <stageId>`: filter by stage id.
-- `--work-item-id <workItemId>`: filter by work item id.
-- `--workflow-type <workflow>`: filter by workflow type.
-- `--worker-instance-id <workerInstanceId>`: filter by worker instance id.
-- `--role <role>`: filter by worker role.
-- `--clip-id <clipId>`: filter by clip id.
-- `--level <level>`: filter by log level.
-- `--start-time <iso>`: only include logs on or after the given timestamp.
-- `--end-time <iso>`: only include logs on or before the given timestamp.
-- `--limit <n>`: maximum logs to return. Default: `100`.
-- `--json`: emit JSON output.
-
-#### `list`
-
-List tracks.
-
-```text
-suno-export list [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `-w, --workspace <id>`: only list this workspace ID.
-- `--json`: emit JSON output.
-
-#### `workspaces`
-
-List workspaces.
-
-```text
-suno-export workspaces [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `--json`: emit JSON output.
-
-#### `metadata`
-
-Fetch metadata for one track.
-
-```text
-suno-export metadata <trackId> [options]
-```
-
-Arguments:
-
-- `<trackId>`: Suno clip/track ID. Required.
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-
-#### `fetch-metadata`
-
-Fetch and cache metadata for tracks.
-
-```text
-suno-export fetch-metadata [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
-- `--ids <ids>`: comma-separated list of track IDs to fetch.
-- `-w, --workspace <id>`: only process this workspace ID.
-- `--created-after <date>`: include only tracks created on/after this date.
-- `--created-before <date>`: include only tracks created on/before this date.
-
-Selection modes:
-
-- `--ids` mode: fetch only IDs explicitly provided.
-- workspace/date mode: fetch tracks discovered from workspace scope, optionally filtered by creation date.
-- `--ids` cannot be combined with `--workspace`, `--created-after`, or `--created-before`.
-
-#### `refresh`
-
-Refresh cached tracks for all workspaces.
-
-```text
-suno-export refresh [options]
-```
-
-Options:
-
-- `-t, --token <token>`: authentication token.
-- `-b, --browser [url]`: connect to an existing Chrome DevTools endpoint (default: `http://localhost:9222`).
-- `--ignore-cached-token`: skip the cached auth token and use `--token` or `--browser`.
-- `--browser-profile <dir>`: Chrome user data directory for a launched browser.
+### RUNTIME ENTRYPOINTS
+
+| App | Development script | Built script |
+| --- | --- | --- |
+| Unified CLI | `npm run dev` | `npm start` |
+| Operator CLI | `npm run dev:operator` | `npm run start:operator` |
+| HTTP API/dashboard | `npm run dev:api` | `npm run start:api` |
+| Worker | `npm run dev:worker` | `npm run start:worker` |
+| Workspace librarian | `npm run dev:librarian` | `npm run start:librarian` |
+| Kubernetes operator | `npm run dev:k8s-operator` | `npm run start:k8s-operator` |
+
+Pass application arguments after `--`. Each worker owns one role: `auth`, `metadata`, `asset`, or `conversion`. Workers receive MQTT dispatches; `--poll-interval` is a deprecated compatibility flag. `run-librarian` handles one pinned workspace and supports `--once`, workspace allow/deny lists, and `--librarian-interval` (default six hours).
 
 ### DATE FILTER FORMAT
 
@@ -724,38 +517,148 @@ Date-only behavior:
 
 ### OUTPUT LAYOUT
 
-Download flow writes:
+Local downloads create assets as applicable under the selected root:
 
-- `mp3/`
-- `wav/`
-- `metadata/`
-- `images/`
-- `songs_metadata.json` only when exported with `--export-metadata-json` or `--copy-songs-metadata-to-output`
+```text
+downloads/
+  mp3/
+  wav/
+  metadata/
+  images/
+  songs_metadata.json
+```
 
-Process flow reads a download-style input root and writes converted output.
+Processing reads a download-style input root and writes converted files to the configured output. Default conversion formats are `flac,mp3,alac`, with MP3 bitrate `320` kbps. API/runtime workflows use their configured metadata store; JSON exports are separate from durable Postgres job state.
 
-### SONGS METADATA DATABASE LOCATION
+## Development and Validation
 
-- The authoritative metadata database defaults to SQLite at `data/suno-export.sqlite`.
-- Use `--database <path>` with `download`, `sync`, `process`, or `download-images` to override the SQLite database path.
-- Use `--database-type postgres --postgres-url <url>` with metadata-aware commands to use Postgres instead, or set `SUNO_EXPORT_POSTGRES_URL`.
-- Use `import-metadata-json` or `--import-metadata-json <path>` to migrate an existing `songs_metadata.json` file into the selected database.
-- Use `export-metadata-json` or `--export-metadata-json <path>` to write a compatibility JSON file matching the previous format.
-- If `--copy-songs-metadata-to-output` is set, a finalized JSON export is written to the output side only after completion, using `--metadata-file` when provided.
+```bash
+source ~/.nvm/nvm.sh
+nvm use
+npm run build
+npm start -- --help
+npm start -- download --help
+npm start -- process --help
+npm start -- sync --help
+npm test
+```
 
-### PROJECT STRUCTURE
+`npm run build` runs `npm install` followed by TypeScript compilation. `npm run compile` compiles existing dependencies without reinstalling. Output goes to `dist/` (CommonJS, ES2020).
 
-- `src/index.ts`: CLI setup, arg parsing, and flow dispatch.
-- `src/cli-actions.ts`: CLI action implementations.
-- `docs/cli-program-flow.md`: CLI flow diagrams and module/method ownership notes.
-- `src/client.ts`: Suno API client + download helpers.
-- `src/auth.ts`: browser token extraction (Puppeteer).
-- `src/converter.ts`: converter entrypoint used by the CLI.
-- `src/metadata-store.ts`: SQLite/Postgres metadata stores plus JSON import/export helpers.
-- `src/library-processor.ts`: processing pipeline coordinator.
-- `src/audio-converter.ts`: audio conversion (ffmpeg).
-- `src/metadata-processor.ts`: metadata/tag embedding + sidecar writes.
-- `src/lib/metadata/normalize-metadata.ts`: metadata normalization/tag parsing.
-- `src/lib/interfaces/*.ts`: shared interface definitions.
-- `src/storage.ts`: local cache/device/auth storage.
-- `src/types.ts`: compatibility barrel for interfaces.
+See [Runtime Smoke Test](docs/testing.md) for current runtime startup commands. Live workflow verification needs Postgres, MQTT, shared asset paths, and valid Suno authentication for downloads.
+
+## Deployment and Operations
+
+The root `Dockerfile` builds a shared runtime image; `SUNO_EXPORT_APP` selects `cli`, `api`, `operator-cli`, `k8s-operator`, `worker`, or `librarian`. The [container workflow](.github/workflows/container-image.yml) builds on pull requests and publishes on main-branch pushes and version tags.
+
+- [Kubernetes Operator](docs/kubernetes-operator.md): custom resource, API/worker deployments, and workspace librarian jobs.
+- [Local K8s Bootstrap](docs/k8s-local-bootstrap.md): generate local manifests from tracked examples and a gitignored environment file.
+- [ELK Logging](docs/elk-logging.md): structured runtime logs, secret redaction, Filebeat collection, retention, and the repeatable `scripts/elk-smoke-test.sh` check.
+
+### Kubernetes Setup
+
+The operator reconciles a namespaced `SunoExportCluster` into an API Service/Deployment, one Deployment per worker role, and workspace librarian CronJobs or one-off Jobs. Postgres holds durable state and MQTT dispatches work; both services must be provided separately and reachable from the pods.
+
+Before deploying, have:
+
+- A Kubernetes context selected in `kubectl`, with permission to install the CRD and RBAC resources.
+- A runtime image accessible to the cluster. Set `IMAGE_REPO` and `IMAGE_TAG` to your published image when generating manifests.
+- Storage that supports the shared volume: the supplied PVC requests **100 GiB with ReadWriteMany**. Adjust the generated PVC for your storage class, or set `spec.sharedStorage.existingClaim` to a suitable existing claim and remove the generated PVC resource from the local kustomization.
+- Postgres and MQTT connection URLs. Optional ELK collection also requires an external Elasticsearch endpoint and the credentials in the environment template.
+
+The examples below use namespace `suno-export` and cluster name `main`. Substitute your values if you set `NAMESPACE` or `CLUSTER_NAME`.
+
+### Generate and Deploy
+
+Create the local configuration file if it does not already exist:
+
+```bash
+cp -n scripts/pre-conf-bootstrap-k8s-local.env.example scripts/pre-conf-bootstrap-k8s-local.env
+```
+
+Edit that file with your `RUNTIME_POSTGRES_URL` and `RUNTIME_MQTT_URL`, plus any image or namespace overrides. Keep real credentials in this gitignored file and the generated `k8s/local` tree.
+
+Generate the application manifests without applying them:
+
+```bash
+scripts/pre-conf-bootstrap-k8s-local.sh --skip-elk --no-run
+```
+
+`--no-run` still writes local files but does not execute `kubectl`. Without it, the bootstrap also applies the manifests. Existing generated files are preserved; use `--force` when deliberately regenerating them, including after changing credentials or image settings.
+
+Review `k8s/local/shared-storage-pvc.yaml`, `k8s/local/operator-deployment.yaml`, and `k8s/local/cluster/sunoexportcluster.yaml`. The custom resource controls worker replicas, shared paths, image settings, and librarian schedules. Render the manifests to check them, then apply the base resources before the custom resource:
+
+```bash
+kubectl kustomize k8s/local > /dev/null
+kubectl kustomize k8s/local/cluster > /dev/null
+kubectl apply -k k8s/local
+kubectl wait --for=condition=Established crd/sunoexportclusters.suno.mikegales.dev --timeout=60s
+kubectl apply -k k8s/local/cluster
+kubectl -n suno-export rollout status deployment/suno-export-k8s-operator --timeout=180s
+kubectl -n suno-export get sunoexportclusters,pods,pvc
+```
+
+Once the operator has created `main-api`, check its rollout and open a local connection:
+
+```bash
+kubectl -n suno-export rollout status deployment/main-api --timeout=180s
+kubectl -n suno-export port-forward service/main-api 3000:3000
+```
+
+Leave port-forwarding running and open `http://127.0.0.1:3000/` for the dashboard. From another terminal, verify the API and send a token captured from your local logged-in Chrome session:
+
+```bash
+suno-export api-health --api-url http://127.0.0.1:3000
+suno-export capture-auth-token --browser http://localhost:9222 --send-to-api --api-url http://127.0.0.1:3000
+```
+
+Browser authentication runs on the operator's machine. Submit workflows through `target.apiUrl` or `--api-url`; output is written to the shared cluster volume. The example mount is `/var/lib/suno-export`, with `downloads/`, `library/`, and `cache/` beneath it.
+
+### Librarians and Scaling
+
+Edit `spec.workers.<role>.replicas` in the local custom resource to scale `auth`, `metadata`, `asset`, or `conversion` workers, then reapply `k8s/local/cluster`. The example starts one worker for each role except conversion, which starts two.
+
+Dynamic librarian discovery uses workspaces already present in the Postgres metadata store. Each discovered workspace gets a CronJob (every six hours by default) running the librarian with `--once`. Use `spec.librarians.workspaces` to configure static workspace IDs and schedules. Pending manual sync requests create one-off Jobs and temporarily suspend the corresponding CronJob.
+
+### Logging and Troubleshooting
+
+```bash
+kubectl -n suno-export logs deployment/suno-export-k8s-operator --tail=100
+kubectl -n suno-export logs deployment/main-api --tail=100
+kubectl -n suno-export logs deployment/main-worker-asset --tail=100
+kubectl -n suno-export get cronjobs,jobs
+kubectl -n suno-export get events --sort-by=.metadata.creationTimestamp
+```
+
+For a pending PVC, check storage class and ReadWriteMany support. For image pull failures, check the configured image tag and registry access. For queued jobs, check that all required worker roles are running, Postgres/MQTT are reachable, and the API has a valid Suno token. API liveness alone does not verify job completion.
+
+To enable Filebeat, fill in the `ELK_*` settings in the local environment file, regenerate without `--skip-elk`, and apply the logging bundle:
+
+```bash
+scripts/pre-conf-bootstrap-k8s-local.sh --no-run
+kubectl -n suno-export delete job/suno-export-filebeat-provisioner --ignore-not-found
+kubectl apply -k k8s/local/observability/elk
+```
+
+The fixed-name provisioner Job is replaced so provisioning runs again. It configures the Elasticsearch writer account, mappings, rollover alias, and 30-day retention policy. Use `--force` during generation if existing local credentials or settings need updating.
+
+For a repeatable live check, run `scripts/elk-smoke-test.sh`. It generates/applies manifests, verifies that a tagged API request reaches Elasticsearch as a structured event, and leaves the deployment running. See [ELK Logging](docs/elk-logging.md) for details.
+
+Full removal is available through `scripts/remove-k8s-resources.sh`. This removes namespace resources, including PVCs, and cluster RBAC/CRD resources; storage loss depends on the volume reclaim policy. Review its `--help` before teardown.
+
+Older design and migration documents may retain historical runtime examples. Use the current CLI help and runtime smoke-test instructions when launching services.
+
+## Project Structure
+
+- `src/index.ts`, `src/cli-programs.ts`, `src/cli-actions.ts`: CLI entrypoint, command registration, and workflow dispatch.
+- `src/cli-config.ts`, `src/workflow-target-config.ts`: config merging and local/API target resolution.
+- `src/apps/`: separate API, operator CLI, worker, librarian, and Kubernetes operator entrypoints.
+- `src/client.ts`, `src/lib/auth/auth.ts`: Suno API/download client and browser token capture.
+- `src/services/`: authentication, acquisition, planning, conversion, and librarian services.
+- `src/metadata-store.ts`: file, SQLite, and Postgres metadata stores.
+- `src/library-processor.ts`, `src/audio-converter.ts`, `src/metadata-processor.ts`: conversion and metadata pipeline.
+- `src/http-api*.ts`, `src/http-dashboard.ts`: HTTP API, typed client, and dashboard.
+- `src/orchestration/`, `src/core/`: durable control plane and runtime contracts.
+- `src/logging/`: centralized logging and secret sanitization.
+- `src/k8s/`, `k8s/`, `scripts/`: operator implementation, manifests, and operational helpers.
+- `test/`: automated regression and integration coverage.

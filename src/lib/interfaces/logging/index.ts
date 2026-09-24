@@ -1,3 +1,1 @@
-export * from "./ILogEntry";
-export * from "./ILogQuery";
-
+export * from "../../../core/contracts/logging";

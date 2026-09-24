@@ -1,0 +1,47 @@
+// STEP 1: Define the ILM Policy (Hot phase + 30-day Delete phase)
+PUT _ilm/policy/daily_rollover_policy
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": {
+            "max_age": "1d"
+          }
+        }
+      },
+      "delete": {
+        "min_age": "30d",
+        "actions": {
+          "delete": {}
+        }
+      }
+    }
+  }
+}
+
+
+// STEP 2: Update the Index Template to match the simplified naming convention
+PUT _index_template/daily_logs_template
+{
+  "index_patterns": ["suno-export-logs-*"],
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "daily_rollover_policy",
+      "index.lifecycle.rollover_alias": "suno-export-logs"
+    }
+  }
+}
+
+
+// STEP 3: Bootstrap the first index with a pure trailing suffix
+// This creates: suno-export-logs-000001
+// Subsequent daily rollovers will create: suno-export-logs-000002, suno-export-logs-000003, etc.
+PUT suno-export-logs-000001
+{
+  "aliases": {
+    "suno-export-logs": {
+      "is_write_index": true
+    }
+  }
+}

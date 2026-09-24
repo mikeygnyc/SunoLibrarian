@@ -1,4 +1,4 @@
-import type { IOrchestrationRepository, IRuntimeConfig, IWorkerLease, OrchestrationStageType, WorkerRole } from "../lib/interfaces";
+import type { IOrchestrationRepository, IRuntimeConfig, IWorkerLease, OrchestrationStageType, WorkerRole } from "../core/contracts";
 
 type StageLeasePlan = {
   resourceKey: string;
@@ -27,11 +27,6 @@ export class LeaseManager {
           resourceKey: "asset-acquisition-global",
           maxActive: this.runtimeConfig.concurrency.assetAcquisitionMaxActive,
           conflictResourceKeys: ["acquisition-global"],
-        };
-      case "processing":
-        return {
-          resourceKey: "processing-global",
-          maxActive: this.runtimeConfig.concurrency.processingSongConcurrency,
         };
       case "conversion":
         return {

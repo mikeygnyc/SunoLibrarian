@@ -13,6 +13,11 @@ export interface IClaimedWorkItem {
   workItem: IWorkItem;
 }
 
+export interface IRuntimeStateCleanupResult {
+  expiredLeaseCount: number;
+  removedWorkerInstanceCount: number;
+}
+
 export interface IOrchestrationRepository {
   initialize(): Promise<void>;
   close(): Promise<void>;
@@ -23,6 +28,14 @@ export interface IOrchestrationRepository {
     jobId: string,
     status: OrchestrationJobStatus,
     details?: Partial<Pick<IOrchestrationJob, "startedAt" | "completedAt" | "errorCode" | "errorMessage">>,
+  ): Promise<void>;
+  updateJobPayload(
+    jobId: string,
+    payload: IOrchestrationJob["payload"],
+  ): Promise<void>;
+  cancelJob(
+    jobId: string,
+    details?: Partial<Pick<IOrchestrationJob, "completedAt" | "errorCode" | "errorMessage">>,
   ): Promise<void>;
   createStage(stage: IOrchestrationStage): Promise<IOrchestrationStage>;
   listStages(jobId: string): Promise<IOrchestrationStage[]>;
@@ -57,6 +70,10 @@ export interface IOrchestrationRepository {
   }): Promise<IWorkerLease | null>;
   appendStatusEvent(event: IStatusEvent): Promise<void>;
   listStatusEvents(jobId: string): Promise<IStatusEvent[]>;
+  cleanupStaleRuntimeState(staleBefore: Date): Promise<IRuntimeStateCleanupResult>;
+  getRuntimeSetting(key: string): Promise<unknown | undefined>;
+  setRuntimeSetting(key: string, value: unknown): Promise<void>;
+  deleteRuntimeSetting(key: string): Promise<void>;
 }
 
 export interface ICentralLogRepository {

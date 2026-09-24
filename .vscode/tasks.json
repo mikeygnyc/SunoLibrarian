@@ -3,23 +3,20 @@
   "tasks": [
     {
       "type": "shell",
-      "command": "source ~/.nvm/nvm.sh && nvm use && npm run build",
+      "command": "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run compile",
       "options": {
         "cwd": "${workspaceFolder}",
         "shell": {
           "executable": "/bin/zsh",
           "args": [
             "-l",
-            "-i",
             "-c"
           ]
         }
       },
-      "problemMatcher": [
-        "$tsc"
-      ],
+      "problemMatcher": [],
       "group": "build",
-      "label": "tsc: build - tsconfig.json"
+      "label": "compile via nvm"
     }
   ]
 }
