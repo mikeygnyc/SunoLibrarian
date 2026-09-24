@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import { runApiJobStatusFlow, runApiSubmitWorkflowFlow } from "../src/cli-actions";
+import { runApiSubmitWorkflowFlow, runJobStatusFlow } from "../src/cli-actions";
 
 test("runApiSubmitWorkflowFlow reads payload JSON and submits the selected workflow", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "suno-export-api-cli-"));
@@ -45,7 +45,7 @@ test("runApiSubmitWorkflowFlow reads payload JSON and submits the selected workf
   assert.ok(capturedLogs.some((line) => line.includes("Job submitted: job-123")));
 });
 
-test("runApiJobStatusFlow prints formatted remote job status", async () => {
+test("runJobStatusFlow prints formatted remote job status", async () => {
   const capturedLogs: string[] = [];
   const originalLog = console.log;
   console.log = (...args: unknown[]) => {
@@ -53,7 +53,7 @@ test("runApiJobStatusFlow prints formatted remote job status", async () => {
   };
 
   try {
-    await runApiJobStatusFlow("job-77", {
+    await runJobStatusFlow("job-77", {
       __apiClient: {
         async getJob() {
           return {

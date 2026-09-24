@@ -306,8 +306,12 @@ spec:
               set -eu
 
               role_payload="\$(mktemp)"
+              reader_role_payload="\$(mktemp)"
               user_payload="\$(mktemp)"
-              trap 'rm -f "\$role_payload" "\$user_payload"' EXIT
+              ilm_payload="\$(mktemp)"
+              template_payload="\$(mktemp)"
+              initial_index_payload="\$(mktemp)"
+              trap 'rm -f "\$role_payload" "\$reader_role_payload" "\$user_payload" "\$ilm_payload" "\$template_payload" "\$initial_index_payload"' EXIT
 
               curl_args="--fail --silent --show-error"
               if [ -f /etc/elasticsearch-bootstrap/elasticsearch-ca.crt ]; then
@@ -326,6 +330,83 @@ spec:
               }
               ROLE_EOF
 
+              cat >"\$reader_role_payload" <<READER_ROLE_EOF
+              {
+                "cluster": ["monitor"],
+                "indices": [
+                  {
+                    "names": ["suno-export-*"],
+                    "privileges": ["read", "view_index_metadata"]
+                  }
+                ]
+              }
+              READER_ROLE_EOF
+
+              cat >"\$ilm_payload" <<ILM_EOF
+              {
+                "policy": {
+                  "phases": {
+                    "hot": {
+                      "actions": {
+                        "rollover": {
+                          "max_age": "1d",
+                          "max_primary_shard_size": "25gb"
+                        }
+                      }
+                    },
+                    "delete": {
+                      "min_age": "30d",
+                      "actions": { "delete": {} }
+                    }
+                  }
+                }
+              }
+              ILM_EOF
+
+              cat >"\$template_payload" <<TEMPLATE_EOF
+              {
+                "index_patterns": ["suno-export-logs-*"],
+                "priority": 200,
+                "template": {
+                  "settings": {
+                    "index.lifecycle.name": "suno-export-logs-30d",
+                    "index.lifecycle.rollover_alias": "suno-export-logs",
+                    "number_of_shards": 1
+                  },
+                  "mappings": {
+                    "dynamic": true,
+                    "properties": {
+                      "@timestamp": { "type": "date" },
+                      "timestamp": { "type": "date" },
+                      "level": { "type": "keyword" },
+                      "service": { "type": "keyword" },
+                      "subsystem": { "type": "keyword" },
+                      "role": { "type": "keyword" },
+                      "workspaceId": { "type": "keyword" },
+                      "jobId": { "type": "keyword" },
+                      "stageId": { "type": "keyword" },
+                      "workItemId": { "type": "keyword" },
+                      "workerInstanceId": { "type": "keyword" },
+                      "workflowType": { "type": "keyword" },
+                      "clipId": { "type": "keyword" },
+                      "tags": { "type": "keyword" },
+                      "stack": { "type": "keyword" },
+                      "environment": { "type": "keyword" },
+                      "message": { "type": "match_only_text" }
+                    }
+                  }
+                }
+              }
+              TEMPLATE_EOF
+
+              cat >"\$initial_index_payload" <<INITIAL_INDEX_EOF
+              {
+                "aliases": {
+                  "suno-export-logs": { "is_write_index": true }
+                }
+              }
+              INITIAL_INDEX_EOF
+
               cat >"\$user_payload" <<USER_EOF
               {
                 "password": "\${ELASTICSEARCH_PASSWORD}",
@@ -338,6 +419,34 @@ spec:
                 -H "Content-Type: application/json" \\
                 -X POST "\${ELASTICSEARCH_HOSTS}/_security/role/suno_export_filebeat_writer" \\
                 --data-binary @"\$role_payload"
+
+              curl \$curl_args \\
+                -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
+                -H "Content-Type: application/json" \\
+                -X POST "\${ELASTICSEARCH_HOSTS}/_security/role/suno_export_log_reader" \\
+                --data-binary @"\$reader_role_payload"
+
+              curl \$curl_args \\
+                -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
+                -H "Content-Type: application/json" \\
+                -X PUT "\${ELASTICSEARCH_HOSTS}/_ilm/policy/suno-export-logs-30d" \\
+                --data-binary @"\$ilm_payload"
+
+              curl \$curl_args \\
+                -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
+                -H "Content-Type: application/json" \\
+                -X PUT "\${ELASTICSEARCH_HOSTS}/_index_template/suno-export-logs" \\
+                --data-binary @"\$template_payload"
+
+              if ! curl \$curl_args \\
+                -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
+                -I "\${ELASTICSEARCH_HOSTS}/_alias/suno-export-logs" >/dev/null 2>&1; then
+                curl \$curl_args \\
+                  -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
+                  -H "Content-Type: application/json" \\
+                  -X PUT "\${ELASTICSEARCH_HOSTS}/suno-export-logs-000001" \\
+                  --data-binary @"\$initial_index_payload"
+              fi
 
               curl \$curl_args \\
                 -u "\${ELASTICSEARCH_ADMIN_USERNAME}:\${ELASTICSEARCH_ADMIN_PASSWORD}" \\
@@ -396,6 +505,10 @@ EOF
   kubectl apply -k "${local_root}"
   kubectl apply -k "${local_cluster_dir}"
   if [[ "$INCLUDE_ELK" == "1" ]]; then
+    # A completed Job will not rerun when its referenced credentials change.
+    # Delete the fixed-name provisioner before applying the bundle so every
+    # bootstrap re-provisions the Filebeat writer account with current values.
+    kubectl -n "$NAMESPACE" delete job/suno-export-filebeat-provisioner --ignore-not-found
     kubectl apply -k "${local_elk_dir}"
   fi
 }

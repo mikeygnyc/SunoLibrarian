@@ -1,4 +1,5 @@
 import * as util from "util";
+import { sanitizeLogData } from "./sanitize-log-data";
 
 type ConsoleMethodName = "log" | "info" | "warn" | "error" | "debug";
 
@@ -35,7 +36,7 @@ export function installStructuredConsoleBridge(
       workspaceId: options.workspaceId,
       pid: process.pid,
       tags: options.tags,
-      message: formatConsoleArgs(args),
+      message: formatConsoleArgs(sanitizeLogData(args)),
     };
     const line = JSON.stringify(payload);
     if (level === "warn" || level === "error") {

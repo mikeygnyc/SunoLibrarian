@@ -3,29 +3,7 @@ import test from "node:test";
 import { LibrarianService } from "../src/services/librarian-service";
 
 test("LibrarianService requires a pinned workspace for each cycle", async () => {
-  const service = new LibrarianService(
-    {
-      async getAuthenticatedClient() {
-        return {
-          async getWorkspaces() {
-            return [
-              { id: "ws-1", name: "Workspace 1" },
-              { id: "ws-2", name: "Workspace 2" },
-            ];
-          },
-        };
-      },
-    } as any,
-    {
-      async saveWorkspacesToDatabase() {},
-      async syncWorkspaceMetadata() {
-        return {
-          discoveredTrackCount: 1,
-          fetchedMetadataCount: 1,
-        };
-      },
-    } as any,
-  );
+  const service = new LibrarianService();
 
   await assert.rejects(
     service.runSingleWorkspaceCycle({}),
@@ -33,35 +11,21 @@ test("LibrarianService requires a pinned workspace for each cycle", async () => 
   );
 });
 
-test("LibrarianService respects a pinned workspace", async () => {
-  const syncedWorkspaceIds: string[] = [];
-  const service = new LibrarianService(
-    {
-      async getAuthenticatedClient() {
-        return {
-          async getWorkspaces() {
-            return [
-              { id: "ws-1", name: "Workspace 1" },
-              { id: "ws-2", name: "Workspace 2" },
-            ];
-          },
-        };
-      },
-    } as any,
-    {
-      async saveWorkspacesToDatabase() {},
-      async syncWorkspaceMetadata(_options: unknown, _client: unknown, workspace: { id: string }) {
-        syncedWorkspaceIds.push(workspace.id);
-        return {
-          discoveredTrackCount: 1,
-          fetchedMetadataCount: 1,
-        };
-      },
-    } as any,
-  );
+test("LibrarianService skips a pinned workspace disabled by policy", async () => {
+  const service = new LibrarianService();
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
 
-  await service.runSingleWorkspaceCycle({ workspace: "ws-2" });
-  await service.runSingleWorkspaceCycle({ workspace: "ws-2" });
+  try {
+    const synced = await service.runSingleWorkspaceCycle({
+      workspace: "ws-2",
+      disabledWorkspaces: ["ws-2"],
+    });
+    assert.equal(synced, false);
+  } finally {
+    console.log = originalLog;
+  }
 
-  assert.deepEqual(syncedWorkspaceIds, ["ws-2", "ws-2"]);
+  assert.ok(logs.some((line) => line.includes("Skipping workspace ws-2")));
 });

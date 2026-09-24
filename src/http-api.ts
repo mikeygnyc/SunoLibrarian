@@ -95,8 +95,9 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
       const url = new URL(req.url, `http://${req.headers.host ?? `${host}:${port}`}`);
       pathname = url.pathname;
       method = req.method.toUpperCase();
+      const requestId = readRequestId(req.headers["x-request-id"]);
       res.once("finish", () => {
-        if (pathname === "/healthz") {
+        if (!shouldLogHttpRequest(pathname)) {
           return;
         }
         serverLogger.info("request completed", {
@@ -104,6 +105,7 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
           pathname,
           statusCode: res.statusCode,
           durationMs: Date.now() - startedAt,
+          ...(requestId ? { requestId } : {}),
         });
       });
 
@@ -349,6 +351,20 @@ export async function runServeApiFlow(options: ApiServerConfig = {}): Promise<vo
   } finally {
     logBridge.close();
   }
+}
+
+function readRequestId(value: string | string[] | undefined): string | undefined {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (typeof candidate !== "string") {
+    return undefined;
+  }
+
+  const normalized = candidate.trim();
+  return normalized.length > 0 ? normalized.slice(0, 128) : undefined;
+}
+
+export function shouldLogHttpRequest(pathname: string): boolean {
+  return pathname !== "/healthz";
 }
 
 function resolveApiServerMode(options: ApiServerConfig): ApiServerMode {

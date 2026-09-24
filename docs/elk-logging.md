@@ -59,6 +59,81 @@ up the updated config:
 kubectl -n suno-export rollout restart daemonset/suno-export-filebeat
 ```
 
+## Repeatable Smoke Test
+
+With the local bootstrap environment configured, run:
+
+```bash
+scripts/elk-smoke-test.sh
+```
+
+The command regenerates the ignored local manifests, applies the Filebeat and
+application manifests, waits for Filebeat and the API to become ready, sends a
+uniquely tagged API request, and confirms Elasticsearch indexed its decoded
+structured event. It leaves resources running by default. Use `--teardown` only
+when you explicitly want to remove the local Kubernetes installation afterward.
+
+## Filebeat Provisioner Lifecycle
+
+The Filebeat writer-account provisioner uses the fixed Job name
+`suno-export-filebeat-provisioner`. Each normal bootstrap and smoke-test run
+deletes any prior instance immediately before applying the ELK bundle, then
+waits for the replacement Job to complete. This deliberately makes credential
+rotation rerun provisioning without leaving a growing set of uniquely named
+Jobs. Completed Jobs also retain their existing five-minute TTL as a fallback
+cleanup mechanism.
+
+## Elasticsearch Troubleshooting
+
+Filebeat writes to rollover indices such as `suno-export-logs-000011`. The
+provisioner now maintains `suno-export-logs` as the write alias, but the broader
+`suno-export-*` pattern is still preferred for troubleshooting because it also
+includes historical indices created before that alias was managed. With the
+local bootstrap environment loaded, this lists matching concrete indices:
+
+```bash
+source scripts/pre-conf-bootstrap-k8s-local.env
+curl --fail --silent --show-error \
+  --user "$ELK_ELASTICSEARCH_ADMIN_USERNAME:$ELK_ELASTICSEARCH_ADMIN_PASSWORD" \
+  "${ELK_ELASTICSEARCH_HOSTS%/}/_cat/indices/suno-export-*?v&s=index"
+```
+
+To inspect recent decoded application events, use the same pattern with
+`_search`:
+
+```bash
+curl --fail --silent --show-error \
+  --user "$ELK_ELASTICSEARCH_ADMIN_USERNAME:$ELK_ELASTICSEARCH_ADMIN_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  --data '{"size":20,"sort":[{"@timestamp":{"order":"desc"}}],"query":{"match_all":{}}}' \
+  "${ELK_ELASTICSEARCH_HOSTS%/}/suno-export-*/_search?pretty"
+```
+
+If the local environment uses a private CA, add
+`--cacert /path/to/elasticsearch-ca.pem` to each command.
+The Filebeat writer credentials intentionally cannot run these queries.
+
+## Index Lifecycle, Mappings, and Access
+
+The local provisioner installs an explicit Elasticsearch baseline instead of
+granting Filebeat permission to run its automatic setup:
+
+- the `suno-export-logs-30d` ILM policy rolls over after one day or a 25 GB
+  primary shard, then deletes an index after 30 days
+- the `suno-export-logs` index template applies that policy and the
+  `suno-export-logs` write alias to `suno-export-logs-*`
+- core timestamps use `date`, operational identifiers and tags use `keyword`,
+  and `message` uses `match_only_text`; additional fields remain dynamic
+- `suno_export_filebeat_writer` can create documents and inspect index metadata
+  but cannot read logs or change lifecycle policy
+- `suno_export_log_reader` can read `suno-export-*` and inspect index metadata;
+  assign it to human or service accounts separately as needed
+
+The provisioner creates `suno-export-logs-000001` only when the write alias does
+not already exist, so reruns update policy, mappings, and roles without resetting
+existing data. Before changing the 30-day baseline, confirm legal, incident
+response, and storage requirements for the target environment.
+
 ## Configuration
 
 The example secret currently provides:
@@ -83,6 +158,20 @@ If Elasticsearch rejects events, Filebeat writes rejection details under
 The Filebeat input also drops Filebeat's own decoded logs so `service.name`
 from collector events does not conflict with the application's flat `service`
 field mapping.
+
+## Sensitive Data
+
+Shared logging boundaries redact bearer credentials, credential-bearing URLs,
+token/password assignments, and fields with sensitive names before writing to
+stdout, stderr, the API text log, Postgres log sinks, or Elasticsearch. Tests
+cover nested structured properties as well as free-form messages.
+
+The metadata database status description intentionally retains the PostgreSQL
+username, host, port, and database name after removing the password. These
+values are useful for distinguishing runtime targets and are considered
+acceptable for the intended operator-only log audience. If logs are shared more
+broadly, restrict access at the Elasticsearch reader role or remove those fields
+at the collector boundary.
 
 ## Notes
 

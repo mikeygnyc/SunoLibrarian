@@ -7,6 +7,8 @@ import { CancellationError } from './cancellation';
 import { Storage } from './storage';
 import { attachBrowserAbortHandlers, connectOrLaunchBrowser } from './lib/auth/auth';
 
+export type AuthTokenRefresher = (rejectedToken: string) => Promise<string>;
+
 export class SunoClient {
   private authToken: string;
   private deviceId: string;
@@ -17,6 +19,8 @@ export class SunoClient {
   private metadataCache: Map<string, ITrackMetadata>;
   private storage: Storage;
   private abortSignal?: AbortSignal;
+  private authTokenRefresher?: AuthTokenRefresher;
+  private authRefreshPromise?: Promise<string>;
 
   constructor(
     authToken: string,
@@ -26,12 +30,14 @@ export class SunoClient {
     browserProfileDirectory?: string,
     cacheDir?: string,
     abortSignal?: AbortSignal,
+    authTokenRefresher?: AuthTokenRefresher,
   ) {
     this.authToken = authToken;
     this.browserUrl = browserUrl;
     this.browserUserDataDir = browserUserDataDir;
     this.browserProfileDirectory = browserProfileDirectory;
     this.abortSignal = abortSignal;
+    this.authTokenRefresher = authTokenRefresher;
     this.storage = new Storage({ cacheDir });
     this.deviceId = deviceId || this.storage.getDeviceId() || this.generateUUID();
     if (!deviceId) {
@@ -122,24 +128,22 @@ export class SunoClient {
 
   private async makeRequest(url: string, options: any = {}) {
     this.throwIfAborted();
-    const browserToken = this.generateBrowserToken();
+    const rejectedToken = this.authToken;
+    let response = await this.sendRequest(url, options);
 
-    const response = await fetch(url, {
-      ...options,
-      signal: options.signal ?? this.abortSignal,
-      headers: {
-        accept: '*/*',
-        'accept-language': 'en-US,en;q=0.8',
-        authorization: `Bearer ${this.authToken}`,
-        'browser-token': browserToken,
-        'cache-control': 'no-cache',
-        'device-id': this.deviceId,
-        origin: 'https://suno.com',
-        pragma: 'no-cache',
-        referer: 'https://suno.com/',
-        ...options.headers,
-      },
-    });
+    if (response.status === 401 && this.authTokenRefresher) {
+      // Drain the rejected response before retrying so its connection can be
+      // returned to the HTTP agent.
+      await response.text();
+      // Another concurrent request may already have refreshed the token by the
+      // time this response arrives. In that case, reuse it without launching a
+      // second browser capture.
+      if (this.authToken === rejectedToken) {
+        await this.refreshAuthToken(rejectedToken);
+      }
+      this.throwIfAborted();
+      response = await this.sendRequest(url, options);
+    }
 
     if (!response.ok) {
       const error: any = new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -148,6 +152,49 @@ export class SunoClient {
     }
 
     return response;
+  }
+
+  private sendRequest(url: string, options: any): Promise<import('node-fetch').Response> {
+    const browserToken = this.generateBrowserToken();
+    return fetch(url, {
+      ...options,
+      signal: options.signal ?? this.abortSignal,
+      headers: {
+        accept: '*/*',
+        'accept-language': 'en-US,en;q=0.8',
+        'browser-token': browserToken,
+        'cache-control': 'no-cache',
+        'device-id': this.deviceId,
+        origin: 'https://suno.com',
+        pragma: 'no-cache',
+        referer: 'https://suno.com/',
+        ...options.headers,
+        authorization: `Bearer ${this.authToken}`,
+      },
+    });
+  }
+
+  private async refreshAuthToken(rejectedToken: string): Promise<void> {
+    if (!this.authTokenRefresher) return;
+
+    if (!this.authRefreshPromise) {
+      console.warn('Authentication token was rejected (HTTP 401). Retrieving a fresh token...');
+      this.authRefreshPromise = this.authTokenRefresher(rejectedToken)
+        .then((token) => {
+          const normalizedToken = token.trim();
+          if (!normalizedToken || normalizedToken === rejectedToken) {
+            throw new Error('Authentication refresh returned no new token after HTTP 401');
+          }
+          this.authToken = normalizedToken;
+          console.log('Authentication token refreshed successfully.');
+          return normalizedToken;
+        })
+        .finally(() => {
+          this.authRefreshPromise = undefined;
+        });
+    }
+
+    await this.authRefreshPromise;
   }
 
   async fetchWorkspacesPage(page: number = 1): Promise<any> {

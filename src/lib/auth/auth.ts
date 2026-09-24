@@ -390,7 +390,7 @@ function isSunoUrl(url: string): boolean {
   }
 }
 
-async function visitSunoRoutesUntilToken(
+export async function visitSunoRoutesUntilToken(
   page: Page,
   getCapturedToken: () => string | null,
 ): Promise<void> {
@@ -403,7 +403,15 @@ async function visitSunoRoutesUntilToken(
   for (const route of routes) {
     if (getCapturedToken() || page.isClosed()) return;
     console.log(`Opening ${route}...`);
-    await page.goto(route, { waitUntil: "networkidle2" });
+    try {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      // A token can arrive from an intercepted request before navigation
+      // finishes. Once that happens, a navigation timeout is irrelevant.
+      if (getCapturedToken()) return;
+      throw error;
+    }
+    if (getCapturedToken()) return;
     await sleep(3000);
   }
 }
@@ -597,33 +605,34 @@ export async function extractTokenFromBrowser(
     );
   });
 
-  console.log("Please log in to Suno.com in the browser window...");
-  console.log("Waiting for authentication token...");
-  await visitSunoRoutesUntilToken(page, () => capturedToken);
+  try {
+    console.log("Please log in to Suno.com in the browser window...");
+    console.log("Waiting for authentication token...");
+    await visitSunoRoutesUntilToken(page, () => capturedToken);
 
-  while (!capturedToken) {
-    throwIfAborted(options?.abortSignal);
-    await sleep(1000);
-    if (page.isClosed()) {
-      throw new Error(
-        "Browser page was closed before authentication token was captured",
-      );
+    while (!capturedToken) {
+      throwIfAborted(options?.abortSignal);
+      await sleep(1000);
+      if (page.isClosed()) {
+        throw new Error(
+          "Browser page was closed before authentication token was captured",
+        );
+      }
+    }
+
+    console.log("Authentication complete!");
+    return capturedToken;
+  } finally {
+    abortCleanup();
+    if (!page.isClosed()) {
+      await page.close({ runBeforeUnload: false }).catch(() => {});
+    }
+    if (isRemoteBrowser) {
+      await browser.disconnect();
+    } else {
+      await browser.close();
     }
   }
-
-  await browser.close();
-  console.log("Authentication complete!");
-  abortCleanup();
-
-  if (isRemoteBrowser) {
-    await browser.disconnect();
-        }
-
-  if (!capturedToken) {
-    throw new Error("Failed to capture authentication token");
-  }
-
-  return capturedToken;
 }
 
 export function attachBrowserAbortHandlers(params: {

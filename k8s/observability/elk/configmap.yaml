@@ -54,6 +54,8 @@ data:
       username: "${ELASTICSEARCH_USERNAME}"
       password: "${ELASTICSEARCH_PASSWORD}"
       index: "suno-export-logs"
+    # The local bootstrap provisioner owns ILM, the index template, mappings,
+    # rollover alias, and writer permissions so Filebeat needs no admin rights.
     setup.ilm.enabled: false
     setup.template.enabled: false
     setup.template.name: "suno-export-logs"

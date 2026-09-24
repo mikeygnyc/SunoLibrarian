@@ -5,7 +5,7 @@ import {
   resolveBrowserUserDataDir,
 } from "../lib/auth/auth";
 import { getSharedAuthToken, setSharedAuthToken } from "../orchestration/auth-token-store";
-import { SunoClient } from "../client";
+import { SunoClient, type AuthTokenRefresher } from "../client";
 import { Storage } from "../storage";
 
 export interface CliOptions {
@@ -83,6 +83,7 @@ export type AuthDeps<TClient extends AuthClient> = {
     browserProfileDirectory?: string,
     cacheDir?: string,
     abortSignal?: AbortSignal,
+    authTokenRefresher?: AuthTokenRefresher,
   ) => TClient;
   extractTokenFromBrowser: typeof extractTokenFromBrowser;
   log: Pick<Console, "error" | "log" | "warn">;
@@ -111,6 +112,11 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
   const browserUserDataDir = resolveBrowserUserDataDir(options);
   const browserProfileDirectory = resolveBrowserProfileDirectory(options);
   const requireResolvedAuth = options.__requireResolvedAuth === true;
+  const authTokenRefresher = createAuthTokenRefresher(options, deps, {
+    browserEndpoint,
+    browserUserDataDir,
+    browserProfileDirectory,
+  });
 
   if (requireResolvedAuth) {
     const resolvedToken = typeof options.token === "string" && options.token.trim().length > 0
@@ -134,6 +140,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
       browserProfileDirectory,
       options.cacheDir,
       options.__abortSignal,
+      authTokenRefresher,
     );
   }
 
@@ -148,6 +155,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
         browserProfileDirectory,
         options.cacheDir,
         options.__abortSignal,
+        authTokenRefresher,
       );
 
       try {
@@ -171,6 +179,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
         browserProfileDirectory,
         options.cacheDir,
         options.__abortSignal,
+        authTokenRefresher,
       );
 
       try {
@@ -205,6 +214,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
       browserProfileDirectory,
       options.cacheDir,
       options.__abortSignal,
+      authTokenRefresher,
     );
 
     try {
@@ -239,6 +249,7 @@ export async function getAuthenticatedClientWithDeps<TClient extends AuthClient>
     browserProfileDirectory,
     options.cacheDir,
     options.__abortSignal,
+    authTokenRefresher,
   );
   await extractedClient.fetchWorkspacesPage(1);
   deps.storage.setAuthToken(token);
@@ -253,6 +264,7 @@ function createClient(
   browserProfileDirectory?: string,
   cacheDir?: string,
   abortSignal?: AbortSignal,
+  authTokenRefresher?: AuthTokenRefresher,
 ): SunoClient {
   return new SunoClient(
     token,
@@ -262,7 +274,43 @@ function createClient(
     browserProfileDirectory,
     cacheDir,
     abortSignal,
+    authTokenRefresher,
   );
+}
+
+function createAuthTokenRefresher<TClient extends AuthClient>(
+  options: CliOptions,
+  deps: AuthDeps<TClient>,
+  browser: {
+    browserEndpoint?: string;
+    browserUserDataDir?: string;
+    browserProfileDirectory?: string;
+  },
+): AuthTokenRefresher | undefined {
+  if (!browser.browserEndpoint && !options.postgresUrl) return undefined;
+
+  return async (rejectedToken: string): Promise<string> => {
+    const sharedToken = await getSharedAuthToken({ postgresUrl: options.postgresUrl });
+    if (sharedToken && sharedToken !== rejectedToken) {
+      deps.storage.setAuthToken(sharedToken);
+      deps.log.log("Using refreshed authentication token from control plane.");
+      return sharedToken;
+    }
+
+    if (!browser.browserEndpoint) {
+      throw new Error("Authentication refresh failed after HTTP 401: no newer shared token is available");
+    }
+
+    const token = await deps.extractTokenFromBrowser(browser.browserEndpoint, {
+      userDataDir: browser.browserUserDataDir,
+      profileDirectory: browser.browserProfileDirectory,
+      abortSignal: options.__abortSignal,
+    });
+    deps.storage.setAuthToken(token);
+    await setSharedAuthToken({ postgresUrl: options.postgresUrl }, token);
+    deps.log.log("Captured and saved a fresh authentication token after HTTP 401.");
+    return token;
+  };
 }
 
 function isAuthFailure(error: any): boolean {
